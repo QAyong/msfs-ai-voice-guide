@@ -2,7 +2,7 @@
 
 这是一个使用 TypeScript 与 LiveKit Agents 构建的实时语音导游助手。第一版目标是尽快在本地跑通“一名用户进入一间房间，与导游 Agent 自然语音对话”的闭环。
 
-第一版已在本机完成真实语音对话联调。它固定使用火山方舟 LLM（大语言模型）、豆包 STT（语音转文字）和豆包 TTS（文字转语音）；尚未实现模拟器数据接入或工具调用。
+第一版已在本机完成真实语音对话联调。当前使用 DeepSeek LLM（大语言模型）、豆包 STT（语音转文字）和豆包 TTS（文字转语音）；尚未实现模拟器数据接入或工具调用。
 
 ## 文档入口
 
@@ -31,7 +31,7 @@ pnpm run verify
 
 ## 本地运行
 
-1. 启动本机 LiveKit Server，并在 `.env` 中填写 `ws://127.0.0.1:7880`、`devkey`、`secret` 及火山凭据。
+1. 启动本机 LiveKit Server，并在 `.env` 中填写 `ws://127.0.0.1:7880`、`devkey`、`secret`、DeepSeek Key 与豆包语音凭据。
 2. 使用 `pnpm agent:check` 检查配置（不会输出密钥，也不会发起远程请求）。
 3. 启动本地 Agent Worker（工作进程）：`pnpm agent:dev`。
 4. 用 LiveKit CLI（命令行工具）创建房间 Token（访问令牌）并分派 `msfs-voice-guide`，在 LiveKit Meet 中完成对话。

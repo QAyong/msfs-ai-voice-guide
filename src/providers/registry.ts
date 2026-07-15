@@ -1,6 +1,6 @@
 import { type llm, type stt, type tts } from '@livekit/agents';
 import type { AppConfig } from '../config/schema.js';
-import { createVolcengineLLM } from './llm/volcengine.js';
+import { createDeepSeekLLM } from './llm/deepseek.js';
 import { VolcengineSTT } from './stt/volcengine.js';
 import { VolcengineTTS } from './tts/volcengine.js';
 
@@ -12,7 +12,7 @@ export type VoiceProviders = {
 
 export function createVoiceProviders(config: AppConfig): VoiceProviders {
   return {
-    llm: createVolcengineLLM(config.volcengine.llm),
+    llm: createDeepSeekLLM(config.llm),
     stt: new VolcengineSTT(config.volcengine.stt),
     tts: new VolcengineTTS(config.volcengine.tts),
   };

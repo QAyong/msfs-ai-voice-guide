@@ -6,9 +6,9 @@ const baseEnvironment: NodeJS.ProcessEnv = {
   LIVEKIT_API_KEY: 'livekit-key',
   LIVEKIT_API_SECRET: 'livekit-secret',
   LIVEKIT_AGENT_NAME: 'msfs-voice-guide',
-  VOLCENGINE_ARK_API_KEY: 'ark-secret',
-  VOLCENGINE_ARK_BASE_URL: 'https://ark.example.test/api/v3',
-  VOLCENGINE_LLM_MODEL: 'ep-example',
+  DEEPSEEK_API_KEY: 'deepseek-secret',
+  DEEPSEEK_BASE_URL: 'https://deepseek.example.test',
+  DEEPSEEK_LLM_MODEL: 'deepseek-test-model',
   VOLCENGINE_SPEECH_APP_ID: 'speech-app',
   VOLCENGINE_SPEECH_ACCESS_TOKEN: 'speech-secret',
   VOLCENGINE_STT_ENDPOINT: 'wss://speech.example.test/asr',
@@ -35,6 +35,17 @@ describe('loadConfig', () => {
     expect(config.volcengine.tts.sampleRate).toBe(24_000);
   });
 
+  it('解析 DeepSeek LLM 配置', () => {
+    const config = loadConfig(baseEnvironment);
+
+    expect(config.llm).toEqual({
+      provider: 'deepseek',
+      apiKey: 'deepseek-secret',
+      baseUrl: 'https://deepseek.example.test',
+      model: 'deepseek-test-model',
+    });
+  });
+
   it('配置错误不会回显密钥值', () => {
     expect(() =>
       loadConfig({ ...baseEnvironment, LIVEKIT_URL: 'https://not-websocket.example.test' }),
@@ -44,7 +55,7 @@ describe('loadConfig', () => {
       loadConfig({ ...baseEnvironment, LIVEKIT_URL: 'https://not-websocket.example.test' });
     } catch (error) {
       expect(String(error)).not.toContain('livekit-secret');
-      expect(String(error)).not.toContain('ark-secret');
+      expect(String(error)).not.toContain('deepseek-secret');
     }
   });
 });

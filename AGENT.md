@@ -19,7 +19,7 @@ src/
   conversation/   # 导游角色、提示词与会话策略
   config/         # Zod 配置 Schema 与环境变量加载
   providers/      # LLM、STT、TTS Provider 工厂注册表与火山适配器
-    llm/           # 火山方舟 LLM 工厂
+    llm/           # DeepSeek LLM 工厂
     stt/           # 豆包流式 ASR 工厂/适配器
     tts/           # 豆包双向流式 TTS 工厂/适配器
   shared/         # 无业务归属的小型通用工具
@@ -61,7 +61,7 @@ src/
 - Microsoft Flight Simulator 遥测、位置、高度、航向或航线数据接入。
 - 业务工具调用、工具参数 Schema 的具体实现。
 - 云端部署、Docker、持久化存储、账号体系和运营后台。
-- 火山引擎以外的 LLM、STT 或 TTS 供应商，以及运行时 Provider 切换。
+- DeepSeek 与豆包语音以外的 Provider，以及运行时 Provider 切换。
 
 ## 约束来源
 

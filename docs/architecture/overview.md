@@ -19,7 +19,7 @@ graph TD
     Bootstrap --> Session[agent: LiveKit 会话编排]
     Bootstrap --> Providers[providers: 按能力注册与创建]
     Session --> Guide[conversation: 导游角色与提示词]
-    Providers --> LLM[火山方舟 LLM]
+    Providers --> LLM[DeepSeek LLM]
     Providers --> STT[豆包流式 ASR]
     Providers --> TTS[豆包双向流式 TTS]
     Session <--> Room[LiveKit 房间]
@@ -51,15 +51,15 @@ sequenceDiagram
 
 ## 模块职责与依赖方向
 
-| 模块                 | 职责                                          | 可以依赖                     | 不应依赖                               |
-| -------------------- | --------------------------------------------- | ---------------------------- | -------------------------------------- |
-| `src/config/`        | 定义与解析 Zod 环境配置                       | Zod、Node 环境               | Agent、Provider、业务模块              |
-| `src/providers/`     | 通过 `registry.ts` 注册并创建火山 LLM/STT/TTS | Provider 官方 SDK、配置      | LiveKit 房间生命周期、提示词           |
-| `src/core/`          | 启动辅助、脱敏日志与 Provider 自检            | 配置、注册表                 | 提示词、音频协议细节                   |
-| `src/conversation/`  | 定义导游身份、语言、回答边界                  | 少量共享类型                 | 环境变量、SDK 启动细节                 |
-| `src/agent/`         | 连接 LiveKit、创建会话、组合依赖              | 上述内部模块、LiveKit Agents | 具体密钥解析、长篇提示词、未来业务逻辑 |
-| `src/tools/`（未来） | 真实业务能力及其 Zod 参数                     | 业务服务、共享类型           | Agent 生命周期实现                     |
-| `src/cli/`（未来）   | 本地命令的参数与执行入口                      | 需要调用的内部模块           | 复制 Agent 业务逻辑                    |
+| 模块                 | 职责                                                      | 可以依赖                     | 不应依赖                               |
+| -------------------- | --------------------------------------------------------- | ---------------------------- | -------------------------------------- |
+| `src/config/`        | 定义与解析 Zod 环境配置                                   | Zod、Node 环境               | Agent、Provider、业务模块              |
+| `src/providers/`     | 通过 `registry.ts` 注册并创建 DeepSeek LLM 与豆包 STT/TTS | Provider 官方 SDK、配置      | LiveKit 房间生命周期、提示词           |
+| `src/core/`          | 启动辅助、脱敏日志与 Provider 自检                        | 配置、注册表                 | 提示词、音频协议细节                   |
+| `src/conversation/`  | 定义导游身份、语言、回答边界                              | 少量共享类型                 | 环境变量、SDK 启动细节                 |
+| `src/agent/`         | 连接 LiveKit、创建会话、组合依赖                          | 上述内部模块、LiveKit Agents | 具体密钥解析、长篇提示词、未来业务逻辑 |
+| `src/tools/`（未来） | 真实业务能力及其 Zod 参数                                 | 业务服务、共享类型           | Agent 生命周期实现                     |
+| `src/cli/`（未来）   | 本地命令的参数与执行入口                                  | 需要调用的内部模块           | 复制 Agent 业务逻辑                    |
 
 依赖始终由入口向内组合；`config`、`conversation` 和未来的 `tools` 不反向导入 `agent`，从而避免循环依赖。
 
@@ -72,9 +72,9 @@ sequenceDiagram
 
 ## Provider 注册与火山引擎边界
 
-第一版固定使用火山引擎，并遵循参考项目 `Pipecat-AI` 的按能力注册方式：`src/providers/registry.ts` 是创建 LLM、STT、TTS 的唯一入口。它只注册 `volcengine`，不实现动态插件系统。
+当前版本使用 DeepSeek LLM 与豆包语音，并遵循参考项目 `Pipecat-AI` 的按能力注册方式：`src/providers/registry.ts` 是创建 LLM、STT、TTS 的唯一入口。不实现动态插件系统或运行时 Provider 选择。
 
-- 火山方舟 LLM 优先使用当前 LiveKit OpenAI 兼容插件的 `baseURL` 能力；安装后必须以本地类型为准。
+- DeepSeek LLM 使用当前 LiveKit OpenAI 插件的 `withDeepSeek()`（创建 DeepSeek LLM）能力；安装后必须以本地类型为准。
 - 豆包 STT、TTS 先核对当前 LiveKit 官方插件是否已支持；若无，最小 WebSocket 适配代码仅位于对应 Provider 子目录。
 - 新供应商必须新增同类型工厂并注册，不能让 Agent 入口产生 `if/else` 供应商分支。
 
@@ -82,7 +82,7 @@ sequenceDiagram
 
 ## 配置与密钥
 
-`src/config/` 以 Zod Schema 集中校验配置。配置分为：LiveKit 连接参数、火山方舟 LLM、豆包 STT、豆包 TTS 与可选运行参数。STT 支持 Speech API Key 优先、App ID + Access Token 后备的互斥/成对校验。应用启动时一次性解析；缺失或不合法时以可读错误退出，禁止以空字符串继续运行。
+`src/config/` 以 Zod Schema 集中校验配置。配置分为：LiveKit 连接参数、DeepSeek LLM、豆包 STT、豆包 TTS 与可选运行参数。STT 支持 Speech API Key 优先、App ID + Access Token 后备的互斥/成对校验。应用启动时一次性解析；缺失或不合法时以可读错误退出，禁止以空字符串继续运行。
 
 真实密钥只来自运行环境或未提交的 `.env` 文件。`.env.example` 仅列出变量名和安全的示例值。禁止在源码、测试快照、日志、文档或 Git 历史中写入密钥。
 
@@ -92,7 +92,7 @@ sequenceDiagram
 | -------------------------- | ----------------------------- | --------------------------- | -------------------- |
 | LiveKit Agents Node.js SDK | 实时语音 Agent 生命周期与会话 | `src/agent/`                | 实施时安装当前稳定版 |
 | LiveKit Server / Cloud     | 本地联调房间基础设施          | 本地运行环境                | 待确定               |
-| 火山方舟                   | 对话理解与生成（LLM）         | `src/providers/llm/`        | 第一版确定           |
+| DeepSeek                   | 对话理解与生成（LLM）         | `src/providers/llm/`        | 当前基线             |
 | 豆包流式 ASR               | 语音转文字（STT）             | `src/providers/stt/`        | 第一版确定           |
 | 豆包双向流式 TTS           | 文字转语音（TTS）             | `src/providers/tts/`        | 第一版确定           |
 | Zod                        | 配置和未来工具参数校验        | `src/config/`、`src/tools/` | 已确定               |
