@@ -22,6 +22,9 @@ src/
     llm/           # DeepSeek LLM 工厂
     stt/           # 豆包流式 ASR 工厂/适配器
     tts/           # 豆包双向流式 TTS 工厂/适配器
+  search/         # 共享搜索服务：API 请求、结果清洗与相关性保护
+  tools/          # LiveKit 可调用的业务工具包装层
+  cli/            # CLI 命令行入口，复用共享业务服务
   shared/         # 无业务归属的小型通用工具
 ```
 
@@ -40,6 +43,9 @@ src/
 
 - 使用 TypeScript、pnpm、Zod（运行时配置与工具参数校验）和 Vitest（核心测试）。
 - `src/agent/` 仅负责 LiveKit 生命周期和依赖装配，不能承载提示词、环境变量解析或未来业务工具逻辑。
+- `src/search/` 是与 LiveKit 无关的共享搜索服务；Agent 工具和 CLI 必须复用它，不得各自实现搜索请求、清洗和相关性判断。
+- `src/tools/` 只负责将共享业务能力包装成 LiveKit Tool（工具）；`src/cli/` 只负责命令行参数、输出和退出码。
+- Agent 不得通过 `child_process` 启动 CLI 执行搜索；CLI 是共享服务的入口，不是实时 Agent 的运行时依赖。
 - Provider 的具体实现只能出现在 `src/providers/`；`registry.ts`（Provider 工厂注册表）是唯一创建入口，其他模块不得散落引用火山 SDK 或 WebSocket。
 - 遵循参考项目 `[reference project]` 的“按 STT/LLM/TTS 分类 + 集中注册表 + 启动前自检”规范；只继承职责边界，不复制 Python/Pipecat 实现。
 - 所有密钥均从环境变量读取；`.env`、`.env.local` 等含密钥文件永不提交。提供不含值的 `.env.example`。
@@ -59,7 +65,7 @@ src/
 - Web、移动端或其他客户端实现。
 - 多用户共用一个 Agent 房间、房间级群聊策略。
 - Microsoft Flight Simulator 遥测、位置、高度、航向或航线数据接入。
-- 业务工具调用、工具参数 Schema 的具体实现。
+- 网络搜索和业务工具的运行时实现；当前规划见 `docs/specs/spec-003-web-search-and-capability-modules.md`。
 - 云端部署、Docker、持久化存储、账号体系和运营后台。
 - DeepSeek 与豆包语音以外的 Provider，以及运行时 Provider 切换。
 

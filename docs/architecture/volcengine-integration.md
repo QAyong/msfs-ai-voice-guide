@@ -1,13 +1,25 @@
 # DeepSeek LLM 与火山语音 Provider 集成设计
 
 **最后更新：** 2026-07-15  
-**状态：** 已实现；DeepSeek API 与本地语音闭环均已完成真实验证
+**状态：** 语音 Provider 已实现并验证；搜索 API 已完成独立验证，Agent 接入规划中
 
 ## 目标与来源
 
 当前版本固定使用 DeepSeek 提供 LLM（大语言模型），豆包语音提供 STT（语音转文字）和 TTS（文字转语音）。结构沿用参考项目 `[reference project]` 的有效边界：按 STT/LLM/TTS 分类、由集中注册表装配 Provider、集中配置和启动前自检；不复制其 Python/Pipecat 协议实现。
 
 本项目仍遵循自身已确认的安全约束：真实密钥仅从 `.env` 或进程环境变量读取，不创建或写入带密钥的 `settings.json`。
+
+## 搜索 API 边界
+
+豆包搜索 Custom API（火山搜索服务）是业务数据源，不属于 LLM、STT 或 TTS Provider，因此不进入 `src/providers/registry.ts`。它应由 `src/search/`（共享搜索服务）封装，再由 LiveKit Tool（工具）和 CLI（命令行工具）复用。
+
+- API 地址：`https://open.feedcoopapi.com/search_api/web_search`
+- 认证方式：`Authorization: Bearer <API_KEY>`
+- 结果使用：优先使用 `Summary`（摘要）或 `Content`（正文），保留 `Url`（来源 URL）和站点信息；不把 `Snippet`（列表摘要）直接作为 LLM 事实依据。
+- 当前独立测试脚本：`scripts/test-volcengine-search.mjs`，通过 `VOLCENGINE_SEARCH_API_KEY` 显式传入，不写入项目文件。
+- 搜索结果必须经过实体相关性、来源策略、去重和无结果保护，API 返回的权威等级不能直接等同于项目可信度。
+
+详细范围与验收条件见 [Spec-003：网络搜索与可扩展能力模块](../specs/spec-003-web-search-and-capability-modules.md) 和 [ADR-006：搜索访问边界](../adr/adr-006-search-access-boundary.md)。
 
 ## Provider 目录与注册方式
 
@@ -44,6 +56,7 @@ src/providers/
 | DeepSeek LLM | `DEEPSEEK_API_KEY`、`DEEPSEEK_BASE_URL`、`DEEPSEEK_LLM_MODEL`                                                            | 默认地址为官方兼容地址，默认模型为 `deepseek-v4-flash`。                  |
 | 豆包 STT     | `VOLCENGINE_SPEECH_API_KEY`，或 `VOLCENGINE_SPEECH_APP_ID` + `VOLCENGINE_SPEECH_ACCESS_TOKEN`；另需 endpoint/resource ID | Speech API Key 存在时优先使用；否则要求 App ID 和 Access Token 成对存在。 |
 | 豆包 TTS     | `VOLCENGINE_SPEECH_APP_ID`、`VOLCENGINE_SPEECH_ACCESS_TOKEN`、endpoint、resource ID、speaker                             | `speaker` 必须是账户已开通的音色；采样率必须为正整数。                    |
+| 豆包搜索     | `VOLCENGINE_SEARCH_API_KEY`（搜索功能启用后）                                                                            | 只从配置层读取；不得写入 CLI 参数、日志、测试快照或提交文件。             |
 
 TTS 采用火山文档推荐的 V3 双向流式 WebSocket，适合实时文本输入与流式音频输出；端点、资源 ID 和音色许可均以账户控制台及官方当日文档为准。[豆包语音双向流式 TTS 文档](https://www.volcengine.com/docs/6561/2532486?lang=zh)
 
@@ -59,10 +72,12 @@ TTS 采用火山文档推荐的 V3 双向流式 WebSocket，适合实时文本�
 4. 核对 LiveKit 是否已有火山 STT/TTS 官方插件；若无，分别实现最小 WebSocket 适配器，协议代码不得泄漏到 `agent` 或 `conversation`。
 5. 实现 `health.ts`：默认仅校验本地配置；使用显式命令或开关才进行远程连通性检查，且脱敏记录 request/log ID。
 6. 将三个工厂产物传入 LiveKit 会话，进行本地独立房间人工语音冒烟测试。
+7. 实现 `src/search/` 共享搜索服务，完成结果标准化、相关性和来源保护；再分别接入 LiveKit Tool 与 CLI。
 
 ## 测试边界
 
 - 单元测试必须覆盖配置优先级、注册表映射、非法参数拒绝和脱敏错误；使用 mock，不用真实密钥。
 - 适配器测试使用录制的脱敏协议帧或本地 mock WebSocket，不复刻整套火山服务。
 - 远程 STT/TTS/LLM 自检单独运行，显式读取本地 `.env`，不作为 `pnpm test` 的默认前提。
+- 远程搜索自检使用 `pnpm search:test` 或等价显式命令，不作为默认 `pnpm test` 的前提；默认测试不得依赖真实搜索 Key。
 - 所有测试仍只放在本项目的 `tests/`（唯一测试目录）下，按 `unit`、`integration`、`e2e` 分类；不要在业务模块旁重复创建测试根目录。
