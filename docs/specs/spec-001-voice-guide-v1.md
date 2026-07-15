@@ -66,12 +66,12 @@
 ## 实施顺序
 
 1. [x] 初始化 pnpm、TypeScript、Vitest、ESLint/格式化工具与 `.gitignore`；安装 LiveKit Agents 当前稳定版并核验 API。
-2. 实现 `config` 的 Zod Schema、`.env.example` 与单元测试。
-3. 实现 `conversation` 的导游提示词和单元测试。
-4. 在 `providers` 中建立 LLM/STT/TTS 分类注册表；以 LiveKit OpenAI 兼容插件接入方舟 LLM，并核对是否已有官方火山语音插件。
-5. 仅在官方插件不存在时，在各自 Provider 子目录实现豆包 STT/TTS 的最小协议适配器与 mock 测试。
-6. 在 `agent` 中按官方当前 SDK 类型实现入口、worker/dispatcher 与语音会话。
-7. 进行本地房间人工联调，补充不依赖真实密钥的集成测试与显式远程自检。
+2. [x] 实现 `config` 的 Zod Schema、`.env.example` 与单元测试。
+3. [x] 实现 `conversation` 的导游提示词和单元测试。
+4. [x] 在 `providers` 中建立 LLM/STT/TTS 分类注册表；以 LiveKit OpenAI 兼容插件接入方舟 LLM，并核对是否已有官方火山语音插件。
+5. [x] 在各自 Provider 子目录实现豆包 STT/TTS 的最小协议适配器与 mock 测试。
+6. [x] 在 `agent` 中按官方当前 SDK 类型实现入口、worker/dispatcher 与语音会话。
+7. [ ] 使用真实 LiveKit 与火山凭据完成本地房间人工联调；已提供不依赖真实密钥的集成测试、配置自检命令和[冒烟测试手册](../testing/local-agent-smoke.md)。
 8. 只有在该流程稳定后，另立 Spec 实现工具调用和模拟器数据模块。
 
 ## 相关测试

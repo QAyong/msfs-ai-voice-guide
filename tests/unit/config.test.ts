@@ -1,0 +1,50 @@
+import { ConfigError, loadConfig } from '../../src/config/schema.js';
+import { describe, expect, it } from 'vitest';
+
+const baseEnvironment: NodeJS.ProcessEnv = {
+  LIVEKIT_URL: 'wss://livekit.example.test',
+  LIVEKIT_API_KEY: 'livekit-key',
+  LIVEKIT_API_SECRET: 'livekit-secret',
+  LIVEKIT_AGENT_NAME: 'msfs-voice-guide',
+  VOLCENGINE_ARK_API_KEY: 'ark-secret',
+  VOLCENGINE_ARK_BASE_URL: 'https://ark.example.test/api/v3',
+  VOLCENGINE_LLM_MODEL: 'ep-example',
+  VOLCENGINE_SPEECH_APP_ID: 'speech-app',
+  VOLCENGINE_SPEECH_ACCESS_TOKEN: 'speech-secret',
+  VOLCENGINE_STT_ENDPOINT: 'wss://speech.example.test/asr',
+  VOLCENGINE_STT_RESOURCE_ID: 'asr-resource',
+  VOLCENGINE_TTS_ENDPOINT: 'wss://speech.example.test/tts',
+  VOLCENGINE_TTS_RESOURCE_ID: 'tts-resource',
+  VOLCENGINE_TTS_SPEAKER: 'speaker-id',
+};
+
+describe('loadConfig', () => {
+  it('使用 Speech API Key 并保留 App ID/Token 供 TTS 使用', () => {
+    const config = loadConfig({ ...baseEnvironment, VOLCENGINE_SPEECH_API_KEY: 'speech-api-key' });
+
+    expect(config.volcengine.stt.apiKey).toBe('speech-api-key');
+    expect(config.volcengine.tts.appId).toBe('speech-app');
+    expect(config.volcengine.stt.sampleRate).toBe(16_000);
+  });
+
+  it('为可选 STT 配置提供安全默认值', () => {
+    const config = loadConfig(baseEnvironment);
+
+    expect(config.volcengine.stt.model).toBe('bigmodel');
+    expect(config.volcengine.stt.language).toBe('zh');
+    expect(config.volcengine.tts.sampleRate).toBe(24_000);
+  });
+
+  it('配置错误不会回显密钥值', () => {
+    expect(() =>
+      loadConfig({ ...baseEnvironment, LIVEKIT_URL: 'https://not-websocket.example.test' }),
+    ).toThrow(ConfigError);
+
+    try {
+      loadConfig({ ...baseEnvironment, LIVEKIT_URL: 'https://not-websocket.example.test' });
+    } catch (error) {
+      expect(String(error)).not.toContain('livekit-secret');
+      expect(String(error)).not.toContain('ark-secret');
+    }
+  });
+});
