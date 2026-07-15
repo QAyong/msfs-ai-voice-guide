@@ -17,11 +17,11 @@ graph TD
     Env --> Config[config: Zod 配置解析]
     Config --> Bootstrap[agent: 进程入口与依赖装配]
     Bootstrap --> Session[agent: LiveKit 会话编排]
-    Bootstrap --> Providers[providers: LLM/STT/TTS 创建]
+    Bootstrap --> Providers[providers: 按能力注册与创建]
     Session --> Guide[conversation: 导游角色与提示词]
-    Providers --> LLM[已选 LLM Provider]
-    Providers --> STT[已选 STT Provider]
-    Providers --> TTS[已选 TTS Provider]
+    Providers --> LLM[火山方舟 LLM]
+    Providers --> STT[豆包流式 ASR]
+    Providers --> TTS[豆包双向流式 TTS]
     Session <--> Room[LiveKit 房间]
     User[单个用户客户端] <--> Room
 ```
@@ -54,7 +54,8 @@ sequenceDiagram
 | 模块 | 职责 | 可以依赖 | 不应依赖 |
 |---|---|---|---|
 | `src/config/` | 定义与解析 Zod 环境配置 | Zod、Node 环境 | Agent、Provider、业务模块 |
-| `src/providers/` | 根据有效配置创建 LLM/STT/TTS | Provider 官方 SDK、配置 | LiveKit 房间生命周期、提示词 |
+| `src/providers/` | 通过 `registry.ts` 注册并创建火山 LLM/STT/TTS | Provider 官方 SDK、配置 | LiveKit 房间生命周期、提示词 |
+| `src/core/` | 启动辅助、脱敏日志与 Provider 自检 | 配置、注册表 | 提示词、音频协议细节 |
 | `src/conversation/` | 定义导游身份、语言、回答边界 | 少量共享类型 | 环境变量、SDK 启动细节 |
 | `src/agent/` | 连接 LiveKit、创建会话、组合依赖 | 上述内部模块、LiveKit Agents | 具体密钥解析、长篇提示词、未来业务逻辑 |
 | `src/tools/`（未来） | 真实业务能力及其 Zod 参数 | 业务服务、共享类型 | Agent 生命周期实现 |
@@ -69,17 +70,19 @@ sequenceDiagram
 - 使用 LiveKit 已有的房间、音频发布订阅、会话及中断机制；不自行实现 WebSocket 信令、音频流协议或 VAD（语音活动检测）替代品。
 - 每名用户使用独立 LiveKit 房间，Agent 只服务该房间上下文。房间命名、鉴权 Token 和客户端创建不属于第一版 Agent 仓库的实现范围，但需在联调前确定。
 
-## Provider 扩展方式
+## Provider 注册与火山引擎边界
 
-供应商尚未选定，因此仅保留一个集中装配点，而不预先实现复杂的插件系统。实施首个 Provider 后：
+第一版固定使用火山引擎，并遵循参考项目 `Pipecat-AI` 的按能力注册方式：`src/providers/registry.ts` 是创建 LLM、STT、TTS 的唯一入口。它只注册 `volcengine`，不实现动态插件系统。
 
-1. 在 `src/providers/` 创建其 LLM、STT、TTS 实例的工厂函数。
-2. 由 `src/agent/` 在启动时组合实例并传给 LiveKit 会话。
-3. 新供应商出现第二个真实需求时，再抽出最小的内部能力接口与选择逻辑；接口形状以 LiveKit 当前类型和实际差异为准。
+- 火山方舟 LLM 优先使用当前 LiveKit OpenAI 兼容插件的 `baseURL` 能力；安装后必须以本地类型为准。
+- 豆包 STT、TTS 先核对当前 LiveKit 官方插件是否已支持；若无，最小 WebSocket 适配代码仅位于对应 Provider 子目录。
+- 新供应商必须新增同类型工厂并注册，不能让 Agent 入口产生 `if/else` 供应商分支。
+
+详细配置与实施顺序见 [火山引擎 Provider 集成设计](volcengine-integration.md)。
 
 ## 配置与密钥
 
-`src/config/` 以 Zod Schema 集中校验配置。配置至少分为：LiveKit 连接参数、运行模式、Provider 选择、Provider 密钥与可选模型名。应用启动时一次性解析；缺失或不合法时以可读错误退出，禁止以空字符串继续运行。
+`src/config/` 以 Zod Schema 集中校验配置。配置分为：LiveKit 连接参数、火山方舟 LLM、豆包 STT、豆包 TTS 与可选运行参数。STT 支持 Speech API Key 优先、App ID + Access Token 后备的互斥/成对校验。应用启动时一次性解析；缺失或不合法时以可读错误退出，禁止以空字符串继续运行。
 
 真实密钥只来自运行环境或未提交的 `.env` 文件。`.env.example` 仅列出变量名和安全的示例值。禁止在源码、测试快照、日志、文档或 Git 历史中写入密钥。
 
@@ -89,9 +92,9 @@ sequenceDiagram
 |---|---|---|---|
 | LiveKit Agents Node.js SDK | 实时语音 Agent 生命周期与会话 | `src/agent/` | 实施时安装当前稳定版 |
 | LiveKit Server / Cloud | 本地联调房间基础设施 | 本地运行环境 | 待确定 |
-| LLM Provider | 对话理解与生成 | `src/providers/` | 待定 |
-| STT Provider | 语音转文字 | `src/providers/` | 待定 |
-| TTS Provider | 文字转语音 | `src/providers/` | 待定 |
+| 火山方舟 | 对话理解与生成（LLM） | `src/providers/llm/` | 第一版确定 |
+| 豆包流式 ASR | 语音转文字（STT） | `src/providers/stt/` | 第一版确定 |
+| 豆包双向流式 TTS | 文字转语音（TTS） | `src/providers/tts/` | 第一版确定 |
 | Zod | 配置和未来工具参数校验 | `src/config/`、`src/tools/` | 已确定 |
 | Vitest | 自动化测试 | `tests/` | 已确定 |
 
@@ -99,5 +102,6 @@ sequenceDiagram
 
 - LiveKit SDK API 必须在实施时依据当前官方文档与已安装类型定义核验。
 - Agent 生命周期、Provider 创建、导游策略和配置解析必须分离。
+- Provider 必须按 LLM/STT/TTS 分类，经 `registry.ts` 创建；火山协议细节不可出现在 Agent 入口。
 - 所有配置与未来工具输入均须由 Zod 在边界处校验。
 - 第一版仅做单用户独立房间的本地纯语音对话，不扩展模拟器数据或业务工具。
