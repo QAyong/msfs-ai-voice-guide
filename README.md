@@ -27,4 +27,14 @@ pnpm install
 pnpm run verify
 ```
 
-当前已完成工程工具链与 LiveKit SDK 类型契约检查；实际 Agent 启动命令会在实现 LiveKit 会话入口后加入。
+当前已完成工程工具链、LiveKit SDK 类型契约、火山 Provider 适配器和 LiveKit 会话入口。
+
+## 本地运行
+
+1. 复制 `.env.example` 为 `.env`，填入 LiveKit、火山方舟和豆包语音凭据。
+2. 使用 `pnpm agent:check` 检查配置（不会输出密钥，也不会发起远程请求）。
+3. 启动本地 Agent Worker（工作进程）：`pnpm agent:dev`。
+
+Agent Worker 依赖可访问的 LiveKit Server；客户端和房间 Token 由后续客户端项目负责。本仓库当前不提供客户端实现。
+
+完整的真实语音联调步骤见[本地冒烟测试](docs/testing/local-agent-smoke.md)。

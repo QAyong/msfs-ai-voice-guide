@@ -11,18 +11,26 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
+    "agent:check": "node --env-file=.env --import tsx src/main.ts check",
+    "agent:dev": "node --env-file=.env --import tsx src/main.ts dev",
+    "agent:start": "node --env-file=.env --import tsx src/main.ts start",
     "verify": "pnpm lint && pnpm typecheck && pnpm test && pnpm format:check"
   },
   "dependencies": {
     "@livekit/agents": "^1.5.2",
+    "@livekit/agents-plugin-openai": "^1.5.2",
+    "@livekit/rtc-node": "0.13.31",
+    "ws": "^8.21.0",
     "zod": "^4.4.3"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@types/node": "^26.1.1",
+    "@types/ws": "^8.18.1",
     "eslint": "^10.7.0",
     "eslint-config-prettier": "^10.1.8",
     "prettier": "^3.9.5",
+    "tsx": "^4.23.1",
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.64.0",
     "vitest": "^4.1.10"
