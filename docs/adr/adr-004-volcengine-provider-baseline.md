@@ -1,7 +1,7 @@
 # ADR-004：火山引擎作为第一版唯一 Provider 基线
 
 **日期：** 2026-07-15  
-**状态：** 已接受
+**状态：** 已被 ADR-005 取代
 
 ## 背景
 
@@ -9,7 +9,7 @@
 
 ## 决策
 
-第一版固定使用火山方舟 LLM、豆包流式 ASR 和豆包双向流式 TTS；以按能力分类的 `src/providers/registry.ts`（Provider 工厂注册表）作为唯一装配入口。LLM 优先复用 LiveKit 官方 OpenAI 兼容插件，STT/TTS 仅在当前官方插件不存在时实现受限于 Provider 层的最小适配器。
+本 ADR 不再作为现行 Provider 基线。请遵循 ADR-005：LLM 改用 DeepSeek，豆包流式 ASR 与豆包双向流式 TTS 保持火山引擎实现。
 
 ## 原因
 
