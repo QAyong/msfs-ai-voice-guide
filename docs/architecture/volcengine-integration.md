@@ -38,14 +38,18 @@ src/providers/
 
 `.env.example`（环境变量模板）是唯一可提交的配置样例。`src/config/schema.ts` 使用 Zod 在启动时解析、校验和转换下列变量；业务模块不可直接读取 `process.env`。
 
-| 配置组   | 必填变量                                                                                                                 | 规则                                                                      |
-| -------- | ------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------- |
-| LiveKit  | `LIVEKIT_URL`、`LIVEKIT_API_KEY`、`LIVEKIT_API_SECRET`、`LIVEKIT_AGENT_NAME`                                             | URL 格式与非空字符串校验；日志不得输出 API Secret。                       |
-| 方舟 LLM | `VOLCENGINE_ARK_API_KEY`、`VOLCENGINE_ARK_BASE_URL`、`VOLCENGINE_LLM_MODEL`                                              | 模型值使用已开通的 endpoint/model ID；不在文档中硬编码过期模型名。        |
-| 豆包 STT | `VOLCENGINE_SPEECH_API_KEY`，或 `VOLCENGINE_SPEECH_APP_ID` + `VOLCENGINE_SPEECH_ACCESS_TOKEN`；另需 endpoint/resource ID | Speech API Key 存在时优先使用；否则要求 App ID 和 Access Token 成对存在。 |
-| 豆包 TTS | `VOLCENGINE_SPEECH_APP_ID`、`VOLCENGINE_SPEECH_ACCESS_TOKEN`、endpoint、resource ID、speaker                             | `speaker` 必须是账户已开通的音色；采样率必须为正整数。                    |
+| 配置组   | 必填变量                                                                                                                 | 规则                                                                       |
+| -------- | ------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------- |
+| LiveKit  | `LIVEKIT_URL`、`LIVEKIT_API_KEY`、`LIVEKIT_API_SECRET`、`LIVEKIT_AGENT_NAME`                                             | URL 格式与非空字符串校验；日志不得输出 API Secret。                        |
+| 方舟 LLM | `VOLCENGINE_ARK_API_KEY`、`VOLCENGINE_ARK_BASE_URL`、`VOLCENGINE_LLM_MODEL`                                              | 模型值使用已开通的 endpoint/model ID；示例默认值来自参考项目的已验证配置。 |
+| 豆包 STT | `VOLCENGINE_SPEECH_API_KEY`，或 `VOLCENGINE_SPEECH_APP_ID` + `VOLCENGINE_SPEECH_ACCESS_TOKEN`；另需 endpoint/resource ID | Speech API Key 存在时优先使用；否则要求 App ID 和 Access Token 成对存在。  |
+| 豆包 TTS | `VOLCENGINE_SPEECH_APP_ID`、`VOLCENGINE_SPEECH_ACCESS_TOKEN`、endpoint、resource ID、speaker                             | `speaker` 必须是账户已开通的音色；采样率必须为正整数。                     |
 
 TTS 采用火山文档推荐的 V3 双向流式 WebSocket，适合实时文本输入与流式音频输出；端点、资源 ID 和音色许可均以账户控制台及官方当日文档为准。[豆包语音双向流式 TTS 文档](https://www.volcengine.com/docs/6561/2532486?lang=zh)
+
+### 当前可提交模板的参考基线
+
+为与 `[reference project]` 已完成的本地配置保持一致，`.env.example`（环境变量模板）预填了下列非敏感默认值：方舟模型 `doubao-seed-2-0-mini-260215`、STT `bigmodel` / `volc.bigasr.sauc.duration`，以及 TTS `seed-tts-2.0` / `zh_female_vv_uranus_bigtts`。真实凭据仍只允许写入未跟踪的 `.env`（本机环境文件）或进程环境变量；LiveKit 的 URL、API Key 和 API Secret 必须由实际房间服务提供，不能从该参考项目推断。
 
 ## 实施与验证顺序
 
