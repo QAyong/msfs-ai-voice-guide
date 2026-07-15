@@ -1,7 +1,7 @@
 # Spec-001：本地实时语音导游 Agent 第一版
 
 **日期：** 2026-07-15  
-**状态：** 设计已确认，待开发
+**状态：** 开发中
 
 ## 背景
 
@@ -65,7 +65,7 @@
 
 ## 实施顺序
 
-1. 初始化 pnpm、TypeScript、Vitest、ESLint/格式化工具与 `.gitignore`；安装 LiveKit Agents 当前稳定版并核验 API。
+1. [x] 初始化 pnpm、TypeScript、Vitest、ESLint/格式化工具与 `.gitignore`；安装 LiveKit Agents 当前稳定版并核验 API。
 2. 实现 `config` 的 Zod Schema、`.env.example` 与单元测试。
 3. 实现 `conversation` 的导游提示词和单元测试。
 4. 在 `providers` 中建立 LLM/STT/TTS 分类注册表；以 LiveKit OpenAI 兼容插件接入方舟 LLM，并核对是否已有官方火山语音插件。
