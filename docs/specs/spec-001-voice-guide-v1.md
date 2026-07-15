@@ -1,7 +1,7 @@
 # Spec-001：本地实时语音导游 Agent 第一版
 
 **日期：** 2026-07-15  
-**状态：** 开发中
+**状态：** 已完成
 
 ## 背景
 
@@ -31,15 +31,15 @@
 
 ## 验收标准
 
-- [ ] `pnpm install` 后可用项目脚本启动本地 Agent，且脚本名称、参数与当前 LiveKit 官方文档及已安装 SDK 类型一致。
-- [ ] 使用有效本地配置时，Agent 能加入用户的独立 LiveKit 房间并完成至少一轮“用户说话 → Agent 语音回复”。
-- [ ] 缺少 LiveKit 或选定 Provider 的必填环境变量时，启动在连接前以不含密钥的明确错误失败。
-- [ ] 导游角色提示词不位于 Agent 进程入口文件中。
-- [ ] Agent 入口文件不直接解析 `process.env`，也不含 Provider 密钥或 Provider 特定初始化细节。
-- [ ] 火山 LLM、STT、TTS 均经 `registry.ts` 创建；LLM 优先复用已安装的 LiveKit OpenAI 兼容插件，STT/TTS 仅在官方插件缺失时使用隔离的最小适配器。
-- [ ] 配置支持 STT 的 Speech API Key 优先模式，以及 App ID + Access Token 后备模式；TTS 必须验证 App ID、Access Token、resource ID 和已授权 speaker。
-- [ ] `pnpm test` 运行 Vitest 核心测试并通过，默认不需要真实云端密钥。
-- [ ] 仓库不跟踪 `.env` 或任何真实密钥；存在 `.env.example` 说明必需变量。
+- [x] `pnpm install` 后可用项目脚本启动本地 Agent，且脚本名称、参数与当前 LiveKit 官方文档及已安装 SDK 类型一致。
+- [x] 使用有效本地配置时，Agent 能加入用户的独立 LiveKit 房间并完成至少一轮“用户说话 → Agent 语音回复”。
+- [x] 缺少 LiveKit 或选定 Provider 的必填环境变量时，启动在连接前以不含密钥的明确错误失败。
+- [x] 导游角色提示词不位于 Agent 进程入口文件中。
+- [x] Agent 入口文件不直接解析 `process.env`，也不含 Provider 密钥或 Provider 特定初始化细节。
+- [x] 火山 LLM、STT、TTS 均经 `registry.ts` 创建；LLM 优先复用已安装的 LiveKit OpenAI 兼容插件，STT/TTS 仅在官方插件缺失时使用隔离的最小适配器。
+- [x] 配置支持 STT 的 Speech API Key 优先模式，以及 App ID + Access Token 后备模式；TTS 必须验证 App ID、Access Token、resource ID 和已授权 speaker。
+- [x] `pnpm test` 运行 Vitest 核心测试并通过，默认不需要真实云端密钥。
+- [x] 仓库不跟踪 `.env` 或任何真实密钥；存在 `.env.example` 说明必需变量。
 
 ## 场景描述
 
@@ -71,7 +71,7 @@
 4. [x] 在 `providers` 中建立 LLM/STT/TTS 分类注册表；以 LiveKit OpenAI 兼容插件接入方舟 LLM，并核对是否已有官方火山语音插件。
 5. [x] 在各自 Provider 子目录实现豆包 STT/TTS 的最小协议适配器与 mock 测试。
 6. [x] 在 `agent` 中按官方当前 SDK 类型实现入口、worker/dispatcher 与语音会话。
-7. [ ] 使用真实 LiveKit 与火山凭据完成本地房间人工联调；已提供不依赖真实密钥的集成测试、配置自检命令和[冒烟测试手册](../testing/local-agent-smoke.md)。
+7. [x] 使用本机 LiveKit Server 与真实火山凭据完成本地房间人工联调：用户确认“用户说话 → Agent 语音回复”无问题；保留不依赖真实密钥的集成测试、配置自检命令和[冒烟测试手册](../testing/local-agent-smoke.md)。
 8. 只有在该流程稳定后，另立 Spec 实现工具调用和模拟器数据模块。
 
 ## 相关测试
