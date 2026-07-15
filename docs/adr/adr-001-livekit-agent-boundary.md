@@ -25,5 +25,5 @@ LiveKit 已提供面向实时房间和 Agent 的成熟能力，能让第一版�
 ## 不在此决策范围内
 
 - 使用 LiveKit Cloud 还是自建服务。
-- LLM、STT、TTS 供应商的具体选择。
+- 火山引擎之外的 LLM、STT、TTS 供应商选择（第一版火山基线见 ADR-004）。
 - 客户端 Token 签发和房间命名规则。
