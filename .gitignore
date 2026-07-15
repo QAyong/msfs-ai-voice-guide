@@ -1,0 +1,14 @@
+# Dependencies and build output
+node_modules/
+dist/
+coverage/
+
+# Local secrets and overrides
+.env
+.env.*
+!.env.example
+
+# Tooling noise
+*.log
+.DS_Store
+Thumbs.db
