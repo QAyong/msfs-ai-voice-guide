@@ -1,12 +1,12 @@
 # 本地语音 Agent 冒烟测试
 
-**最近一次通过：** 2026-07-15，本机 LiveKit Server + 火山方舟 LLM + 豆包 STT/TTS；人工语音对话正常。
+**最近一次通过：** 2026-07-15，本机 LiveKit Server + 豆包 STT/TTS 人工语音对话正常；同日 DeepSeek `deepseek-v4-flash` API（应用程序接口）真实请求通过。
 
 ## 前置条件
 
 - 已启动或已配置可访问的 LiveKit Server（实时音视频房间服务）。
 - 已具备一个可加入 LiveKit 房间、发布麦克风音频的客户端；本仓库不提供客户端实现。可使用 LiveKit Meet（官方测试页面）。
-- 火山方舟 LLM、豆包流式 ASR 和豆包双向流式 TTS 均已开通，且音色已授权。
+- DeepSeek LLM、豆包流式 ASR 和豆包双向流式 TTS 均已开通，且音色已授权。
 
 ## 启动本机 LiveKit Server
 

@@ -24,9 +24,9 @@ const envSchema = z.object({
   LIVEKIT_API_KEY: requiredText,
   LIVEKIT_API_SECRET: requiredText,
   LIVEKIT_AGENT_NAME: requiredText,
-  VOLCENGINE_ARK_API_KEY: requiredText,
-  VOLCENGINE_ARK_BASE_URL: z.string().url(),
-  VOLCENGINE_LLM_MODEL: requiredText,
+  DEEPSEEK_API_KEY: requiredText,
+  DEEPSEEK_BASE_URL: z.string().url().default('https://api.deepseek.com'),
+  DEEPSEEK_LLM_MODEL: requiredText.default('deepseek-v4-flash'),
   VOLCENGINE_SPEECH_API_KEY: optionalNonEmpty,
   VOLCENGINE_SPEECH_APP_ID: requiredText,
   VOLCENGINE_SPEECH_ACCESS_TOKEN: requiredText,
@@ -47,12 +47,13 @@ export type AppConfig = {
     apiSecret: string;
     agentName: string;
   };
+  llm: {
+    provider: 'deepseek';
+    apiKey: string;
+    baseUrl: string;
+    model: string;
+  };
   volcengine: {
-    llm: {
-      apiKey: string;
-      baseUrl: string;
-      model: string;
-    };
     stt: {
       apiKey?: string;
       appId: string;
@@ -101,12 +102,13 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
       apiSecret: value.LIVEKIT_API_SECRET,
       agentName: value.LIVEKIT_AGENT_NAME,
     },
+    llm: {
+      provider: 'deepseek',
+      apiKey: value.DEEPSEEK_API_KEY,
+      baseUrl: value.DEEPSEEK_BASE_URL,
+      model: value.DEEPSEEK_LLM_MODEL,
+    },
     volcengine: {
-      llm: {
-        apiKey: value.VOLCENGINE_ARK_API_KEY,
-        baseUrl: value.VOLCENGINE_ARK_BASE_URL,
-        model: value.VOLCENGINE_LLM_MODEL,
-      },
       stt: {
         ...(value.VOLCENGINE_SPEECH_API_KEY ? { apiKey: value.VOLCENGINE_SPEECH_API_KEY } : {}),
         appId: value.VOLCENGINE_SPEECH_APP_ID,

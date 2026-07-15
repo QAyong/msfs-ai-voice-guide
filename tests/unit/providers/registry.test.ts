@@ -7,9 +7,9 @@ const config = loadConfig({
   LIVEKIT_API_KEY: 'livekit-key',
   LIVEKIT_API_SECRET: 'livekit-secret',
   LIVEKIT_AGENT_NAME: 'msfs-voice-guide',
-  VOLCENGINE_ARK_API_KEY: 'ark-secret',
-  VOLCENGINE_ARK_BASE_URL: 'https://ark.example.test/api/v3',
-  VOLCENGINE_LLM_MODEL: 'ep-example',
+  DEEPSEEK_API_KEY: 'deepseek-secret',
+  DEEPSEEK_BASE_URL: 'https://deepseek.example.test',
+  DEEPSEEK_LLM_MODEL: 'deepseek-test-model',
   VOLCENGINE_SPEECH_APP_ID: 'speech-app',
   VOLCENGINE_SPEECH_ACCESS_TOKEN: 'speech-secret',
   VOLCENGINE_STT_ENDPOINT: 'wss://speech.example.test/asr',
@@ -20,10 +20,10 @@ const config = loadConfig({
 });
 
 describe('createVoiceProviders', () => {
-  it('集中创建火山 LLM、STT 和 TTS', async () => {
+  it('集中创建 DeepSeek LLM 与豆包 STT/TTS', async () => {
     const providers = createVoiceProviders(config);
 
-    expect(providers.llm.provider).toBe('ark.example.test');
+    expect(providers.llm.provider).toBe('deepseek.example.test');
     expect(providers.stt.label).toBe('volcengine.STT');
     expect(providers.tts.label).toBe('volcengine.TTS');
 
