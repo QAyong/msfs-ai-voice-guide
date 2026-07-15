@@ -26,11 +26,11 @@ src/providers/
 
 ## 组件映射
 
-| 能力 | 第一版实现 | 复用优先级 | 关键配置 |
-|---|---|---|---|
-| LLM | 火山方舟 OpenAI 兼容 Chat API | 首选当前 LiveKit OpenAI 插件的兼容端点能力；安装后核对其 `baseURL`、`apiKey` 和模型类型 | `VOLCENGINE_ARK_API_KEY`、`VOLCENGINE_ARK_BASE_URL`、`VOLCENGINE_LLM_MODEL` |
-| STT | 豆包大模型流式 ASR | 先检查当前 LiveKit 官方插件是否已原生支持；若没有，仅在 `src/providers/stt/volcengine.ts` 实现官方 WebSocket 协议适配 | `VOLCENGINE_SPEECH_API_KEY` 或 App ID + Access Token、endpoint、resource ID |
-| TTS | 豆包双向流式 TTS WebSocket | 先检查当前 LiveKit 官方插件是否已原生支持；若没有，仅在 `src/providers/tts/volcengine.ts` 实现官方 WebSocket 协议适配 | App ID、Access Token、endpoint、resource ID、speaker |
+| 能力 | 第一版实现                    | 复用优先级                                                                                                            | 关键配置                                                                    |
+| ---- | ----------------------------- | --------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
+| LLM  | 火山方舟 OpenAI 兼容 Chat API | 首选当前 LiveKit OpenAI 插件的兼容端点能力；安装后核对其 `baseURL`、`apiKey` 和模型类型                               | `VOLCENGINE_ARK_API_KEY`、`VOLCENGINE_ARK_BASE_URL`、`VOLCENGINE_LLM_MODEL` |
+| STT  | 豆包大模型流式 ASR            | 先检查当前 LiveKit 官方插件是否已原生支持；若没有，仅在 `src/providers/stt/volcengine.ts` 实现官方 WebSocket 协议适配 | `VOLCENGINE_SPEECH_API_KEY` 或 App ID + Access Token、endpoint、resource ID |
+| TTS  | 豆包双向流式 TTS WebSocket    | 先检查当前 LiveKit 官方插件是否已原生支持；若没有，仅在 `src/providers/tts/volcengine.ts` 实现官方 WebSocket 协议适配 | App ID、Access Token、endpoint、resource ID、speaker                        |
 
 截至本设计更新日，LiveKit Node.js 的官方插件目录提供了按 Provider 独立安装的插件，并明确支持使用 OpenAI 插件连接 OpenAI 兼容 LLM；火山方舟文档也说明其兼容 OpenAI SDK。因此，LLM 不应重新实现 HTTP 客户端。STT/TTS 是否已有官方火山插件必须在实际安装日再次核对；没有才写最小适配器。参考：[LiveKit 插件总览](https://docs.livekit.io/agents/integrations/plugins/)、[LiveKit OpenAI 兼容 LLM](https://docs.livekit.io/agents/models/llm/openai-compatible-llms/)、[火山方舟 OpenAI SDK 兼容说明](https://www.volcengine.com/docs/82379/1330626?lang=zh)。
 
@@ -38,12 +38,12 @@ src/providers/
 
 `.env.example`（环境变量模板）是唯一可提交的配置样例。`src/config/schema.ts` 使用 Zod 在启动时解析、校验和转换下列变量；业务模块不可直接读取 `process.env`。
 
-| 配置组 | 必填变量 | 规则 |
-|---|---|---|
-| LiveKit | `LIVEKIT_URL`、`LIVEKIT_API_KEY`、`LIVEKIT_API_SECRET`、`LIVEKIT_AGENT_NAME` | URL 格式与非空字符串校验；日志不得输出 API Secret。 |
-| 方舟 LLM | `VOLCENGINE_ARK_API_KEY`、`VOLCENGINE_ARK_BASE_URL`、`VOLCENGINE_LLM_MODEL` | 模型值使用已开通的 endpoint/model ID；不在文档中硬编码过期模型名。 |
+| 配置组   | 必填变量                                                                                                                 | 规则                                                                      |
+| -------- | ------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------- |
+| LiveKit  | `LIVEKIT_URL`、`LIVEKIT_API_KEY`、`LIVEKIT_API_SECRET`、`LIVEKIT_AGENT_NAME`                                             | URL 格式与非空字符串校验；日志不得输出 API Secret。                       |
+| 方舟 LLM | `VOLCENGINE_ARK_API_KEY`、`VOLCENGINE_ARK_BASE_URL`、`VOLCENGINE_LLM_MODEL`                                              | 模型值使用已开通的 endpoint/model ID；不在文档中硬编码过期模型名。        |
 | 豆包 STT | `VOLCENGINE_SPEECH_API_KEY`，或 `VOLCENGINE_SPEECH_APP_ID` + `VOLCENGINE_SPEECH_ACCESS_TOKEN`；另需 endpoint/resource ID | Speech API Key 存在时优先使用；否则要求 App ID 和 Access Token 成对存在。 |
-| 豆包 TTS | `VOLCENGINE_SPEECH_APP_ID`、`VOLCENGINE_SPEECH_ACCESS_TOKEN`、endpoint、resource ID、speaker | `speaker` 必须是账户已开通的音色；采样率必须为正整数。 |
+| 豆包 TTS | `VOLCENGINE_SPEECH_APP_ID`、`VOLCENGINE_SPEECH_ACCESS_TOKEN`、endpoint、resource ID、speaker                             | `speaker` 必须是账户已开通的音色；采样率必须为正整数。                    |
 
 TTS 采用火山文档推荐的 V3 双向流式 WebSocket，适合实时文本输入与流式音频输出；端点、资源 ID 和音色许可均以账户控制台及官方当日文档为准。[豆包语音双向流式 TTS 文档](https://www.volcengine.com/docs/6561/2532486?lang=zh)
 

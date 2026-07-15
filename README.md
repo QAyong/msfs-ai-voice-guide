@@ -17,3 +17,14 @@
 使用 pnpm 锁定依赖；LiveKit Agents 的包名、版本和 API 必须以安装当日的官方文档与本地 TypeScript 类型定义为准。不要把未核验的示例或记忆中的 API 直接写入生产代码。
 
 所有本地密钥通过环境变量注入。请复制 [`.env.example`](.env.example) 为本地 `.env` 并填写凭据；绝不提交真实 `.env` 文件。
+
+## 当前开发命令
+
+需要 Node.js 24 和 pnpm 11。安装依赖后，可运行以下工程检查：
+
+```powershell
+pnpm install
+pnpm run verify
+```
+
+当前已完成工程工具链与 LiveKit SDK 类型契约检查；实际 Agent 启动命令会在实现 LiveKit 会话入口后加入。

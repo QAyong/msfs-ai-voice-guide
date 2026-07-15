@@ -51,15 +51,15 @@ sequenceDiagram
 
 ## 模块职责与依赖方向
 
-| 模块 | 职责 | 可以依赖 | 不应依赖 |
-|---|---|---|---|
-| `src/config/` | 定义与解析 Zod 环境配置 | Zod、Node 环境 | Agent、Provider、业务模块 |
-| `src/providers/` | 通过 `registry.ts` 注册并创建火山 LLM/STT/TTS | Provider 官方 SDK、配置 | LiveKit 房间生命周期、提示词 |
-| `src/core/` | 启动辅助、脱敏日志与 Provider 自检 | 配置、注册表 | 提示词、音频协议细节 |
-| `src/conversation/` | 定义导游身份、语言、回答边界 | 少量共享类型 | 环境变量、SDK 启动细节 |
-| `src/agent/` | 连接 LiveKit、创建会话、组合依赖 | 上述内部模块、LiveKit Agents | 具体密钥解析、长篇提示词、未来业务逻辑 |
-| `src/tools/`（未来） | 真实业务能力及其 Zod 参数 | 业务服务、共享类型 | Agent 生命周期实现 |
-| `src/cli/`（未来） | 本地命令的参数与执行入口 | 需要调用的内部模块 | 复制 Agent 业务逻辑 |
+| 模块                 | 职责                                          | 可以依赖                     | 不应依赖                               |
+| -------------------- | --------------------------------------------- | ---------------------------- | -------------------------------------- |
+| `src/config/`        | 定义与解析 Zod 环境配置                       | Zod、Node 环境               | Agent、Provider、业务模块              |
+| `src/providers/`     | 通过 `registry.ts` 注册并创建火山 LLM/STT/TTS | Provider 官方 SDK、配置      | LiveKit 房间生命周期、提示词           |
+| `src/core/`          | 启动辅助、脱敏日志与 Provider 自检            | 配置、注册表                 | 提示词、音频协议细节                   |
+| `src/conversation/`  | 定义导游身份、语言、回答边界                  | 少量共享类型                 | 环境变量、SDK 启动细节                 |
+| `src/agent/`         | 连接 LiveKit、创建会话、组合依赖              | 上述内部模块、LiveKit Agents | 具体密钥解析、长篇提示词、未来业务逻辑 |
+| `src/tools/`（未来） | 真实业务能力及其 Zod 参数                     | 业务服务、共享类型           | Agent 生命周期实现                     |
+| `src/cli/`（未来）   | 本地命令的参数与执行入口                      | 需要调用的内部模块           | 复制 Agent 业务逻辑                    |
 
 依赖始终由入口向内组合；`config`、`conversation` 和未来的 `tools` 不反向导入 `agent`，从而避免循环依赖。
 
@@ -88,15 +88,15 @@ sequenceDiagram
 
 ## 外部依赖
 
-| 依赖类别 | 用途 | 接入模块 | 选型状态 |
-|---|---|---|---|
-| LiveKit Agents Node.js SDK | 实时语音 Agent 生命周期与会话 | `src/agent/` | 实施时安装当前稳定版 |
-| LiveKit Server / Cloud | 本地联调房间基础设施 | 本地运行环境 | 待确定 |
-| 火山方舟 | 对话理解与生成（LLM） | `src/providers/llm/` | 第一版确定 |
-| 豆包流式 ASR | 语音转文字（STT） | `src/providers/stt/` | 第一版确定 |
-| 豆包双向流式 TTS | 文字转语音（TTS） | `src/providers/tts/` | 第一版确定 |
-| Zod | 配置和未来工具参数校验 | `src/config/`、`src/tools/` | 已确定 |
-| Vitest | 自动化测试 | `tests/` | 已确定 |
+| 依赖类别                   | 用途                          | 接入模块                    | 选型状态             |
+| -------------------------- | ----------------------------- | --------------------------- | -------------------- |
+| LiveKit Agents Node.js SDK | 实时语音 Agent 生命周期与会话 | `src/agent/`                | 实施时安装当前稳定版 |
+| LiveKit Server / Cloud     | 本地联调房间基础设施          | 本地运行环境                | 待确定               |
+| 火山方舟                   | 对话理解与生成（LLM）         | `src/providers/llm/`        | 第一版确定           |
+| 豆包流式 ASR               | 语音转文字（STT）             | `src/providers/stt/`        | 第一版确定           |
+| 豆包双向流式 TTS           | 文字转语音（TTS）             | `src/providers/tts/`        | 第一版确定           |
+| Zod                        | 配置和未来工具参数校验        | `src/config/`、`src/tools/` | 已确定               |
+| Vitest                     | 自动化测试                    | `tests/`                    | 已确定               |
 
 ## 不变量（来自 ADR）
 
