@@ -1,4 +1,4 @@
-import { ConfigError, loadConfig } from '../../src/config/schema.js';
+import { ConfigError, loadConfig, loadSearchConfig } from '../../src/config/schema.js';
 import { describe, expect, it } from 'vitest';
 
 const baseEnvironment: NodeJS.ProcessEnv = {
@@ -16,6 +16,7 @@ const baseEnvironment: NodeJS.ProcessEnv = {
   VOLCENGINE_TTS_ENDPOINT: 'wss://speech.example.test/tts',
   VOLCENGINE_TTS_RESOURCE_ID: 'tts-resource',
   VOLCENGINE_TTS_SPEAKER: 'speaker-id',
+  VOLCENGINE_SEARCH_API_KEY: 'search-secret',
 };
 
 describe('loadConfig', () => {
@@ -43,6 +44,24 @@ describe('loadConfig', () => {
       apiKey: 'deepseek-secret',
       baseUrl: 'https://deepseek.example.test',
       model: 'deepseek-test-model',
+    });
+  });
+
+  it('为搜索服务解析连接配置与默认超时', () => {
+    const config = loadConfig(baseEnvironment);
+
+    expect(config.search).toEqual({
+      apiKey: 'search-secret',
+      endpoint: 'https://open.feedcoopapi.com/search_api/web_search',
+      timeoutMs: 10_000,
+    });
+  });
+
+  it('可为独立 CLI 只加载搜索配置', () => {
+    expect(loadSearchConfig({ VOLCENGINE_SEARCH_API_KEY: 'search-secret' })).toEqual({
+      apiKey: 'search-secret',
+      endpoint: 'https://open.feedcoopapi.com/search_api/web_search',
+      timeoutMs: 10_000,
     });
   });
 

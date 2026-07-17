@@ -1,0 +1,1295 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>云迹导游 · 悬浮语音面板原型</title>
+    <style>
+      :root {
+        --font:
+          system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft YaHei', sans-serif;
+        --panel-bg: rgba(255, 255, 255, 0.94);
+        --panel-border: rgba(20, 24, 31, 0.09);
+        --text: #1a1c22;
+        --muted: #6b7280;
+        --blue: #2563eb;
+        --blue-soft: #eef4ff;
+        --shadow: 0 12px 32px rgba(10, 12, 18, 0.2);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        min-width: 720px;
+        min-height: 500px;
+        margin: 0;
+        overflow: hidden;
+        background: #6e8d9f;
+        color: var(--text);
+        font-family: var(--font);
+      }
+
+      .flight-view {
+        position: relative;
+        min-height: 100vh;
+        overflow: hidden;
+        background: #6e8d9f;
+      }
+
+      .flight-caption {
+        position: absolute;
+        left: 20px;
+        top: 18px;
+        z-index: 1;
+        color: rgba(255, 255, 255, 0.82);
+        font-size: 11px;
+        letter-spacing: 0.04em;
+      }
+
+      .flight-caption strong {
+        display: block;
+        margin-bottom: 3px;
+        color: #fff;
+        font-size: 13px;
+        font-weight: 650;
+        letter-spacing: 0;
+      }
+
+      .assistant-shell {
+        position: fixed;
+        right: 20px;
+        top: 50%;
+        z-index: 3;
+        width: 272px;
+        transform: translateY(-50%);
+        transition: transform 0.24s ease;
+      }
+
+      .panel {
+        position: relative;
+        display: flex;
+        width: 272px;
+        min-width: 240px;
+        max-width: calc(100vw - 32px);
+        min-height: 158px;
+        max-height: calc(100vh - 32px);
+        flex-direction: column;
+        overflow: hidden;
+        border: 1px solid var(--panel-border);
+        border-radius: 9px;
+        background: var(--panel-bg);
+        box-shadow: var(--shadow);
+        backdrop-filter: blur(12px);
+        resize: none;
+        transition:
+          opacity 0.18s ease,
+          transform 0.24s ease;
+      }
+
+      .panel.is-resizing {
+        user-select: none;
+      }
+
+      .resize-handle {
+        position: absolute;
+        z-index: 5;
+        touch-action: none;
+      }
+      .resize-top {
+        top: 0;
+        right: 10px;
+        left: 10px;
+        height: 5px;
+        cursor: ns-resize;
+      }
+      .resize-bottom {
+        right: 10px;
+        bottom: 0;
+        left: 10px;
+        height: 5px;
+        cursor: ns-resize;
+      }
+      .resize-left {
+        top: 10px;
+        bottom: 10px;
+        left: 0;
+        width: 5px;
+        cursor: ew-resize;
+      }
+      .resize-right {
+        top: 10px;
+        right: 0;
+        bottom: 10px;
+        width: 5px;
+        cursor: ew-resize;
+      }
+      .resize-top-left {
+        top: 0;
+        left: 0;
+        width: 10px;
+        height: 10px;
+        cursor: nwse-resize;
+      }
+      .resize-top-right {
+        top: 0;
+        right: 0;
+        width: 10px;
+        height: 10px;
+        cursor: nesw-resize;
+      }
+      .resize-bottom-left {
+        bottom: 0;
+        left: 0;
+        width: 10px;
+        height: 10px;
+        cursor: nesw-resize;
+      }
+      .resize-bottom-right {
+        right: 0;
+        bottom: 0;
+        width: 10px;
+        height: 10px;
+        cursor: nwse-resize;
+      }
+
+      .header {
+        position: relative;
+        display: flex;
+        align-items: center;
+        justify-content: flex-start;
+        gap: 8px;
+        height: 40px;
+        padding: 0 9px;
+        border-bottom: 1px solid rgba(20, 24, 31, 0.07);
+        color: var(--muted);
+        cursor: grab;
+        font-size: 11px;
+        user-select: none;
+      }
+
+      .header.dragging {
+        cursor: grabbing;
+      }
+
+      .header .avatar {
+        width: 25px;
+        height: 25px;
+        border-width: 1px;
+      }
+      .header .status-dot {
+        right: -1px;
+        bottom: -1px;
+        width: 8px;
+        height: 8px;
+        border-width: 1px;
+      }
+      .header-title {
+        font-weight: 650;
+        color: #343944;
+      }
+      .header-status {
+        color: #8b919d;
+      }
+
+      .collapse-button {
+        margin-left: auto;
+        padding: 4px 6px;
+        border: 0;
+        border-radius: 5px;
+        background: transparent;
+        color: #6b7280;
+        cursor: pointer;
+        font: inherit;
+        font-size: 10px;
+      }
+
+      .collapse-button:hover {
+        background: rgba(20, 24, 31, 0.06);
+        color: #111827;
+      }
+      .collapse-button:focus-visible {
+        outline: 2px solid #93c5fd;
+        outline-offset: 2px;
+      }
+
+      .avatar-wrap {
+        position: relative;
+        flex: 0 0 auto;
+      }
+
+      .avatar {
+        display: block;
+        width: 36px;
+        height: 36px;
+        border: 1px solid #fff;
+        border-radius: 999px;
+        background: #dce7e8;
+        box-shadow:
+          0 1px 0 rgba(0, 0, 0, 0.05),
+          0 0 0 1px rgba(20, 24, 31, 0.08);
+        object-fit: cover;
+        -webkit-user-drag: none;
+        user-select: none;
+      }
+
+      .status-dot {
+        position: absolute;
+        right: -1px;
+        bottom: -1px;
+        width: 9px;
+        height: 9px;
+        border: 1px solid #fff;
+        border-radius: 50%;
+        background: #22a06b;
+      }
+
+      .messages {
+        display: flex;
+        min-height: 72px;
+        flex-direction: column;
+        flex: 1 1 auto;
+        gap: 6px;
+        padding: 9px 10px 10px;
+        overflow: auto;
+      }
+
+      .message {
+        display: flex;
+        align-items: flex-end;
+        gap: 7px;
+      }
+      .message.user {
+        justify-content: flex-end;
+      }
+
+      .message-guide-avatar {
+        width: 18px;
+        height: 18px;
+        border-radius: 50%;
+        object-fit: cover;
+      }
+
+      .bubble {
+        max-width: 220px;
+        padding: 7px 9px;
+        border: 1px solid rgba(20, 24, 31, 0.06);
+        border-radius: 8px;
+        background: #f4f5f7;
+        color: #3d424d;
+        font-size: 12px;
+        line-height: 1.45;
+      }
+
+      .user .bubble {
+        border-color: #d9e7ff;
+        background: var(--blue-soft);
+        color: #244a85;
+      }
+
+      .guide-stack {
+        display: flex;
+        width: 100%;
+        flex-direction: column;
+        gap: 7px;
+      }
+
+      .source-card {
+        display: grid;
+        width: 100%;
+        grid-template-columns: 52px minmax(0, 1fr);
+        gap: 8px;
+        padding: 7px;
+        border: 1px solid #d9e7ff;
+        border-radius: 8px;
+        background: #f8fbff;
+        color: inherit;
+        cursor: pointer;
+        font: inherit;
+        text-align: left;
+      }
+
+      .source-card:hover {
+        border-color: #a9c6ff;
+        background: #f3f7ff;
+      }
+      .source-card:focus-visible,
+      .search-preview:focus-visible {
+        outline: 2px solid #93c5fd;
+        outline-offset: 2px;
+      }
+
+      .source-thumb {
+        display: block;
+        width: 52px;
+        height: 52px;
+        border-radius: 6px;
+        object-fit: cover;
+        -webkit-user-drag: none;
+        user-select: none;
+      }
+
+      .source-copy {
+        min-width: 0;
+      }
+      .source-title {
+        display: block;
+        overflow: hidden;
+        color: #1d4ed8;
+        font-size: 11px;
+        font-weight: 650;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .source-domain {
+        display: block;
+        margin-top: 2px;
+        color: #7b8390;
+        font-size: 9px;
+      }
+      .source-summary {
+        display: -webkit-box;
+        margin-top: 3px;
+        overflow: hidden;
+        color: #59606c;
+        font-size: 10px;
+        line-height: 1.35;
+        -webkit-box-orient: vertical;
+        -webkit-line-clamp: 2;
+      }
+
+      .search-preview {
+        align-self: flex-start;
+        padding: 3px 1px;
+        border: 0;
+        background: transparent;
+        color: #3567b7;
+        cursor: pointer;
+        font: inherit;
+        font-size: 10px;
+      }
+
+      .browser-panel {
+        position: fixed;
+        z-index: 4;
+        display: none;
+        width: min(410px, calc(100vw - 32px));
+        height: min(540px, calc(100vh - 32px));
+        flex-direction: column;
+        overflow: hidden;
+        border: 1px solid var(--panel-border);
+        border-radius: 10px;
+        background: rgba(255, 255, 255, 0.98);
+        box-shadow: var(--shadow);
+      }
+
+      .browser-panel.open {
+        display: flex;
+      }
+      .browser-panel.is-resizing {
+        user-select: none;
+      }
+
+      .browser-topbar {
+        display: grid;
+        height: 42px;
+        grid-template-columns: 54px minmax(0, 1fr) 54px;
+        align-items: center;
+        flex: 0 0 auto;
+        padding: 0 5px;
+        border-bottom: 1px solid rgba(20, 24, 31, 0.08);
+        cursor: grab;
+        user-select: none;
+      }
+
+      .browser-topbar.dragging {
+        cursor: grabbing;
+      }
+
+      .browser-chrome-button {
+        padding: 5px 6px;
+        border: 0;
+        border-radius: 5px;
+        background: transparent;
+        color: #56606f;
+        cursor: pointer;
+        font: inherit;
+        font-size: 10px;
+      }
+
+      .browser-chrome-button:hover {
+        background: #f1f3f5;
+        color: #111827;
+      }
+      .browser-domain {
+        overflow: hidden;
+        color: #6d7480;
+        font-size: 10px;
+        text-align: center;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .browser-content {
+        min-height: 0;
+        flex: 1 1 auto;
+        overflow: auto;
+        background: #fff;
+      }
+
+      .wiki-sitebar {
+        display: flex;
+        align-items: baseline;
+        gap: 8px;
+        padding: 12px 18px;
+        border-bottom: 1px solid #e6e8eb;
+      }
+
+      .wiki-wordmark {
+        font-family: Georgia, 'Times New Roman', serif;
+        font-size: 18px;
+        font-weight: 700;
+        letter-spacing: 0.06em;
+      }
+      .wiki-tagline {
+        color: #858b95;
+        font-size: 9px;
+      }
+
+      .wiki-article {
+        padding: 17px 18px 28px;
+        color: #202122;
+        font-family: Georgia, 'Times New Roman', 'Microsoft YaHei', serif;
+      }
+      .wiki-article h1 {
+        margin: 0;
+        padding-bottom: 8px;
+        border-bottom: 1px solid #a2a9b1;
+        font-size: 25px;
+        font-weight: 500;
+      }
+      .wiki-meta {
+        display: flex;
+        gap: 14px;
+        margin: 8px 0 14px;
+        color: #3366cc;
+        font-family: var(--font);
+        font-size: 10px;
+      }
+      .wiki-notice {
+        margin-bottom: 12px;
+        padding: 7px 9px;
+        border-left: 3px solid #a2a9b1;
+        background: #f8f9fa;
+        color: #54595d;
+        font-family: var(--font);
+        font-size: 10px;
+      }
+      .wiki-article p {
+        margin: 0 0 12px;
+        font-size: 13px;
+        line-height: 1.75;
+      }
+      .wiki-figure {
+        margin: 12px 0 0;
+        border: 1px solid #c8ccd1;
+        background: #f8f9fa;
+      }
+      .wiki-figure img {
+        display: block;
+        width: 100%;
+        height: 190px;
+        object-fit: cover;
+      }
+      .wiki-figure figcaption {
+        padding: 7px 9px;
+        color: #54595d;
+        font-family: var(--font);
+        font-size: 9px;
+        line-height: 1.45;
+      }
+
+      .search-page {
+        padding: 16px 17px 26px;
+        font-family: var(--font);
+      }
+      .search-heading {
+        margin: 0;
+        font-size: 17px;
+        font-weight: 650;
+      }
+      .search-query {
+        margin: 5px 0 15px;
+        color: #747b87;
+        font-size: 10px;
+      }
+      .search-result {
+        padding: 12px 0;
+        border-top: 1px solid #e8eaed;
+      }
+      .search-result:first-of-type {
+        border-top: 0;
+      }
+      .result-domain {
+        color: #777f8b;
+        font-size: 9px;
+      }
+      .result-title {
+        margin: 3px 0;
+        color: #1d4ed8;
+        font-size: 13px;
+        font-weight: 600;
+      }
+      .result-snippet {
+        margin: 0;
+        color: #565d68;
+        font-size: 11px;
+        line-height: 1.55;
+      }
+      .result-with-image {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 82px;
+        gap: 10px;
+      }
+      .result-image {
+        width: 82px;
+        height: 62px;
+        border-radius: 6px;
+        object-fit: cover;
+      }
+
+      .voice-area {
+        display: flex;
+        align-items: center;
+        padding: 8px 10px 10px;
+        border-top: 1px solid rgba(20, 24, 31, 0.07);
+        flex: 0 0 auto;
+      }
+
+      .voice-button {
+        display: inline-flex;
+        width: 100%;
+        height: 36px;
+        align-items: center;
+        justify-content: center;
+        flex: 0 0 auto;
+        padding: 0 12px;
+        border: 1px solid #d6e3ff;
+        border-radius: 7px;
+        background: var(--blue);
+        color: #fff;
+        cursor: pointer;
+        font: inherit;
+        font-size: 12px;
+        font-weight: 600;
+      }
+
+      .voice-button:hover {
+        border-color: #1d4ed8;
+        background: #1d4ed8;
+      }
+      .voice-button:active {
+        background: #1e40af;
+        transform: translateY(1px);
+      }
+
+      .floating-ball {
+        position: absolute;
+        right: 0;
+        top: 50%;
+        display: none;
+        width: 48px;
+        height: 48px;
+        align-items: center;
+        justify-content: center;
+        padding: 0;
+        border: 1px solid var(--panel-border);
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.93);
+        box-shadow: 0 10px 30px rgba(10, 12, 18, 0.22);
+        cursor: pointer;
+        touch-action: none;
+        transform: translateY(-50%);
+      }
+
+      .floating-ball .avatar {
+        width: 34px;
+        height: 34px;
+      }
+      .floating-ball .avatar {
+        pointer-events: none;
+      }
+      .floating-ball .status-dot {
+        width: 10px;
+        height: 10px;
+      }
+
+      .assistant-shell.collapsed {
+        width: 48px;
+        transform: translateY(-50%);
+      }
+      .assistant-shell.collapsed .panel {
+        pointer-events: none;
+        opacity: 0;
+        transform: scale(0.9);
+      }
+      .assistant-shell.collapsed .floating-ball {
+        display: flex;
+        animation: pop 0.2s ease both;
+      }
+
+      .assistant-shell.listening .voice-button {
+        border-color: #1e40af;
+        background: #1e40af;
+        color: #fff;
+      }
+      .assistant-shell.listening .status-dot {
+        background: var(--blue);
+      }
+
+      @keyframes pop {
+        from {
+          opacity: 0;
+          transform: translateY(-50%) scale(0.85);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(-50%) scale(1);
+        }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        *,
+        *::before,
+        *::after {
+          animation-duration: 0.01ms !important;
+          transition-duration: 0.01ms !important;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="flight-view" aria-label="模拟飞行画面占位">
+      <div class="flight-caption"><strong>模拟飞行画面</strong>语音助手悬浮在右侧边缘</div>
+
+      <section class="assistant-shell" id="assistant-shell" aria-label="云迹导游语音面板">
+        <button class="floating-ball" id="expand-button" aria-label="展开云迹导游">
+          <span class="avatar-wrap"
+            ><img
+              class="avatar"
+              src="assets/ai-travel-guide.png"
+              alt="云迹导游头像"
+              draggable="false" /><i class="status-dot"></i
+          ></span>
+        </button>
+
+        <article class="panel">
+          <span class="resize-handle resize-top" data-resize-edge="top" aria-hidden="true"></span>
+          <span
+            class="resize-handle resize-bottom"
+            data-resize-edge="bottom"
+            aria-hidden="true"
+          ></span>
+          <span class="resize-handle resize-left" data-resize-edge="left" aria-hidden="true"></span>
+          <span
+            class="resize-handle resize-right"
+            data-resize-edge="right"
+            aria-hidden="true"
+          ></span>
+          <span
+            class="resize-handle resize-top-left"
+            data-resize-edge="top-left"
+            aria-hidden="true"
+          ></span>
+          <span
+            class="resize-handle resize-top-right"
+            data-resize-edge="top-right"
+            aria-hidden="true"
+          ></span>
+          <span
+            class="resize-handle resize-bottom-left"
+            data-resize-edge="bottom-left"
+            aria-hidden="true"
+          ></span>
+          <span
+            class="resize-handle resize-bottom-right"
+            data-resize-edge="bottom-right"
+            aria-hidden="true"
+          ></span>
+          <header class="header" id="drag-handle">
+            <span class="avatar-wrap"
+              ><img
+                class="avatar"
+                src="assets/ai-travel-guide.png"
+                alt="云迹导游头像"
+                draggable="false" /><i class="status-dot"></i></span
+            ><span class="header-title">云迹</span
+            ><span class="header-status" id="profile-state">在线</span
+            ><button class="collapse-button" id="collapse-button" aria-label="收起面板">
+              收起
+            </button>
+          </header>
+          <section class="messages" aria-label="近期对话">
+            <div class="message user"><div class="bubble">这里有什么值得看的？</div></div>
+            <div class="message guide">
+              <div class="guide-stack">
+                <div class="bubble">建议稍微向右转，湖岸与阿尔卑斯山会同时进入视野。</div>
+                <button
+                  class="source-card"
+                  data-browser-view="wiki"
+                  aria-label="预览苏黎世湖维基百科页面"
+                >
+                  <img
+                    class="source-thumb"
+                    src="assets/lake-zurich.jpg"
+                    alt="苏黎世湖上的游船"
+                    draggable="false"
+                  />
+                  <span class="source-copy"
+                    ><span class="source-title">苏黎世湖 · 维基百科</span
+                    ><span class="source-domain">zh.wikipedia.org</span
+                    ><span class="source-summary"
+                      >苏黎世湖位于瑞士中北部，是该国主要湖泊之一。</span
+                    ></span
+                  >
+                </button>
+                <button class="search-preview" data-browser-view="search">
+                  查看 3 条网页搜索结果
+                </button>
+              </div>
+            </div>
+          </section>
+          <footer class="voice-area">
+            <button class="voice-button" id="voice-button">
+              <span id="button-text">按住说话</span>
+            </button>
+          </footer>
+        </article>
+      </section>
+
+      <aside class="browser-panel" id="browser-panel" aria-label="来源网页预览">
+        <span
+          class="resize-handle resize-top"
+          data-browser-resize-edge="top"
+          aria-hidden="true"
+        ></span>
+        <span
+          class="resize-handle resize-bottom"
+          data-browser-resize-edge="bottom"
+          aria-hidden="true"
+        ></span>
+        <span
+          class="resize-handle resize-left"
+          data-browser-resize-edge="left"
+          aria-hidden="true"
+        ></span>
+        <span
+          class="resize-handle resize-right"
+          data-browser-resize-edge="right"
+          aria-hidden="true"
+        ></span>
+        <span
+          class="resize-handle resize-top-left"
+          data-browser-resize-edge="top-left"
+          aria-hidden="true"
+        ></span>
+        <span
+          class="resize-handle resize-top-right"
+          data-browser-resize-edge="top-right"
+          aria-hidden="true"
+        ></span>
+        <span
+          class="resize-handle resize-bottom-left"
+          data-browser-resize-edge="bottom-left"
+          aria-hidden="true"
+        ></span>
+        <span
+          class="resize-handle resize-bottom-right"
+          data-browser-resize-edge="bottom-right"
+          aria-hidden="true"
+        ></span>
+        <header class="browser-topbar" id="browser-drag-handle">
+          <button class="browser-chrome-button" id="browser-back" aria-label="返回聊天">
+            返回
+          </button>
+          <span class="browser-domain" id="browser-domain">zh.wikipedia.org</span>
+          <button class="browser-chrome-button" id="browser-close" aria-label="关闭网页预览">
+            关闭
+          </button>
+        </header>
+        <section class="browser-content" id="wiki-view">
+          <div class="wiki-sitebar">
+            <span class="wiki-wordmark">维基百科</span
+            ><span class="wiki-tagline">自由的百科全书</span>
+          </div>
+          <article class="wiki-article">
+            <h1>苏黎世湖</h1>
+            <div class="wiki-meta"><span>条目</span><span>讨论</span></div>
+            <div class="wiki-notice">本页面为源网页的离线视觉预览。</div>
+            <p>
+              <strong>苏黎世湖</strong
+              >（德语：Zürichsee）位于瑞士中北部，是该国主要的湖泊之一，延伸于苏黎世州、圣加仑州和施维茨州之间。
+            </p>
+            <p>
+              湖水清澈，沿岸分布着城镇、码头与休闲步道。从空中可以看到湖岸与阿尔卑斯山共同形成的开阔景观。
+            </p>
+            <figure class="wiki-figure">
+              <img src="assets/lake-zurich.jpg" alt="苏黎世湖上的游船" draggable="false" />
+              <figcaption>苏黎世湖上的游船。摄影：Andrzej Otrębski，CC BY-SA 4.0。</figcaption>
+            </figure>
+          </article>
+        </section>
+        <section class="browser-content search-page" id="search-view" hidden>
+          <h2 class="search-heading">网页搜索结果</h2>
+          <p class="search-query">苏黎世湖 景点</p>
+          <article class="search-result result-with-image">
+            <div>
+              <div class="result-domain">zh.wikipedia.org</div>
+              <h3 class="result-title">苏黎世湖 - 维基百科</h3>
+              <p class="result-snippet">苏黎世湖位于瑞士中北部，是瑞士重要的湖泊与旅游区域。</p>
+            </div>
+            <img class="result-image" src="assets/lake-zurich.jpg" alt="苏黎世湖" />
+          </article>
+          <article class="search-result">
+            <div class="result-domain">myswitzerland.com</div>
+            <h3 class="result-title">苏黎世湖旅行体验</h3>
+            <p class="result-snippet">了解湖畔步道、游船路线以及从空中值得观察的地标。</p>
+          </article>
+          <article class="search-result">
+            <div class="result-domain">zuerich.com</div>
+            <h3 class="result-title">苏黎世湖周边景点</h3>
+            <p class="result-snippet">从苏黎世市区到湖岸小镇，查看适合短途旅行的地点。</p>
+          </article>
+        </section>
+      </aside>
+    </main>
+    <script>
+      const shell = document.querySelector('#assistant-shell');
+      const panel = document.querySelector('.panel');
+      const voiceButton = document.querySelector('#voice-button');
+      const collapseButton = document.querySelector('#collapse-button');
+      const expandButton = document.querySelector('#expand-button');
+      const dragHandle = document.querySelector('#drag-handle');
+      const profileState = document.querySelector('#profile-state');
+      const buttonText = document.querySelector('#button-text');
+      const browserPanel = document.querySelector('#browser-panel');
+      const browserDragHandle = document.querySelector('#browser-drag-handle');
+      const browserBack = document.querySelector('#browser-back');
+      const browserClose = document.querySelector('#browser-close');
+      const browserDomain = document.querySelector('#browser-domain');
+      const wikiView = document.querySelector('#wiki-view');
+      const searchView = document.querySelector('#search-view');
+      const browserTriggers = document.querySelectorAll('[data-browser-view]');
+
+      let dragState = null;
+      let resizeState = null;
+      let ballDragState = null;
+      let ballDidDrag = false;
+      let browserDragState = null;
+      let browserResizeState = null;
+      let browserDetached = false;
+
+      const syncShellSize = () => {
+        if (shell.classList.contains('collapsed')) return;
+        shell.style.width = `${panel.offsetWidth}px`;
+        shell.style.height = `${panel.offsetHeight}px`;
+      };
+
+      const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
+
+      const pinShell = (rect) => {
+        shell.style.left = `${rect.left}px`;
+        shell.style.top = `${rect.top}px`;
+        shell.style.right = 'auto';
+        shell.style.transform = 'none';
+      };
+
+      const cursorForEdge = (edge) => {
+        if (edge === 'left' || edge === 'right') return 'ew-resize';
+        if (edge === 'top' || edge === 'bottom') return 'ns-resize';
+        if (edge === 'top-left' || edge === 'bottom-right') return 'nwse-resize';
+        if (edge === 'top-right' || edge === 'bottom-left') return 'nesw-resize';
+        return '';
+      };
+
+      const snapFloatingBallToEdge = () => {
+        const rect = shell.getBoundingClientRect();
+        const gap = 8;
+        const ballSize = 48;
+        const dockToLeft = rect.left + rect.width / 2 < window.innerWidth / 2;
+        const left = dockToLeft ? gap : window.innerWidth - ballSize - gap;
+        shell.style.left = `${clamp(left, gap, Math.max(gap, window.innerWidth - ballSize - gap))}px`;
+        shell.style.top = `${clamp(rect.top, gap, Math.max(gap, window.innerHeight - ballSize - gap))}px`;
+        shell.style.right = 'auto';
+        shell.style.transform = 'none';
+      };
+
+      const setListening = (listening) => {
+        shell.classList.toggle('listening', listening);
+        profileState.textContent = listening ? '聆听中' : '在线';
+        buttonText.textContent = listening ? '正在聆听' : '按住说话';
+      };
+
+      const isBrowserOpen = () => browserPanel.classList.contains('open');
+
+      const placeBrowserPanel = () => {
+        if (!isBrowserOpen() || browserDetached) return;
+        const chatRect = panel.getBoundingClientRect();
+        const browserWidth = browserPanel.offsetWidth;
+        const browserHeight = browserPanel.offsetHeight;
+        const gap = 12;
+        const margin = 16;
+        const roomOnLeft = chatRect.left - gap - browserWidth >= margin;
+        const roomOnRight = chatRect.right + gap + browserWidth <= window.innerWidth - margin;
+        let left;
+
+        if (roomOnLeft) {
+          left = chatRect.left - gap - browserWidth;
+        } else if (roomOnRight) {
+          left = chatRect.right + gap;
+        } else {
+          left = clamp(
+            chatRect.left - gap - browserWidth,
+            margin,
+            Math.max(margin, window.innerWidth - browserWidth - margin),
+          );
+        }
+
+        browserPanel.style.left = `${left}px`;
+        browserPanel.style.top = `${clamp(chatRect.top, margin, Math.max(margin, window.innerHeight - browserHeight - margin))}px`;
+      };
+
+      const closeBrowser = () => {
+        browserPanel.classList.remove('open');
+        browserPanel.setAttribute('aria-hidden', 'true');
+        browserDetached = false;
+      };
+
+      const showBrowserView = (view) => {
+        const showSearch = view === 'search';
+        wikiView.hidden = showSearch;
+        searchView.hidden = !showSearch;
+        browserDomain.textContent = showSearch ? '网页搜索结果' : 'zh.wikipedia.org';
+        browserPanel.classList.add('open');
+        browserPanel.setAttribute('aria-hidden', 'false');
+        browserDetached = false;
+        requestAnimationFrame(placeBrowserPanel);
+      };
+
+      browserTriggers.forEach((trigger) => {
+        trigger.addEventListener('click', () => showBrowserView(trigger.dataset.browserView));
+      });
+      browserBack.addEventListener('click', closeBrowser);
+      browserClose.addEventListener('click', closeBrowser);
+
+      browserDragHandle.addEventListener('pointerdown', (event) => {
+        if (event.target.closest('button')) return;
+        const rect = browserPanel.getBoundingClientRect();
+        browserDetached = true;
+        browserDragState = {
+          offsetX: event.clientX - rect.left,
+          offsetY: event.clientY - rect.top,
+        };
+        browserDragHandle.classList.add('dragging');
+        browserDragHandle.setPointerCapture(event.pointerId);
+      });
+
+      browserDragHandle.addEventListener('pointermove', (event) => {
+        if (!browserDragState) return;
+        const margin = 16;
+        browserPanel.style.left = `${clamp(event.clientX - browserDragState.offsetX, margin, Math.max(margin, window.innerWidth - browserPanel.offsetWidth - margin))}px`;
+        browserPanel.style.top = `${clamp(event.clientY - browserDragState.offsetY, margin, Math.max(margin, window.innerHeight - browserPanel.offsetHeight - margin))}px`;
+      });
+
+      const stopBrowserDragging = (event) => {
+        if (!browserDragState) return;
+        browserDragState = null;
+        browserDragHandle.classList.remove('dragging');
+        if (browserDragHandle.hasPointerCapture(event.pointerId))
+          browserDragHandle.releasePointerCapture(event.pointerId);
+      };
+
+      browserDragHandle.addEventListener('pointerup', stopBrowserDragging);
+      browserDragHandle.addEventListener('pointercancel', stopBrowserDragging);
+
+      browserPanel.addEventListener(
+        'pointerdown',
+        (event) => {
+          const handle = event.target.closest('[data-browser-resize-edge]');
+          const edge = handle?.dataset.browserResizeEdge;
+          if (!edge || !isBrowserOpen()) return;
+          const rect = browserPanel.getBoundingClientRect();
+          browserDetached = true;
+          browserResizeState = {
+            edge,
+            startX: event.clientX,
+            startY: event.clientY,
+            startWidth: rect.width,
+            startHeight: rect.height,
+            startLeft: rect.left,
+            startTop: rect.top,
+          };
+          browserPanel.classList.add('is-resizing');
+          browserPanel.style.cursor = cursorForEdge(edge);
+          browserPanel.setPointerCapture(event.pointerId);
+          event.preventDefault();
+          event.stopPropagation();
+        },
+        true,
+      );
+
+      browserPanel.addEventListener('pointermove', (event) => {
+        if (browserDragState || !browserResizeState) return;
+        const { edge, startX, startY, startWidth, startHeight, startLeft, startTop } =
+          browserResizeState;
+        const moveX = event.clientX - startX;
+        const moveY = event.clientY - startY;
+        const margin = 16;
+        const minWidth = 280;
+        const minHeight = 240;
+        let width = startWidth;
+        let height = startHeight;
+        let left = startLeft;
+        let top = startTop;
+
+        if (edge.includes('left')) {
+          width = clamp(startWidth - moveX, minWidth, startLeft + startWidth - margin);
+          left = startLeft + startWidth - width;
+        } else if (edge.includes('right')) {
+          width = clamp(startWidth + moveX, minWidth, window.innerWidth - startLeft - margin);
+        }
+
+        if (edge.includes('top')) {
+          height = clamp(startHeight - moveY, minHeight, startTop + startHeight - margin);
+          top = startTop + startHeight - height;
+        } else if (edge.includes('bottom')) {
+          height = clamp(startHeight + moveY, minHeight, window.innerHeight - startTop - margin);
+        }
+
+        browserPanel.style.width = `${width}px`;
+        browserPanel.style.height = `${height}px`;
+        browserPanel.style.left = `${left}px`;
+        browserPanel.style.top = `${top}px`;
+      });
+
+      const stopBrowserResizing = (event) => {
+        if (!browserResizeState) return;
+        browserResizeState = null;
+        browserPanel.classList.remove('is-resizing');
+        browserPanel.style.cursor = '';
+        if (browserPanel.hasPointerCapture(event.pointerId))
+          browserPanel.releasePointerCapture(event.pointerId);
+      };
+
+      browserPanel.addEventListener('pointerup', stopBrowserResizing);
+      browserPanel.addEventListener('pointercancel', stopBrowserResizing);
+
+      voiceButton.addEventListener('pointerdown', () => setListening(true));
+      ['pointerup', 'pointerleave', 'pointercancel'].forEach((event) =>
+        voiceButton.addEventListener(event, () => setListening(false)),
+      );
+      collapseButton.addEventListener('click', () => {
+        setListening(false);
+        closeBrowser();
+        shell.classList.add('collapsed');
+        shell.style.width = '48px';
+        shell.style.height = '48px';
+        snapFloatingBallToEdge();
+        requestAnimationFrame(snapFloatingBallToEdge);
+      });
+
+      expandButton.addEventListener('click', (event) => {
+        if (ballDidDrag) {
+          event.preventDefault();
+          ballDidDrag = false;
+          return;
+        }
+        shell.classList.remove('collapsed');
+        requestAnimationFrame(() => {
+          syncShellSize();
+          const rect = panel.getBoundingClientRect();
+          const gap = 16;
+          const left = clamp(rect.left, gap, Math.max(gap, window.innerWidth - rect.width - gap));
+          const top = clamp(rect.top, gap, Math.max(gap, window.innerHeight - rect.height - gap));
+          if (left !== rect.left || top !== rect.top) {
+            shell.style.left = `${left}px`;
+            shell.style.top = `${top}px`;
+            shell.style.right = 'auto';
+            shell.style.transform = 'none';
+          }
+        });
+      });
+
+      dragHandle.addEventListener('pointerdown', (event) => {
+        if (event.target.closest('button')) return;
+        const rect = shell.getBoundingClientRect();
+        dragState = { offsetX: event.clientX - rect.left, offsetY: event.clientY - rect.top };
+        pinShell(rect);
+        panel.style.cursor = 'grabbing';
+        dragHandle.classList.add('dragging');
+        dragHandle.setPointerCapture(event.pointerId);
+      });
+
+      dragHandle.addEventListener('pointermove', (event) => {
+        if (!dragState) return;
+        const width = panel.offsetWidth;
+        const height = panel.offsetHeight;
+        shell.style.left = `${clamp(event.clientX - dragState.offsetX, 16, window.innerWidth - width - 16)}px`;
+        shell.style.top = `${clamp(event.clientY - dragState.offsetY, 16, window.innerHeight - height - 16)}px`;
+        placeBrowserPanel();
+      });
+
+      const stopDragging = (event) => {
+        if (!dragState) return;
+        dragState = null;
+        dragHandle.classList.remove('dragging');
+        panel.style.cursor = '';
+        if (dragHandle.hasPointerCapture(event.pointerId))
+          dragHandle.releasePointerCapture(event.pointerId);
+      };
+
+      dragHandle.addEventListener('pointerup', stopDragging);
+      dragHandle.addEventListener('pointercancel', stopDragging);
+
+      panel.addEventListener(
+        'pointerdown',
+        (event) => {
+          const handle = event.target.closest('[data-resize-edge]');
+          const edge = handle?.dataset.resizeEdge;
+          if (!edge || shell.classList.contains('collapsed')) return;
+          const rect = panel.getBoundingClientRect();
+          pinShell(shell.getBoundingClientRect());
+          resizeState = {
+            edge,
+            startX: event.clientX,
+            startY: event.clientY,
+            startWidth: rect.width,
+            startHeight: rect.height,
+            startLeft: rect.left,
+            startTop: rect.top,
+          };
+          panel.classList.add('is-resizing');
+          panel.style.cursor = cursorForEdge(edge);
+          panel.setPointerCapture(event.pointerId);
+          event.preventDefault();
+          event.stopPropagation();
+        },
+        true,
+      );
+
+      panel.addEventListener('pointermove', (event) => {
+        if (dragState) return;
+        if (!resizeState) return;
+
+        const { edge, startX, startY, startWidth, startHeight, startLeft, startTop } = resizeState;
+        const moveX = event.clientX - startX;
+        const moveY = event.clientY - startY;
+        const minWidth = 240;
+        const minHeight = 158;
+        let width = startWidth;
+        let height = startHeight;
+        let left = startLeft;
+        let top = startTop;
+
+        if (edge.includes('left')) {
+          width = clamp(startWidth - moveX, minWidth, startLeft + startWidth - 16);
+          left = startLeft + startWidth - width;
+        } else if (edge.includes('right')) {
+          width = clamp(startWidth + moveX, minWidth, window.innerWidth - startLeft - 16);
+        }
+
+        if (edge.includes('top')) {
+          height = clamp(startHeight - moveY, minHeight, startTop + startHeight - 16);
+          top = startTop + startHeight - height;
+        } else if (edge.includes('bottom')) {
+          height = clamp(startHeight + moveY, minHeight, window.innerHeight - startTop - 16);
+        }
+
+        panel.style.width = `${width}px`;
+        panel.style.height = `${height}px`;
+        shell.style.left = `${left}px`;
+        shell.style.top = `${top}px`;
+        placeBrowserPanel();
+      });
+
+      const stopResizing = (event) => {
+        if (!resizeState) return;
+        resizeState = null;
+        panel.classList.remove('is-resizing');
+        panel.style.cursor = '';
+        if (panel.hasPointerCapture(event.pointerId)) panel.releasePointerCapture(event.pointerId);
+        syncShellSize();
+      };
+
+      panel.addEventListener('pointerup', stopResizing);
+      panel.addEventListener('pointercancel', stopResizing);
+
+      expandButton.addEventListener('pointerdown', (event) => {
+        event.preventDefault();
+        const rect = shell.getBoundingClientRect();
+        ballDragState = {
+          startX: event.clientX,
+          startY: event.clientY,
+          left: rect.left,
+          top: rect.top,
+          moved: false,
+        };
+        expandButton.setPointerCapture(event.pointerId);
+      });
+
+      expandButton.addEventListener('pointermove', (event) => {
+        if (!ballDragState) return;
+        event.preventDefault();
+        const moveX = event.clientX - ballDragState.startX;
+        const moveY = event.clientY - ballDragState.startY;
+        if (Math.abs(moveX) + Math.abs(moveY) > 4) ballDragState.moved = true;
+        const maxLeft = Math.max(8, window.innerWidth - 56);
+        const maxTop = Math.max(8, window.innerHeight - 56);
+        shell.style.left = `${clamp(ballDragState.left + moveX, 8, maxLeft)}px`;
+        shell.style.top = `${clamp(ballDragState.top + moveY, 8, maxTop)}px`;
+        shell.style.right = 'auto';
+        shell.style.transform = 'none';
+      });
+
+      const stopBallDrag = (event) => {
+        if (!ballDragState) return;
+        const dragged = ballDragState.moved;
+        ballDragState = null;
+        if (expandButton.hasPointerCapture(event.pointerId))
+          expandButton.releasePointerCapture(event.pointerId);
+        if (!dragged) return;
+
+        snapFloatingBallToEdge();
+        ballDidDrag = true;
+      };
+
+      expandButton.addEventListener('pointerup', stopBallDrag);
+      expandButton.addEventListener('pointercancel', stopBallDrag);
+
+      window.addEventListener('resize', () => {
+        if (shell.classList.contains('collapsed')) {
+          snapFloatingBallToEdge();
+        } else {
+          const rect = panel.getBoundingClientRect();
+          shell.style.left = `${clamp(rect.left, 16, Math.max(16, window.innerWidth - rect.width - 16))}px`;
+          shell.style.top = `${clamp(rect.top, 16, Math.max(16, window.innerHeight - rect.height - 16))}px`;
+          shell.style.right = 'auto';
+          shell.style.transform = 'none';
+        }
+
+        if (!isBrowserOpen()) return;
+        if (!browserDetached) {
+          placeBrowserPanel();
+          return;
+        }
+        const rect = browserPanel.getBoundingClientRect();
+        browserPanel.style.left = `${clamp(rect.left, 16, Math.max(16, window.innerWidth - rect.width - 16))}px`;
+        browserPanel.style.top = `${clamp(rect.top, 16, Math.max(16, window.innerHeight - rect.height - 16))}px`;
+      });
+
+      new ResizeObserver(syncShellSize).observe(panel);
+      syncShellSize();
+    </script>
+  </body>
+</html>

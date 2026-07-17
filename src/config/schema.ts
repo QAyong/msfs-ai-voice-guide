@@ -19,6 +19,15 @@ const positiveInteger = (defaultValue: number) =>
     z.number().int().positive().default(defaultValue),
   );
 
+const searchEnvironmentSchema = z.object({
+  VOLCENGINE_SEARCH_API_KEY: requiredText,
+  VOLCENGINE_SEARCH_CUSTOM_ENDPOINT: z
+    .string()
+    .url()
+    .default('https://open.feedcoopapi.com/search_api/web_search'),
+  VOLCENGINE_SEARCH_TIMEOUT_MS: positiveInteger(10_000),
+});
+
 const envSchema = z.object({
   LIVEKIT_URL: webSocketUrl,
   LIVEKIT_API_KEY: requiredText,
@@ -38,6 +47,12 @@ const envSchema = z.object({
   VOLCENGINE_TTS_RESOURCE_ID: requiredText,
   VOLCENGINE_TTS_SPEAKER: requiredText,
   VOLCENGINE_TTS_SAMPLE_RATE: positiveInteger(24_000),
+  VOLCENGINE_SEARCH_API_KEY: optionalNonEmpty,
+  VOLCENGINE_SEARCH_CUSTOM_ENDPOINT: z
+    .string()
+    .url()
+    .default('https://open.feedcoopapi.com/search_api/web_search'),
+  VOLCENGINE_SEARCH_TIMEOUT_MS: positiveInteger(10_000),
 });
 
 export type AppConfig = {
@@ -73,6 +88,11 @@ export type AppConfig = {
       sampleRate: number;
     };
   };
+  search: {
+    apiKey?: string;
+    endpoint: string;
+    timeoutMs: number;
+  };
 };
 
 export class ConfigError extends Error {
@@ -81,6 +101,12 @@ export class ConfigError extends Error {
     this.name = 'ConfigError';
   }
 }
+
+export type SearchConfig = {
+  apiKey: string;
+  endpoint: string;
+  timeoutMs: number;
+};
 
 export function formatConfigError(error: z.ZodError): string {
   return error.issues
@@ -128,5 +154,23 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
         sampleRate: value.VOLCENGINE_TTS_SAMPLE_RATE,
       },
     },
+    search: {
+      ...(value.VOLCENGINE_SEARCH_API_KEY ? { apiKey: value.VOLCENGINE_SEARCH_API_KEY } : {}),
+      endpoint: value.VOLCENGINE_SEARCH_CUSTOM_ENDPOINT,
+      timeoutMs: value.VOLCENGINE_SEARCH_TIMEOUT_MS,
+    },
+  };
+}
+
+export function loadSearchConfig(env: NodeJS.ProcessEnv = process.env): SearchConfig {
+  const result = searchEnvironmentSchema.safeParse(env);
+  if (!result.success) {
+    throw new ConfigError(`环境配置无效：\n${formatConfigError(result.error)}`);
+  }
+
+  return {
+    apiKey: result.data.VOLCENGINE_SEARCH_API_KEY,
+    endpoint: result.data.VOLCENGINE_SEARCH_CUSTOM_ENDPOINT,
+    timeoutMs: result.data.VOLCENGINE_SEARCH_TIMEOUT_MS,
   };
 }
