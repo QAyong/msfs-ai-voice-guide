@@ -1,0 +1,44 @@
+import { describe, expect, it } from 'vitest';
+import {
+  dockToNearestSide,
+  getExpandedBounds,
+  keepTitleBarVisible,
+  placeCompanionWindow,
+} from '../../desktop/main/window-placement.js';
+
+describe('desktop multi-display window placement', () => {
+  const leftDisplay = { x: -1920, y: 0, width: 1920, height: 1040 };
+
+  it('preserves negative coordinates when docking on a left-hand display', () => {
+    expect(dockToNearestSide({ x: -1800, y: 980, width: 64, height: 72 }, leftDisplay)).toEqual({
+      side: 'left',
+      x: -1912,
+      y: 960,
+    });
+  });
+
+  it('expands inward from the docked edge of the same display', () => {
+    expect(getExpandedBounds(leftDisplay, 'right', 900, { width: 320, height: 360 })).toEqual({
+      x: -328,
+      y: 672,
+      width: 320,
+      height: 360,
+    });
+  });
+
+  it('keeps an expanded panel title bar reachable without blocking cross-display dragging', () => {
+    expect(
+      keepTitleBarVisible({ x: -2300, y: -100, width: 320, height: 360 }, leftDisplay),
+    ).toEqual({ x: -2176, y: 0, width: 320, height: 360 });
+  });
+
+  it('places a companion window inside a negative-coordinate display', () => {
+    expect(
+      placeCompanionWindow(
+        { x: -328, y: 120, width: 320, height: 360 },
+        { width: 440, height: 600 },
+        leftDisplay,
+      ),
+    ).toEqual({ x: -780, y: 120, width: 440, height: 600 });
+  });
+});

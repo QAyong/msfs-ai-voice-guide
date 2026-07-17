@@ -6,6 +6,6 @@ describe('guide agent composition', () => {
     const agent = createGuideAgent();
 
     expect(agent.instructions).toContain('中文模拟飞行导游');
-    expect(agent.instructions).toContain('不要调用或虚构任何工具');
+    expect(agent.instructions).toContain('使用 searchWeb 工具');
   });
 });
