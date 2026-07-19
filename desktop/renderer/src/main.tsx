@@ -7,12 +7,14 @@ import { GearSixIcon } from '@phosphor-icons/react/dist/csr/GearSix';
 import { MicrophoneIcon } from '@phosphor-icons/react/dist/csr/Microphone';
 import { PowerIcon } from '@phosphor-icons/react/dist/csr/Power';
 import { PushPinIcon } from '@phosphor-icons/react/dist/csr/PushPin';
+import { SpeakerHighIcon } from '@phosphor-icons/react/dist/csr/SpeakerHigh';
 import { SparkleIcon } from '@phosphor-icons/react/dist/csr/Sparkle';
+import { WarningCircleIcon } from '@phosphor-icons/react/dist/csr/WarningCircle';
 import { XIcon } from '@phosphor-icons/react/dist/csr/X';
 import { useMicrophoneTrack } from './useMicrophoneTrack.js';
+import { useVoiceSession } from './useVoiceSession.js';
 import './style.css';
 
-const lakeUrl = 'https://zh.wikipedia.org/wiki/%E8%8B%8F%E9%BB%8E%E4%B8%96%E6%B9%96';
 const preferenceStorageKey = 'cloudpath-guide-preferences';
 
 type MenuDirection = 'up' | 'down';
@@ -20,12 +22,14 @@ type UtilityDialog = 'settings' | 'quit';
 
 type Preferences = {
   alwaysOnTop: boolean;
+  agentVolume: number;
   openSourcesInApp: boolean;
   interfaceMotion: boolean;
 };
 
 const defaultPreferences: Preferences = {
   alwaysOnTop: true,
+  agentVolume: 0.85,
   openSourcesInApp: true,
   interfaceMotion: true,
 };
@@ -33,7 +37,12 @@ const defaultPreferences: Preferences = {
 const readPreferences = (): Preferences => {
   try {
     const saved = localStorage.getItem(preferenceStorageKey);
-    return saved ? { ...defaultPreferences, ...JSON.parse(saved) } : defaultPreferences;
+    if (!saved) return defaultPreferences;
+    const parsed = { ...defaultPreferences, ...JSON.parse(saved) } as Preferences;
+    return {
+      ...parsed,
+      agentVolume: Math.min(1, Math.max(0, Number(parsed.agentVolume) || 0)),
+    };
   } catch {
     return defaultPreferences;
   }
@@ -132,6 +141,24 @@ const SettingsDialog = ({ onClose, preferences, updatePreference }: SettingsDial
         label="始终置顶"
         onChange={(checked) => updatePreference('alwaysOnTop', checked)}
       />
+      <div className="preference-row preference-row--volume">
+        <span className="preference-icon" aria-hidden="true">
+          <SpeakerHighIcon size={18} weight="duotone" />
+        </span>
+        <span className="preference-copy">
+          <strong>回答音量</strong>
+          <small>{Math.round(preferences.agentVolume * 100)}%</small>
+        </span>
+        <input
+          className="volume-slider"
+          type="range"
+          min="0"
+          max="100"
+          value={Math.round(preferences.agentVolume * 100)}
+          aria-label="回答音量"
+          onChange={(event) => updatePreference('agentVolume', Number(event.target.value) / 100)}
+        />
+      </div>
       <PreferenceRow
         checked={preferences.openSourcesInApp}
         description="使用伴随窗口查看回答引用的网页"
@@ -205,8 +232,41 @@ const Assistant = () => {
   const [browserDialog, setBrowserDialog] = useState<UtilityDialog | null>(null);
   const menuCloseTimer = useRef<number | null>(null);
   const { preferences, updatePreference } = usePreferences();
-  const microphone = useMicrophoneTrack();
+  const voice = useVoiceSession(preferences.agentVolume);
+  const microphone = useMicrophoneTrack(voice.prepareMicrophone);
   const listening = microphone.state === 'listening';
+
+  const statusLabel = listening
+    ? '聆听中'
+    : voice.connectionState === 'checking' || voice.connectionState === 'connecting'
+      ? '连接中'
+      : voice.connectionState === 'reconnecting'
+        ? '重新连接'
+        : voice.connectionState === 'setup_required'
+          ? '待配置'
+          : voice.connectionState === 'error' || voice.connectionState === 'disconnected'
+            ? '连接异常'
+            : voice.agentState === 'thinking'
+              ? '思考中'
+              : voice.agentState === 'speaking'
+                ? '回答中'
+                : voice.agentState === 'initializing' || !voice.agentState
+                  ? '等待导游'
+                  : '在线';
+
+  const voiceButtonState =
+    microphone.state === 'error'
+      ? 'error'
+      : voice.connectionState === 'checking' ||
+          voice.connectionState === 'connecting' ||
+          voice.connectionState === 'reconnecting'
+        ? 'requesting'
+        : microphone.state;
+
+  const setupBlocked =
+    voice.connectionState === 'setup_required' ||
+    voice.connectionState === 'error' ||
+    voice.connectionState === 'disconnected';
 
   useEffect(
     () => () => {
@@ -214,6 +274,10 @@ const Assistant = () => {
     },
     [],
   );
+
+  useEffect(() => {
+    void window.desktop?.getAssistantState().then((state) => setCollapsed(state.collapsed));
+  }, []);
 
   const clearMenuCloseTimer = () => {
     if (menuCloseTimer.current === null) return;
@@ -258,13 +322,17 @@ const Assistant = () => {
     setBrowserDialog(kind);
   };
 
-  const openSource = async () => {
+  const openSource = async (url: string) => {
     if (!window.desktop) {
-      window.open(lakeUrl, '_blank', 'noopener,noreferrer');
+      window.open(url, '_blank', 'noopener,noreferrer');
       return;
     }
-    if (preferences.openSourcesInApp) await window.desktop.openSource(lakeUrl);
-    else await window.desktop.openExternal(lakeUrl);
+    if (preferences.openSourcesInApp) await window.desktop.openSource(url);
+    else await window.desktop.openExternal(url);
+  };
+
+  const openConfiguration = async () => {
+    await window.desktop?.openConfiguration();
   };
 
   if (collapsed) {
@@ -346,29 +414,72 @@ const Assistant = () => {
       <header className="drag-bar">
         <span className="avatar">云</span>
         <span className="name">云迹导游</span>
-        <span className="status">{listening ? '聆听中' : '在线'}</span>
+        <span className={`status status--${voice.connectionState}`}>{statusLabel}</span>
         <button className="text-button no-drag" onClick={() => void changeCollapsed(true)}>
           收起
         </button>
       </header>
       <section className="messages" aria-label="最近对话">
-        <p className="bubble user">窗外那片湖泊是什么？</p>
-        <div className="guide-reply">
-          <p className="bubble">
-            你正在飞越苏黎世湖。它从苏黎世城区向东南延伸，天气晴朗时能看见湖岸与远处山脉的轮廓。
-          </p>
-          <button className="source-card no-drag" onClick={() => void openSource()}>
-            <span className="source-mark">W</span>
-            <span>
-              <b>苏黎世湖 - 维基百科</b>
-              <small>zh.wikipedia.org · 原始网页</small>
+        {setupBlocked ? (
+          <div className="readiness-card" role="status">
+            <WarningCircleIcon size={24} weight="duotone" aria-hidden="true" />
+            <strong>
+              {voice.readiness?.message ?? voice.errorMessage ?? '语音服务暂时不可用'}
+            </strong>
+            {(voice.readiness?.issues ?? []).slice(0, 4).map((issue) => (
+              <small key={issue}>{issue}</small>
+            ))}
+            <div className="readiness-actions">
+              {voice.connectionState === 'setup_required' ? (
+                <button type="button" onClick={() => void openConfiguration()}>
+                  打开配置文件
+                </button>
+              ) : null}
+              <button type="button" onClick={() => void voice.retry()}>
+                重新检测
+              </button>
+            </div>
+          </div>
+        ) : voice.messages.length === 0 ? (
+          <div className="empty-conversation">
+            <span className="empty-conversation-icon" aria-hidden="true">
+              <SparkleIcon size={22} weight="duotone" />
             </span>
-          </button>
-        </div>
+            <strong>
+              {voice.connectionState === 'connected' ? '可以开始对话了' : '正在准备语音导游'}
+            </strong>
+            <small>按住下方按钮说话，松开后等待回答</small>
+          </div>
+        ) : (
+          voice.messages.map((message) =>
+            message.role === 'user' ? (
+              <p key={message.id} className="bubble user">
+                {message.text}
+              </p>
+            ) : (
+              <div key={message.id} className="guide-reply">
+                <p className="bubble">{message.text}</p>
+                {message.sources.map((source) => (
+                  <button
+                    key={source.url}
+                    className="source-card no-drag"
+                    onClick={() => void openSource(source.url)}
+                  >
+                    <span className="source-mark">源</span>
+                    <span>
+                      <b>{source.title}</b>
+                      <small>{source.siteName} · 原始网页</small>
+                    </span>
+                  </button>
+                ))}
+              </div>
+            ),
+          )
+        )}
       </section>
       <footer className="voice-area">
         <button
-          className={`voice-button no-drag voice-button--${microphone.state}`}
+          className={`voice-button no-drag voice-button--${voiceButtonState}`}
           type="button"
           aria-label={listening ? '正在聆听，松开结束' : '按住说话'}
           aria-pressed={listening}
@@ -376,6 +487,10 @@ const Assistant = () => {
           onContextMenu={(event) => event.preventDefault()}
           onPointerDown={(event) => {
             if (event.button !== 0) return;
+            if (setupBlocked) {
+              void voice.retry();
+              return;
+            }
             event.currentTarget.setPointerCapture(event.pointerId);
             void microphone.start();
           }}
@@ -387,7 +502,7 @@ const Assistant = () => {
           }}
           onPointerCancel={() => void microphone.stop()}
           onKeyDown={(event) => {
-            if ((event.key === ' ' || event.key === 'Enter') && !event.repeat) {
+            if ((event.key === ' ' || event.key === 'Enter') && !event.repeat && !setupBlocked) {
               event.preventDefault();
               void microphone.start();
             }
@@ -416,13 +531,15 @@ const Assistant = () => {
             ))}
           </span>
           <span className="voice-label">
-            {microphone.state === 'requesting'
+            {voiceButtonState === 'requesting'
               ? '正在连接'
-              : microphone.state === 'error'
+              : voiceButtonState === 'error'
                 ? '麦克风不可用'
-                : listening
-                  ? '松开结束'
-                  : '按住说话'}
+                : setupBlocked
+                  ? '重新连接'
+                  : listening
+                    ? '松开结束'
+                    : '按住说话'}
           </span>
         </button>
       </footer>

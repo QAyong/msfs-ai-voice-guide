@@ -1,9 +1,12 @@
 export {};
 
+import type { DesktopReadiness, DesktopSessionResult } from '../../../shared/desktop-contracts.js';
+
 declare global {
   interface Window {
     desktop?: {
       setCollapsed(collapsed: boolean): Promise<void>;
+      getAssistantState(): Promise<{ collapsed: boolean }>;
       setBallMenuOpen(open: boolean): Promise<'up' | 'down'>;
       openSettings(): Promise<void>;
       openQuitDialog(): Promise<void>;
@@ -13,6 +16,10 @@ declare global {
       openSource(url: string): Promise<boolean>;
       closeSource(): Promise<void>;
       openExternal(url: string): Promise<void>;
+      getReadiness(): Promise<DesktopReadiness>;
+      retryReadiness(): Promise<DesktopReadiness>;
+      openConfiguration(): Promise<boolean>;
+      createLiveKitSession(): Promise<DesktopSessionResult>;
     };
   }
 }

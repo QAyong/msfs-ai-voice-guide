@@ -1,5 +1,15 @@
 import { app, BrowserWindow, ipcMain, screen, shell, WebContentsView } from 'electron';
 import { join } from 'node:path';
+import type { AppConfig } from '../../src/config/schema.js';
+import type {
+  DesktopReadiness,
+  DesktopSessionResult,
+  StoredWindowState,
+} from '../../shared/desktop-contracts.js';
+import { EmbeddedAgentRuntime } from './agent-runtime.js';
+import { ensureLocalEnvironmentFile, reloadLocalEnvironment } from './environment.js';
+import { checkDesktopConfiguration } from './readiness.js';
+import { createDesktopSessionCredentials } from './session-token.js';
 import {
   dockToNearestSide,
   getExpandedBounds,
@@ -7,11 +17,12 @@ import {
   placeCompanionWindow,
   type DockSide,
 } from './window-placement.js';
+import { readStoredWindowState, writeStoredWindowState } from './window-state.js';
 
 const assistantSize = { width: 320, height: 360 };
 const collapsedSize = { width: 64, height: 72 };
 const collapsedMenuSize = { width: 64, height: 174 };
-const settingsSize = { width: 372, height: 454 };
+const settingsSize = { width: 372, height: 536 };
 const quitDialogSize = { width: 328, height: 224 };
 
 type MenuDirection = 'up' | 'down';
@@ -26,8 +37,96 @@ let assistantMenuOpen = false;
 let assistantMenuDirection: MenuDirection = 'down';
 let assistantDockSide: DockSide = 'right';
 let isPositioningAssistant = false;
+let expandedAssistantBounds: Electron.Rectangle | null = null;
+let storedWindowState: StoredWindowState = {};
+let persistWindowTimer: NodeJS.Timeout | null = null;
+
+const agentRuntime = new EmbeddedAgentRuntime();
 
 const isDevelopment = Boolean(process.env.ELECTRON_RENDERER_URL);
+const localConfigurationRoot = app.isPackaged ? app.getPath('userData') : process.cwd();
+const localEnvironmentPath = join(localConfigurationRoot, '.env');
+const localEnvironmentExamplePath = app.isPackaged
+  ? join(process.resourcesPath, '.env.example')
+  : join(localConfigurationRoot, '.env.example');
+
+const getWindowStatePath = () => join(app.getPath('userData'), 'window-state.json');
+const getAgentProcessPath = () => join(__dirname, 'agent-process.js');
+
+const attachDevelopmentDiagnostics = (window: BrowserWindow) => {
+  if (app.isPackaged) return;
+  window.webContents.on('console-message', (details) => {
+    if (details.level === 'error') console.error(`[renderer] ${details.message}`);
+  });
+  window.webContents.on('did-fail-load', (_event, code, description) => {
+    console.error(`[renderer] load failed (${code}): ${description}`);
+  });
+  window.webContents.on('render-process-gone', (_event, details) => {
+    console.error(`[renderer] process gone: ${details.reason}`);
+  });
+};
+
+const persistWindowState = () => {
+  if (!assistantWindow) return;
+  const assistantBounds = assistantWindow.getBounds();
+  const persistedAssistant = assistantMenuOpen
+    ? {
+        ...assistantBounds,
+        y:
+          assistantMenuDirection === 'up'
+            ? assistantBounds.y + assistantBounds.height - collapsedSize.height
+            : assistantBounds.y,
+        width: collapsedSize.width,
+        height: collapsedSize.height,
+      }
+    : assistantBounds;
+  const sourceBounds = sourceWindow?.getBounds();
+  const next: StoredWindowState = {
+    assistant: persistedAssistant,
+    ...(expandedAssistantBounds ? { expandedAssistant: expandedAssistantBounds } : {}),
+    ...(sourceBounds ? { source: { width: sourceBounds.width, height: sourceBounds.height } } : {}),
+    collapsed: assistantCollapsed,
+    dockSide: assistantDockSide,
+  };
+  storedWindowState = next;
+  try {
+    writeStoredWindowState(getWindowStatePath(), next);
+  } catch {
+    // Window state is a convenience; a read-only or damaged profile must not stop voice chat.
+  }
+};
+
+const schedulePersistWindowState = () => {
+  if (persistWindowTimer) clearTimeout(persistWindowTimer);
+  persistWindowTimer = setTimeout(() => {
+    persistWindowTimer = null;
+    persistWindowState();
+  }, 250);
+};
+
+const startConfiguredAgent = async (
+  waitUntilReady: boolean,
+): Promise<
+  { config: AppConfig; readiness: DesktopReadiness } | { readiness: DesktopReadiness }
+> => {
+  reloadLocalEnvironment(localEnvironmentPath);
+  const configuration = checkDesktopConfiguration();
+  if (!configuration.ok) return { readiness: configuration.readiness };
+
+  try {
+    await agentRuntime.ensureStarted(configuration.config, getAgentProcessPath());
+    if (waitUntilReady) await agentRuntime.waitUntilReady();
+    return { config: configuration.config, readiness: agentRuntime.getReadiness() };
+  } catch (error) {
+    return {
+      readiness: {
+        status: 'error',
+        message: 'AI 服务启动失败。',
+        issues: [error instanceof Error ? error.message.slice(0, 320) : '请稍后重试。'],
+      },
+    };
+  }
+};
 
 const loadRenderer = async (window: BrowserWindow, hash: string) => {
   if (isDevelopment) {
@@ -153,6 +252,7 @@ const openUtilityWindow = async (kind: UtilityKind) => {
     },
   });
   utilityWindow.setAlwaysOnTop(true, 'floating');
+  attachDevelopmentDiagnostics(utilityWindow);
   utilityWindow.on('closed', () => {
     utilityWindow = null;
   });
@@ -218,6 +318,7 @@ const positionSourceNextToAssistant = () => {
 const handleAssistantMove = () => {
   if (!assistantWindow || isPositioningAssistant) return;
   positionSourceNextToAssistant();
+  schedulePersistWindowState();
 };
 
 const handleAssistantMoved = () => {
@@ -225,6 +326,7 @@ const handleAssistantMoved = () => {
   if (assistantCollapsed) dockAssistantWindow();
   else constrainExpandedAssistant();
   positionSourceNextToAssistant();
+  schedulePersistWindowState();
 };
 
 const handleDisplayChange = () => {
@@ -262,11 +364,17 @@ const showRemoteSource = async (url: string) => {
 };
 
 const createAssistantWindow = async () => {
+  const savedBounds = storedWindowState.assistant;
+  assistantCollapsed = storedWindowState.collapsed ?? false;
+  assistantDockSide = storedWindowState.dockSide ?? 'right';
+  expandedAssistantBounds = storedWindowState.expandedAssistant ?? null;
+  const initialSize = assistantCollapsed ? collapsedSize : assistantSize;
   assistantWindow = new BrowserWindow({
-    width: assistantSize.width,
-    height: assistantSize.height,
-    minWidth: 240,
-    minHeight: 158,
+    ...(savedBounds ? { x: savedBounds.x, y: savedBounds.y } : {}),
+    width: assistantCollapsed ? collapsedSize.width : (savedBounds?.width ?? initialSize.width),
+    height: assistantCollapsed ? collapsedSize.height : (savedBounds?.height ?? initialSize.height),
+    minWidth: assistantCollapsed ? collapsedSize.width : 240,
+    minHeight: assistantCollapsed ? collapsedSize.height : 158,
     frame: false,
     transparent: true,
     resizable: true,
@@ -279,6 +387,12 @@ const createAssistantWindow = async () => {
     },
   });
   assistantWindow.setAlwaysOnTop(true, 'floating');
+  attachDevelopmentDiagnostics(assistantWindow);
+  assistantWindow.on('close', (event) => {
+    if (shutdownComplete) return;
+    event.preventDefault();
+    app.quit();
+  });
   assistantWindow.on('closed', () => {
     assistantWindow = null;
     sourceWindow?.close();
@@ -286,16 +400,24 @@ const createAssistantWindow = async () => {
   });
   assistantWindow.on('move', handleAssistantMove);
   assistantWindow.on('moved', handleAssistantMoved);
-  assistantWindow.on('resize', positionSourceNextToAssistant);
+  assistantWindow.on('resize', () => {
+    if (!assistantCollapsed && !assistantMenuOpen)
+      expandedAssistantBounds = assistantWindow?.getBounds() ?? null;
+    positionSourceNextToAssistant();
+    schedulePersistWindowState();
+  });
+  if (assistantCollapsed) dockAssistantWindow(false);
+  else constrainExpandedAssistant(false);
   await loadRenderer(assistantWindow, 'assistant');
 };
 
 const createSourceWindow = async () => {
   if (!assistantWindow) return;
+  const savedSourceSize = storedWindowState.source;
   sourceWindow = new BrowserWindow({
     parent: assistantWindow,
-    width: 440,
-    height: 600,
+    width: savedSourceSize?.width ?? 440,
+    height: savedSourceSize?.height ?? 600,
     minWidth: 280,
     minHeight: 240,
     frame: false,
@@ -309,7 +431,11 @@ const createSourceWindow = async () => {
     },
   });
   sourceWindow.setAlwaysOnTop(true, 'floating');
-  sourceWindow.on('resize', setSourceViewBounds);
+  attachDevelopmentDiagnostics(sourceWindow);
+  sourceWindow.on('resize', () => {
+    setSourceViewBounds();
+    schedulePersistWindowState();
+  });
   sourceWindow.on('moved', positionSourceNextToAssistant);
   sourceWindow.on('closed', () => {
     destroySourceView();
@@ -324,26 +450,84 @@ ipcMain.handle('assistant:set-collapsed', (event, collapsed: boolean) => {
   if (assistantMenuOpen) setAssistantMenuOpen(false);
   assistantCollapsed = collapsed;
   if (collapsed) {
+    expandedAssistantBounds = assistantWindow.getBounds();
     sourceWindow?.close();
     assistantWindow.setMinimumSize(collapsedSize.width, collapsedSize.height);
     assistantWindow.setSize(collapsedSize.width, collapsedSize.height);
     dockAssistantWindow(false);
+    schedulePersistWindowState();
     return;
   }
   assistantWindow.setMinimumSize(240, 158);
-  setAssistantBounds(
-    getExpandedBounds(
-      currentDisplay.workArea,
-      assistantDockSide,
-      assistantWindow.getBounds().y,
-      assistantSize,
-    ),
-  );
+  const restored = expandedAssistantBounds
+    ? keepTitleBarVisible(expandedAssistantBounds, currentDisplay.workArea)
+    : getExpandedBounds(
+        currentDisplay.workArea,
+        assistantDockSide,
+        assistantWindow.getBounds().y,
+        assistantSize,
+      );
+  setAssistantBounds(restored);
+  schedulePersistWindowState();
 });
 
 ipcMain.handle('assistant:set-menu-open', (event, open: boolean) => {
   if (!isAssistantSender(event.sender)) return assistantMenuDirection;
   return setAssistantMenuOpen(open);
+});
+
+ipcMain.handle('assistant:get-state', (event) => {
+  if (!isAssistantSender(event.sender)) return { collapsed: false };
+  return { collapsed: assistantCollapsed };
+});
+
+ipcMain.handle('diagnostics:get-readiness', async (event) => {
+  if (!isAssistantSender(event.sender) && !isUtilitySender(event.sender)) {
+    return {
+      status: 'error',
+      message: '不允许的诊断请求。',
+      issues: [],
+    } satisfies DesktopReadiness;
+  }
+  const result = await startConfiguredAgent(false);
+  return result.readiness;
+});
+
+ipcMain.handle('diagnostics:retry', async (event) => {
+  if (!isAssistantSender(event.sender) && !isUtilitySender(event.sender)) {
+    return {
+      status: 'error',
+      message: '不允许的诊断请求。',
+      issues: [],
+    } satisfies DesktopReadiness;
+  }
+  const result = await startConfiguredAgent(true);
+  return result.readiness;
+});
+
+ipcMain.handle('configuration:open', async (event) => {
+  if (!isAssistantSender(event.sender) && !isUtilitySender(event.sender)) return false;
+  try {
+    ensureLocalEnvironmentFile(localEnvironmentPath, localEnvironmentExamplePath);
+    const errorMessage = await shell.openPath(localEnvironmentPath);
+    return errorMessage === '';
+  } catch {
+    return false;
+  }
+});
+
+ipcMain.handle('livekit:create-session', async (event): Promise<DesktopSessionResult> => {
+  if (!isAssistantSender(event.sender)) {
+    return {
+      ok: false,
+      readiness: { status: 'error', message: '不允许的会话请求。', issues: [] },
+    };
+  }
+  const result = await startConfiguredAgent(true);
+  if (!('config' in result) || result.readiness.status !== 'ready') {
+    return { ok: false, readiness: result.readiness };
+  }
+  return { ok: true, credentials: await createDesktopSessionCredentials(result.config) };
 });
 
 ipcMain.handle('settings:open', async (event) => {
@@ -390,13 +574,37 @@ ipcMain.handle('external:open', (event, url: string) => {
 });
 
 app.whenReady().then(async () => {
+  storedWindowState = readStoredWindowState(getWindowStatePath());
   await createAssistantWindow();
+  void startConfiguredAgent(false).then(async (result) => {
+    if ('config' in result) await agentRuntime.waitUntilReady();
+    if (!app.isPackaged) {
+      console.error(`[agent-readiness] ${JSON.stringify(agentRuntime.getReadiness())}`);
+    }
+  });
   screen.on('display-added', handleDisplayChange);
   screen.on('display-removed', handleDisplayChange);
   screen.on('display-metrics-changed', handleDisplayChange);
 });
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();
+});
+let shutdownStarted = false;
+let shutdownComplete = false;
+app.on('before-quit', (event) => {
+  if (shutdownComplete) return;
+  event.preventDefault();
+  if (shutdownStarted) return;
+  shutdownStarted = true;
+  if (persistWindowTimer) {
+    clearTimeout(persistWindowTimer);
+    persistWindowTimer = null;
+  }
+  persistWindowState();
+  void agentRuntime.stop().finally(() => {
+    shutdownComplete = true;
+    app.quit();
+  });
 });
 app.on('activate', () => {
   if (!assistantWindow) void createAssistantWindow();

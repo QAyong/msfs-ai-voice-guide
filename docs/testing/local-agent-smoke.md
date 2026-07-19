@@ -5,7 +5,7 @@
 ## 前置条件
 
 - 已启动或已配置可访问的 LiveKit Server（实时音视频房间服务）。
-- 已具备一个可加入 LiveKit 房间、发布麦克风音频的客户端。仓库桌面端目前只实现本地麦克风轨道和音量反馈，尚未连接 Room；端到端联调继续使用 LiveKit Meet（官方测试页面）。
+- 已构建 Electron 桌面客户端；它会自动创建短期 Token、加入唯一房间、分派 Agent 并发布麦克风音频。
 - DeepSeek LLM、豆包流式 ASR 和豆包双向流式 TTS 均已开通，且音色已授权。
 - 如需验证外部信息工具，`.env` 中还需配置 `VOLCENGINE_SEARCH_API_KEY`。
 
@@ -33,16 +33,9 @@ LIVEKIT_API_SECRET=secret
 
 1. 复制 `.env.example` 为 `.env`，填写真实凭据与已开通的模型/音色配置。
 2. 执行 `pnpm agent:check`。它只校验本地配置并输出脱敏状态，成功时会显示所有能力为 `configured`。
-3. 执行 `pnpm agent:dev` 启动 LiveKit Agent Worker（工作进程）。
-4. 使用 LiveKit CLI（命令行工具）生成一次性测试参与者 Token（访问令牌）并同时分派 Agent：
-
-   ```powershell
-   lk token create --dev --join --room msfs-local-test --identity local-pilot --name "本地测试飞行员" --agent msfs-voice-guide --valid-for 24h --open meet
-   ```
-
-   `--open meet` 会打开 LiveKit Meet。允许麦克风后加入房间，再说出需要外部信息的问题，例如“北京现在天气怎么样”或“给我讲讲喜马拉雅山的形成故事”。
-
-5. 确认收到中文语音回复，并在 Worker 日志中看到 `Executing LLM tool call`、`function: "searchWeb"` 和成功状态。
+3. 执行 `pnpm build`，再执行 `pnpm desktop:preview`。桌面主进程会自动启动隔离的 Agent Worker。
+4. 等待标题状态从“连接中”切换为“在线”或“等待导游”。首次使用时允许桌面应用访问麦克风。
+5. 在桌面窗口按住说话，例如“北京现在天气怎么样”，松开后确认出现真实转写并听到中文回答；如触发 `searchWeb`，回答下方应出现真实 HTTPS 来源卡片。
 
 ## 通过标准
 
@@ -51,17 +44,16 @@ LIVEKIT_API_SECRET=secret
 - DeepSeek 对需要外部信息的问题主动调用 `searchWeb`，搜索服务返回 `ok` 或可解释的低置信度/错误状态。
 - 天气、新闻等时效性回答说明来源地点和时间；来源时间不明确时不声称为实时信息。
 
-## 桌面麦克风与音量反馈
-
-该检查只验证桌面 Renderer 的本地音轨，不代表已经接通 Agent：
+## 桌面语音闭环
 
 1. 执行 `pnpm desktop:build`，再执行 `pnpm desktop:preview` 打开 Electron 桌面窗口。
-2. 按住居中的“按住说话”胶囊；首次使用时允许本地应用访问麦克风。
-3. 确认连接完成后胶囊原位变蓝，文案变为“松开结束”，5 根音量柱随说话音量变化。
-4. 松开后确认界面立即恢复空闲状态，麦克风轨道被静音；再次按住时不重复弹出权限请求。
-5. 拒绝权限时确认界面显示“麦克风不可用”，再次按住可以重试。
+2. 确认应用自动启动 Worker，并在 LiveKit 不可用时显示脱敏、可重试的错误，而不是停留在伪在线状态。
+3. 按住居中的“按住说话”胶囊；首次使用时允许本地应用访问麦克风。
+4. 确认胶囊原位变蓝，文案变为“松开结束”，5 根音量柱随说话音量变化，用户转写随后出现在聊天区。
+5. 松开后确认麦克风被静音，状态依次进入思考/回答并播放 Agent 音频；再次按住时不重复创建采集链路。
+6. 拒绝权限时确认界面显示“麦克风不可用”，再次按住可以重试。
 
-浏览器预览适合检查布局，但内置浏览器可能没有可用麦克风设备；真实麦克风验收以 Electron 窗口为准。当前音轨不会发送给 Agent，直到短期 Token、Room 连接和发布逻辑完成。
+浏览器预览适合检查布局，但内置浏览器可能没有可用麦克风设备；真实麦克风和回答播放验收以 Electron 窗口为准。
 
 - 中断或离开房间后，Worker 不保留该用户的会话状态。
 
@@ -82,5 +74,5 @@ LIVEKIT_API_SECRET=secret
 
 ## 停止本地测试
 
-- 在 Agent 终端按 `Ctrl+C` 停止 Worker。
+- 退出桌面应用会自动停止 Agent Worker 并释放 Room、麦克风与回答音频。
 - 执行 `docker stop msfs-livekit-dev` 停止本机 LiveKit Server。
