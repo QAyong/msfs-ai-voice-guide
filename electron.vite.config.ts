@@ -1,12 +1,26 @@
 import { defineConfig } from 'electron-vite';
 import react from '@vitejs/plugin-react';
+import { resolve } from 'node:path';
 
 export default defineConfig({
   main: {
     build: {
       rollupOptions: {
-        external: ['electron'],
-        input: 'desktop/main/index.ts',
+        external: [
+          'electron',
+          '@livekit/agents',
+          '@livekit/agents-plugin-openai',
+          '@livekit/protocol',
+          '@livekit/rtc-node',
+          'livekit-server-sdk',
+          'ws',
+          'zod',
+        ],
+        input: {
+          index: resolve('desktop/main/index.ts'),
+          'agent-process': resolve('desktop/agent-process.ts'),
+          'guide-agent': resolve('src/agent/guide-agent.ts'),
+        },
       },
     },
   },

@@ -4,13 +4,14 @@
 
 第一版已在本机完成真实语音对话联调。当前使用 DeepSeek LLM（大语言模型）、豆包 STT（语音转文字）和豆包 TTS（文字转语音），并可选接入豆包搜索 Custom API，供模型查询天气、新闻、活动、规则、地点和知识资料等外部信息。尚未实现模拟器遥测数据接入。
 
-桌面前端已完成 Electron + React 基础实现，包括可收起悬浮助手、多显示器边缘吸附、紧凑聊天面板、严格跟随的来源浏览窗，以及基于 LiveKit `LocalAudioTrack` 的按住说话和实时音量反馈。当前本地麦克风音轨尚未加入 LiveKit Room，也尚未完成 Token 获取、Agent 音频回放、`.exe` 安装包与发布流程。
+桌面前端已接通真实 LiveKit Room：应用自动校验配置并启动隔离的 Agent Worker，主进程签发短期 Token，Renderer 发布按住说话的麦克风音轨、播放 Agent 语音，并显示真实转写、Agent 状态和搜索来源。正式 `.exe` 安装包与发布流程仍未实现。
 
 ## 文档入口
 
 - [第一版规格](docs/specs/spec-001-voice-guide-v1.md)
 - [网络搜索规格](docs/specs/spec-003-web-search-and-capability-modules.md)
 - [桌面悬浮前端与来源浏览规格](docs/specs/spec-004-web-frontend-and-source-preview.md)
+- [桌面真实语音闭环与启动诊断](docs/specs/spec-006-desktop-live-voice-and-readiness.md)
 - [基于 Mem0 的持久化对话记忆规划](docs/specs/spec-005-persistent-conversation-memory.md)
 - [前端 HTML 交互原型](prototypes/voice-chat-panel.html)
 - [架构概览](docs/architecture/overview.md)
@@ -44,7 +45,10 @@ pnpm run verify
 - 拖动结束后根据光标所在显示器吸附到最近的左右工作区边缘，并支持负坐标扩展屏。
 - 可移动、可收起、可从四边和四角拉伸的语音聊天面板。
 - 居中的紧凑按住说话胶囊：首次按下申请麦克风权限，之后复用并静音/恢复同一条 LiveKit 本地音轨；激活时显示实时音量柱。
-- AI 回答中的百科来源卡片和搜索结果入口。
+- 自动连接唯一 LiveKit Room、发布麦克风、播放 Agent 音频，并展示真实转写与连接/思考/回答状态。
+- 由主进程签发的短期最小权限 Token；API Secret 和模型密钥不会进入 Renderer。
+- AI 回答中的真实搜索来源卡片和搜索结果入口。
+- 自动启动/检查 Agent Worker、首次配置引导、脱敏故障提示、重试、音量/置顶/窗口状态保存。
 - 独立伴随来源浏览窗，通过隔离的 `WebContentsView` 加载经过校验的 HTTPS 页面，并始终跟随聊天面板定位。
 
 可使用以下命令验证并打开桌面实现：
@@ -54,7 +58,7 @@ pnpm build
 pnpm desktop:preview
 ```
 
-HTML 原型中的百科和搜索结果仍是本地静态视觉数据；Electron 实现会加载真实 HTTPS 来源网页。桌面进程、安全隔离和后续打包要求见 [Spec-004](docs/specs/spec-004-web-frontend-and-source-preview.md)。
+HTML 原型中的百科和搜索结果仍是本地静态视觉数据；Electron 实现使用真实 Agent 转写和来源，并加载经过校验的 HTTPS 来源网页。桌面进程、安全隔离和后续打包要求见 [Spec-004](docs/specs/spec-004-web-frontend-and-source-preview.md)。
 
 搜索 Key 配置完成后，可用以下命令独立验证搜索服务；`--json` 输出适合脚本处理。
 
@@ -69,7 +73,7 @@ pnpm search:smoke
 
 1. 启动本机 LiveKit Server，并在 `.env` 中填写 `ws://127.0.0.1:7880`、`devkey`、`secret`、DeepSeek Key 与豆包语音凭据。
 2. 使用 `pnpm agent:check` 检查配置（不会输出密钥，也不会发起远程请求）。
-3. 启动本地 Agent Worker（工作进程）：`pnpm agent:dev`。
-4. 用 LiveKit CLI（命令行工具）创建房间 Token（访问令牌）并分派 `msfs-voice-guide`，在 LiveKit Meet 中完成对话。
+3. 执行 `pnpm build`，再执行 `pnpm desktop:preview`。桌面应用会自动启动 Agent Worker、创建独立房间并分派 `msfs-voice-guide`。
+4. 在桌面窗口按住说话，松开后等待语音回答；无需另外启动 Worker、生成 Token 或打开 LiveKit Meet。
 
-Agent Worker 依赖可访问的 LiveKit Server。仓库中的桌面端目前只完成本地麦克风音轨与音量反馈，尚未发布音轨到 Room；因此端到端 Agent 联调仍使用 LiveKit Meet。包含 Docker 启动、Token 生成和关闭命令的完整步骤见[本地冒烟测试](docs/testing/local-agent-smoke.md)。
+Agent Worker 仍依赖可访问的 LiveKit Server；服务未启动、凭据错误或麦克风被拒绝时，桌面应用会显示可重试的脱敏提示。包含 Docker 启动和关闭命令的完整步骤见[本地冒烟测试](docs/testing/local-agent-smoke.md)。

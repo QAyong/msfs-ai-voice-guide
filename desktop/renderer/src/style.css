@@ -71,6 +71,19 @@ button {
   color: #7b8390;
   font-size: 10px;
 }
+.status--connected {
+  color: #2d7d55;
+}
+.status--reconnecting,
+.status--checking,
+.status--connecting {
+  color: #8a6116;
+}
+.status--setup_required,
+.status--error,
+.status--disconnected {
+  color: #a12b24;
+}
 .text-button {
   margin-left: auto;
   border: 0;
@@ -93,6 +106,65 @@ button {
   gap: 8px;
   padding: 12px;
   overflow: auto;
+}
+.empty-conversation,
+.readiness-card {
+  display: flex;
+  min-height: 150px;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 16px;
+  border: 1px dashed rgba(51, 83, 128, 0.16);
+  border-radius: 10px;
+  background: rgba(248, 251, 255, 0.68);
+  color: #40516a;
+  text-align: center;
+}
+.empty-conversation-icon {
+  display: grid;
+  width: 38px;
+  height: 38px;
+  margin-bottom: 3px;
+  place-items: center;
+  border-radius: 50%;
+  background: #eef4ff;
+  color: #315c9f;
+}
+.empty-conversation strong,
+.readiness-card strong {
+  font-size: 12px;
+}
+.empty-conversation small,
+.readiness-card small {
+  color: #7a8494;
+  font-size: 10px;
+  line-height: 1.45;
+}
+.readiness-card {
+  border-color: rgba(190, 57, 45, 0.16);
+  background: rgba(255, 249, 248, 0.82);
+  color: #9f342a;
+}
+.readiness-actions {
+  display: flex;
+  gap: 7px;
+  margin-top: 6px;
+}
+.readiness-actions button {
+  border: 1px solid #c8d8f4;
+  border-radius: 7px;
+  padding: 6px 9px;
+  background: #fff;
+  color: #315c9f;
+  cursor: pointer;
+  font-size: 10px;
+  font-weight: 700;
+}
+.readiness-actions button:hover {
+  background: #f1f6ff;
 }
 .bubble {
   max-width: 92%;
@@ -594,6 +666,14 @@ button {
 }
 .preference-switch[aria-checked='true'] .preference-switch-thumb {
   transform: translateX(16px);
+}
+.preference-row--volume {
+  min-height: 72px;
+}
+.volume-slider {
+  width: 92px;
+  accent-color: #2563eb;
+  cursor: pointer;
 }
 .settings-footer {
   display: flex;

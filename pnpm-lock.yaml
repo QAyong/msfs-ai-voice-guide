@@ -14,6 +14,9 @@ importers:
       '@livekit/agents-plugin-openai':
         specifier: ^1.5.2
         version: 1.5.2(@livekit/agents@1.5.2(@livekit/rtc-node@0.13.31)(typescript@5.9.3)(zod@4.4.3))(@livekit/rtc-node@0.13.31)(zod@4.4.3)
+      '@livekit/protocol':
+        specifier: 1.49.0
+        version: 1.49.0
       '@livekit/rtc-node':
         specifier: 0.13.31
         version: 0.13.31
@@ -23,6 +26,9 @@ importers:
       livekit-client:
         specifier: ^2.20.1
         version: 2.20.1(@types/dom-mediacapture-record@1.0.22)
+      livekit-server-sdk:
+        specifier: 2.17.0
+        version: 2.17.0
       react:
         specifier: ^19.2.7
         version: 19.2.7

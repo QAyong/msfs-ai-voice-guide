@@ -17,7 +17,7 @@ const calculateLevel = (analyser: AnalyserNode, samples: Uint8Array<ArrayBuffer>
   return Math.min(1, Math.max(0, (rms - 0.012) / 0.16));
 };
 
-export const useMicrophoneTrack = () => {
+export const useMicrophoneTrack = (prepareTrack?: (track: LocalAudioTrack) => Promise<void>) => {
   const [level, setLevel] = useState(0);
   const [state, setState] = useState<MicrophoneState>('idle');
   const [errorMessage, setErrorMessage] = useState('');
@@ -31,6 +31,9 @@ export const useMicrophoneTrack = () => {
   const pressedRef = useRef(false);
   const disposedRef = useRef(false);
   const smoothedLevelRef = useRef(0);
+  const prepareTrackRef = useRef(prepareTrack);
+
+  prepareTrackRef.current = prepareTrack;
 
   useEffect(() => {
     const updateLevel = () => {
@@ -98,6 +101,7 @@ export const useMicrophoneTrack = () => {
         trackRef.current = localTrack;
         setTrack(localTrack);
         await connectMeter(localTrack);
+        await localTrack.mute();
         return localTrack;
       })
       .finally(() => {
@@ -124,6 +128,7 @@ export const useMicrophoneTrack = () => {
       if (audioContextRef.current?.state === 'suspended') {
         await audioContextRef.current.resume();
       }
+      await prepareTrackRef.current?.(localTrack);
       await localTrack.unmute();
       setState('listening');
     } catch (error) {

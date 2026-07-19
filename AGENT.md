@@ -2,7 +2,7 @@
 
 ## 项目简介
 
-面向单个模拟飞行用户的实时语音导游助手。当前版本提供本地运行的 LiveKit 房间语音对话，并通过 `searchWeb` 查询模型外部的公开网页信息；Electron 桌面端已完成悬浮窗口、来源浏览和本地麦克风音量反馈，LiveKit Room 接入与安装包仍待完成。项目不读取模拟器遥测数据。
+面向单个模拟飞行用户的实时语音导游助手。当前版本提供由 Electron 自动启动 Worker 的 LiveKit 房间语音对话，并通过 `searchWeb` 查询模型外部的公开网页信息；桌面端已完成悬浮窗口、Room 连接、语音发布/播放、真实转写、来源浏览和启动诊断，安装包仍待完成。项目不读取模拟器遥测数据。
 
 ## 开发前必读
 
@@ -54,7 +54,7 @@ prototypes/       # 桌面前端早期交互参考，不作为生产客户端入
 - `src/tools/` 只负责将共享业务能力包装成 LiveKit Tool（工具）；`src/cli/` 只负责命令行参数、输出和退出码。
 - `searchWeb` 是模型获取公开网页外部信息的通用入口，可用于天气、新闻、活动、规则和知识查询；时效性结果必须保留并关注来源时间。
 - Agent 不得通过 `child_process` 启动 CLI 执行搜索；CLI 是共享服务的入口，不是实时 Agent 的运行时依赖。
-- 桌面前端需求以 `docs/specs/spec-004-web-frontend-and-source-preview.md` 为准；`desktop/` 是生产实现入口，HTML 原型只保留早期布局参考，不得被描述为真实客户端或 `.exe` 安装包。
+- 桌面前端需求以 Spec-004 与 Spec-006 为准；`desktop/` 是生产实现入口，HTML 原型只保留早期布局参考，不得被描述为真实客户端或 `.exe` 安装包。
 - 未来加载第三方网页时，必须放入独立、无 Node 权限的 `WebContentsView`（隔离网页视图）；远程网页不得获得 Preload、IPC、文件系统或 Agent 密钥。
 - Provider 的具体实现只能出现在 `src/providers/`；`registry.ts`（Provider 工厂注册表）是唯一创建入口，其他模块不得散落引用火山 SDK 或 WebSocket。
 - 遵循参考项目 `[reference project]` 的“按 STT/LLM/TTS 分类 + 集中注册表 + 启动前自检”规范；只继承职责边界，不复制 Python/Pipecat 实现。
