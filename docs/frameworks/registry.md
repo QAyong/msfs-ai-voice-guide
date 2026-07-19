@@ -2,16 +2,17 @@
 
 **最后更新：** 2026-07-19
 
-| 框架或核心库                    | 实际版本 | 版本证据                                                                      | 对应版本官方文档                                                              | 项目用途                                        |
-| ------------------------------- | -------: | ----------------------------------------------------------------------------- | ----------------------------------------------------------------------------- | ----------------------------------------------- |
-| `@livekit/agents`               |    1.5.2 | `node_modules/@livekit/agents/package.json`、`package.json`、`pnpm-lock.yaml` | [LiveKit Agents Node.js API](https://docs.livekit.io/reference/agents-js/)    | 实时语音 Agent 生命周期、会话历史与工具调用     |
-| `@livekit/agents-plugin-openai` |    1.5.2 | `package.json`、`pnpm-lock.yaml`                                              | [LiveKit OpenAI-compatible LLM](https://docs.livekit.io/agents/models/llm/)   | 通过 `withDeepSeek()` 创建 DeepSeek LLM         |
-| `livekit-client`                |   2.20.1 | `package.json`、`pnpm-lock.yaml`                                              | [LiveKit JavaScript SDK](https://docs.livekit.io/reference/client-sdk-js/)    | 桌面 Room、媒体发布订阅、转写流和自动重连       |
-| `livekit-server-sdk`            |   2.17.0 | `package.json`、`pnpm-lock.yaml`                                              | [LiveKit server SDKs](https://docs.livekit.io/home/server/generating-tokens/) | 短期 Token 与 Agent 分派                        |
-| Electron                        |   43.1.1 | `package.json`、`pnpm-lock.yaml`                                              | [Electron API](https://www.electronjs.org/docs/latest/api/app)                | 桌面主进程、Utility Process、窗口和安全 IPC     |
-| React                           |   19.2.7 | `package.json`、`pnpm-lock.yaml`                                              | [React reference](https://react.dev/reference/react)                          | 桌面可信 Renderer                               |
-| Zod                             |    4.4.3 | `package.json`、`pnpm-lock.yaml`                                              | [Zod documentation](https://zod.dev/)                                         | 配置、IPC 与来源消息边界校验                    |
-| Mem0                            |   未安装 | `package.json` 与 `pnpm-lock.yaml` 中不存在 Mem0 依赖                         | [Mem0 Node SDK](https://docs.mem0.ai/open-source/node-quickstart)             | Spec-005 的长期记忆候选实现，实施前必须固定版本 |
+| 框架或核心库                    | 实际版本 | 版本证据                                                                      | 对应版本官方文档                                                                | 项目用途                                             |
+| ------------------------------- | -------: | ----------------------------------------------------------------------------- | ------------------------------------------------------------------------------- | ---------------------------------------------------- |
+| `@livekit/agents`               |    1.5.2 | `node_modules/@livekit/agents/package.json`、`package.json`、`pnpm-lock.yaml` | [LiveKit Agents Node.js API](https://docs.livekit.io/reference/agents-js/)      | 实时语音 Agent 生命周期、会话历史与工具调用          |
+| `@livekit/agents-plugin-openai` |    1.5.2 | `package.json`、`pnpm-lock.yaml`                                              | [LiveKit OpenAI-compatible LLM](https://docs.livekit.io/agents/models/llm/)     | 通过 `withDeepSeek()` 创建 DeepSeek LLM              |
+| `livekit-client`                |   2.20.1 | `package.json`、`pnpm-lock.yaml`                                              | [LiveKit JavaScript SDK](https://docs.livekit.io/reference/client-sdk-js/)      | 桌面 Room、媒体发布订阅、转写流和自动重连            |
+| `@livekit/components-react`     |   2.9.21 | `package.json`、`pnpm-lock.yaml`                                              | [LiveKit React components](https://docs.livekit.io/reference/components/react/) | Renderer Session、Agent 状态、消息、麦克风和音频播放 |
+| `livekit-server-sdk`            |   2.17.0 | `package.json`、`pnpm-lock.yaml`                                              | [LiveKit server SDKs](https://docs.livekit.io/home/server/generating-tokens/)   | 短期 Token 与 Agent 分派                             |
+| Electron                        |   43.1.1 | `package.json`、`pnpm-lock.yaml`                                              | [Electron API](https://www.electronjs.org/docs/latest/api/app)                  | 桌面主进程、Utility Process、窗口和安全 IPC          |
+| React                           |   19.2.7 | `package.json`、`pnpm-lock.yaml`                                              | [React reference](https://react.dev/reference/react)                            | 桌面可信 Renderer                                    |
+| Zod                             |    4.4.3 | `package.json`、`pnpm-lock.yaml`                                              | [Zod documentation](https://zod.dev/)                                           | 配置、IPC 与来源消息边界校验                         |
+| Mem0                            |   未安装 | `package.json` 与 `pnpm-lock.yaml` 中不存在 Mem0 依赖                         | [Mem0 Node SDK](https://docs.mem0.ai/open-source/node-quickstart)               | Spec-005 的长期记忆候选实现，实施前必须固定版本      |
 
 ## 规划依赖说明
 

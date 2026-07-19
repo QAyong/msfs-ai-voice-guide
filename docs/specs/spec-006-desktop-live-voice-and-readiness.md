@@ -1,7 +1,7 @@
 # Spec-006：桌面真实语音闭环与启动诊断
 
 **日期：** 2026-07-19  
-**状态：** 已实现；真实语音冒烟测试等待本机 LiveKit Server 恢复后复验
+**状态：** 已验收
 
 ## 背景
 
@@ -15,9 +15,12 @@
 
 - Electron 主进程作为可信本地边界签发短期 LiveKit 参与者 Token；Renderer（渲染进程）不接触 `LIVEKIT_API_SECRET`。
 - 每次桌面会话使用唯一房间，并通过 Token 的 `RoomConfiguration`（房间配置）显式分派 `LIVEKIT_AGENT_NAME` 指定的 Agent。
-- 桌面端自动连接 LiveKit Room（房间），发布现有 `LocalAudioTrack`（本地麦克风音轨），并通过静音/恢复实现按住说话。
-- 订阅并播放 Agent 远端音频；接收 `lk.transcription`（LiveKit 转写文本流）并显示真实用户转写与 Agent 回答。
-- 根据连接事件和 Agent 参与者的 `lk.agent.state` 属性显示连接、聆听、思考、回答、重连、断线和错误状态。
+- Renderer 以 `@livekit/components-react` 的 `useSession` 与 `SessionProvider` 作为唯一 Room（房间）会话边界，不自行创建第二套连接生命周期。
+- `useTrackToggle` 管理同一条本地麦克风管线；支持鼠标/空格键按住说话，以及无需持续按键的连续对话。
+- 按住说话使用 LiveKit `manual`（手动轮次）与官方 RPC；连续对话用 `turnDetection: null` 恢复官方自动 Turn Detector（轮次检测器），两种模式不得切换 STT 或创建不同 Session。
+- `useSessionMessages` 显示官方用户/Agent transcription（转写），不在 Renderer 拼接文本片段；火山 Provider 只在同一 ASR 请求内去重重复 final utterance（最终话语）。
+- `RoomAudioRenderer` 播放 Agent 远端音频，`useAgent` 提供官方 Agent 状态；产品自定义参与者属性只补充用户 speaking/listening 状态。
+- 状态区区分等待讲话、真实聆听、思考、回答、正在打断、重连、断线和错误；麦克风持续开启不得等同于用户持续讲话。
 - Agent 将真实 `searchWeb` 搜索来源通过可靠 Data Packet（数据包）发送给桌面端，并关联到下一条 Agent 回答。
 - Electron 启动时自动启动内置 Agent Worker（工作进程），退出时释放 Worker、Room、麦克风和音频元素。
 - 首次启动配置向导只展示脱敏后的缺失/无效配置项，并允许在系统编辑器中打开本地 `.env`；密钥不回传 Renderer。
@@ -29,14 +32,16 @@
 - Mem0 或其他跨会话长期记忆。
 - 正式安装包、代码签名、自动更新和云端账号系统。
 - 在 Renderer 中编辑、保存或显示 LiveKit、DeepSeek、豆包语音和搜索密钥。
-- 自行实现 LiveKit 信令、重连、音频传输、VAD（语音活动检测）或转写协议。
+- 自行实现 LiveKit 信令、Session、重连、音频传输、VAD（语音活动检测）、Turn Detector 或前端转写拼接。
 
 ## 验收标准
 
-- [ ] 配置有效且 LiveKit 可访问时，打开桌面应用会自动启动 Agent Worker 并连接唯一房间。（实现完成，待真实 Server 复验）
+- [x] 配置有效且 LiveKit 可访问时，打开桌面应用会自动启动 Agent Worker 并连接唯一房间。
 - [x] Renderer 只能通过白名单 IPC 请求短期 Token，IPC 响应不含 API Key、API Secret 或模型密钥。
-- [x] 用户按住按钮后发布/恢复同一麦克风音轨，松开后立即静音；再次按住不重复创建采集链路。
-- [ ] 用户松开后能够听到 Agent 的真实语音回答，不需要打开终端或 LiveKit Meet。
+- [x] 用户可用鼠标或空格键按住说话；松开后提交轮次并听到真实回答，再次按住不创建第二条采集链路。
+- [x] 连续对话中用户说完并保持安静后，自动 Turn Detector 会提交轮次并触发 Agent 回答，无需点击结束。
+- [x] Agent 回答过程中再次讲话可触发 VAD interruption（语音活动打断）。
+- [x] 同一个 final utterance 只显示一个用户气泡；interim→final 实时更新不拆成多个碎片气泡。
 - [x] 聊天区使用真实用户转写、Agent 回答和搜索来源，不再显示静态“苏黎世湖”示例。
 - [x] 连接中、聆听、思考、回答、重连、断线和错误状态具有明确界面反馈和重试入口。
 - [x] `.env` 缺失或无效时显示首次配置向导；打开配置文件、保存后重新检测可恢复启动流程。
@@ -51,9 +56,10 @@
 1. 用户打开桌面应用。
 2. 主进程加载并校验配置，启动 Agent Worker；Renderer 请求一次短期会话凭据。
 3. Renderer 连接唯一房间，Token 在房间创建时分派指定 Agent。
-4. 用户按住说话，已连接的麦克风音轨恢复发送；松开后音轨静音。
-5. Agent 发布用户转写、状态、回答音频和回答转写；如调用搜索，还发布真实来源列表。
-6. 桌面端播放回答并更新气泡与来源卡片。
+4. 用户选择按住说话或连续对话，两种模式复用同一个 Session、麦克风和 STT 管线。
+5. 按住说话由松开动作显式提交；连续对话由 VAD 与官方 Turn Detector 在静音后自动提交。
+6. Agent 发布用户转写、状态、回答音频和回答转写；如调用搜索，还发布真实来源列表。
+7. 桌面端播放回答并更新气泡与来源卡片；回答时用户重新讲话可触发打断。
 
 **异常流程：**
 
@@ -68,12 +74,18 @@
 - `tests/unit/desktop-readiness.test.ts`：配置诊断的脱敏状态映射。
 - `tests/unit/agent-search-sources.test.ts`：搜索工具结果到来源数据包的提取与过滤。
 - `tests/unit/window-state.test.ts`：窗口状态读取、约束与持久化数据形状。
+- `tests/unit/voice-control.test.ts`：官方 RPC 名称、输入模式、用户状态属性，以及 manual/automatic 轮次映射。
+- `tests/unit/voice-ui-state.test.ts`：连续麦克风开启时不误报讲话，并校验聆听/思考/回答/打断优先级。
+- `tests/unit/providers/volcengine-stt.test.ts`：火山 utterance 时间、稳定键和请求内重复 final 去重。
+- `tests/unit/guide-events.test.ts`：产品特有搜索来源数据包校验；语音消息不使用自定义数据通道。
 
 ## 本次验证说明
 
-- TypeScript、Lint、构建、配置检查和 35 个自动化测试均通过。
-- Electron Preview 已验证 Renderer 加载、内置 Worker Utility Process 自动启动，以及 LiveKit 未运行时的脱敏错误路径。
-- 本机 `.env` 指向 `127.0.0.1:7880`；验证时 Docker Desktop 自身无法启动，系统也未安装独立 `livekit-server`，因此“真实语音回答”两项保留为未勾选，不能用静态或伪造数据代替验收。
+- `pnpm typecheck`、`pnpm desktop:typecheck`、`pnpm lint` 与 `pnpm desktop:build` 均通过。
+- `pnpm test` 通过：47 passed，8 skipped。
+- Electron Preview 已验证 Renderer、官方 Session 和内置 Worker Utility Process 启动；Worker 健康检查返回 HTTP 200。
+- 用户在真实 Electron 窗口完成连续对话复验，确认“停止讲话 → 自动提交 → Agent 回答”闭环与重复 final 转写修复。
+- 已删除自建 `useVoiceSession`、`useMicrophoneTrack` 与自定义用户转写数据通道；搜索来源仍使用产品专属数据主题。
 
 ## 相关 ADR
 
