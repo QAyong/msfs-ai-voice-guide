@@ -11,6 +11,8 @@
 | `livekit-server-sdk`            |   2.17.0 | `package.json`、`pnpm-lock.yaml`                                              | [LiveKit server SDKs](https://docs.livekit.io/home/server/generating-tokens/)   | 短期 Token 与 Agent 分派                             |
 | Electron                        |   43.1.1 | `package.json`、`pnpm-lock.yaml`                                              | [Electron API](https://www.electronjs.org/docs/latest/api/app)                  | 桌面主进程、Utility Process、窗口和安全 IPC          |
 | React                           |   19.2.7 | `package.json`、`pnpm-lock.yaml`                                              | [React reference](https://react.dev/reference/react)                            | 桌面可信 Renderer                                    |
+| `react-markdown`                |   10.1.0 | `package.json`、`pnpm-lock.yaml`                                              | [react-markdown](https://github.com/remarkjs/react-markdown)                    | 将 Agent Markdown 安全渲染为 React 元素              |
+| `remark-gfm`                    |    4.0.1 | `package.json`、`pnpm-lock.yaml`                                              | [remark-gfm](https://github.com/remarkjs/remark-gfm)                            | 表格、任务列表、删除线等 GFM 扩展                    |
 | Zod                             |    4.4.3 | `package.json`、`pnpm-lock.yaml`                                              | [Zod documentation](https://zod.dev/)                                           | 配置、IPC 与来源消息边界校验                         |
 | Mem0                            |   未安装 | `package.json` 与 `pnpm-lock.yaml` 中不存在 Mem0 依赖                         | [Mem0 Node SDK](https://docs.mem0.ai/open-source/node-quickstart)               | Spec-005 的长期记忆候选实现，实施前必须固定版本      |
 

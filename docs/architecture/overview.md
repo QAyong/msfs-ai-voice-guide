@@ -2,11 +2,11 @@
 
 **最后更新：** 2026-07-19
 
-**阶段：** 第一版语音闭环、网络搜索工具、Electron Room 客户端与启动诊断已实现；安装包待完成
+**阶段：** 第一版语音与文字闭环、网络搜索工具、Electron Room 客户端与启动诊断已实现；安装包待完成
 
 ## 架构目标
 
-当前版本以本地可运行、单用户实时语音对话为交付基线，并已增加通用网络搜索。SDK 生命周期、会话角色、运行时配置、共享业务服务和语音模型 Provider 保持分离，使 CLI（命令行工具）与 Agent 可以复用同一搜索实现。
+当前版本以本地可运行、单用户实时语音与文字对话为交付基线，并已增加通用网络搜索。SDK 生命周期、会话角色、运行时配置、共享业务服务和语音模型 Provider 保持分离，使 CLI（命令行工具）与 Agent 可以复用同一搜索实现。
 
 现有 Agent 外已增加 Windows Electron 桌面壳。桌面端是客户端与窗口编排层，不反向改变 Agent、Provider 或共享搜索服务的职责。当前仓库中的 `desktop/` 是桌面实现入口；`prototypes/` 只保留早期界面与窗口交互参考，不是生产运行入口。
 
@@ -74,7 +74,7 @@ sequenceDiagram
 
 ## 桌面端边界
 
-桌面端采用两个视觉窗口：常驻的语音聊天窗口，以及按需出现的伴随来源浏览窗。Electron 主进程负责透明置顶窗口、多显示器定位、来源窗安全策略、短期 Token 和窗口状态保存；独立 Utility Process 自动运行 Agent Worker。可信 Renderer 通过 `@livekit/components-react` 的 Session（会话）模型连接唯一 LiveKit Room，发布并复用麦克风音轨，播放远端回答，并接收真实转写、Agent 状态和搜索来源。
+桌面端采用两个视觉窗口：常驻的语音与文字聊天窗口，以及按需出现的伴随来源浏览窗。Electron 主进程负责透明置顶窗口、多显示器定位、来源窗安全策略、短期 Token 和窗口状态保存；独立 Utility Process 自动运行 Agent Worker。可信 Renderer 通过 `@livekit/components-react` 的 Session（会话）模型连接唯一 LiveKit Room，发布并复用麦克风音轨，通过 `useSessionMessages().send()` 发送文字，播放远端回答，并接收文字消息、真实转写、Agent 状态和搜索来源。Agent 回答由成熟 Markdown 解析器渲染，消息滚动只在用户仍跟随底部时自动推进。
 
 ```mermaid
 graph TD
@@ -143,7 +143,9 @@ sequenceDiagram
 ## LiveKit 集成准则
 
 - LiveKit Agents SDK 只在 `src/agent/`（以及必要的 `src/providers/` 适配代码）使用；桌面 Renderer 使用官方 `@livekit/components-react` 与浏览器侧 `livekit-client`，两者职责分离。
-- Renderer 的连接、Agent 状态、会话消息、麦克风切换和回答播放分别以官方 `useSession`、`useAgent`、`useSessionMessages`、`useTrackToggle` 与 `RoomAudioRenderer` 为唯一状态源；不得恢复自建 Room/转写拼接 Hook。
+- Renderer 的连接、Agent 状态、文字发送与会话消息、麦克风切换和回答播放分别以官方 `useSession`、`useAgent`、`useSessionMessages`、`useTrackToggle` 与 `RoomAudioRenderer` 为唯一状态源；不得恢复自建 Room、文字协议或转写拼接 Hook。
+- Agent 通过官方 RoomIO 默认开启的 `lk.chat` 文字输入接收键盘消息，并复用同一 `AgentSession`、LLM、工具、TTS 和会话历史；不得为文字输入新增第二套聊天后端。
+- UI 的“语音挂断”是同一 Room 内的音频输入输出暂停，不是结束整个 Session。Renderer 先通过 `RoomAudioRenderer` 立即静音，再以官方 RPC 请求 Agent 调用 `input/output.setAudioEnabled()` 与 `AgentSession.interrupt()`；文字消息继续复用原 Room。
 - 按住说话和连续对话复用同一个 Session、STT、消息和麦克风管线。按住说话使用 `manual`（手动轮次），连续对话用 `null` 恢复官方自动 Turn Detector；不得把保存的 detector 对象重新传入运行时 `updateOptions()`。
 - VAD（语音活动检测）产生 speaking/listening 用户状态；Turn Detector 决定何时提交轮次；interruption（打断）决定 Agent 回答时是否让出。这三个概念不得在 UI 或 Agent 编排中混用。
 - Renderer 不得持有 LiveKit API Key 或 API Secret。可信主进程签发权限最小、有效期短且显式分派 Agent 的参与者 Token。
@@ -171,21 +173,22 @@ sequenceDiagram
 
 ## 外部依赖
 
-| 依赖类别                   | 用途                              | 接入模块                    | 选型状态           |
-| -------------------------- | --------------------------------- | --------------------------- | ------------------ |
-| LiveKit Agents Node.js SDK | 实时语音 Agent 生命周期与会话     | `src/agent/`                | 已实现并验证       |
-| LiveKit JavaScript SDK     | 桌面 Room、麦克风与回答音频       | `desktop/renderer/`         | 已实现             |
-| LiveKit React Components   | 官方 Session、Agent 状态与消息 UI | `desktop/renderer/`         | 已实现并验证       |
-| LiveKit Server / Cloud     | 本地联调房间基础设施              | 本地运行环境                | 本机 Server 已验证 |
-| DeepSeek                   | 对话理解与生成（LLM）             | `src/providers/llm/`        | 当前基线           |
-| 豆包流式 ASR               | 语音转文字（STT）                 | `src/providers/stt/`        | 第一版确定         |
-| 豆包双向流式 TTS           | 文字转语音（TTS）                 | `src/providers/tts/`        | 第一版确定         |
-| 豆包搜索 Custom API        | 通用公开网页外部信息检索          | `src/search/`               | Spec-003 已实现    |
-| Zod                        | 配置和未来工具参数校验            | `src/config/`、`src/tools/` | 已确定             |
-| Vitest                     | 自动化测试                        | `tests/`                    | 已确定             |
-| Electron                   | 桌面壳、Utility Process、窗口 IPC | `desktop/main/`             | 已实现             |
-| React + Vite               | 助手与来源窗口的本地可信 UI       | `desktop/renderer/`         | 已实现             |
-| WebContentsView            | 隔离显示第三方 HTTPS 源网页       | `desktop/main/`             | 基础实现已完成     |
+| 依赖类别                    | 用途                                 | 接入模块                    | 选型状态           |
+| --------------------------- | ------------------------------------ | --------------------------- | ------------------ |
+| LiveKit Agents Node.js SDK  | 实时语音 Agent 生命周期与会话        | `src/agent/`                | 已实现并验证       |
+| LiveKit JavaScript SDK      | 桌面 Room、麦克风与回答音频          | `desktop/renderer/`         | 已实现             |
+| LiveKit React Components    | 官方 Session、Agent 状态与消息 UI    | `desktop/renderer/`         | 已实现并验证       |
+| LiveKit Server / Cloud      | 本地联调房间基础设施                 | 本地运行环境                | 本机 Server 已验证 |
+| DeepSeek                    | 对话理解与生成（LLM）                | `src/providers/llm/`        | 当前基线           |
+| 豆包流式 ASR                | 语音转文字（STT）                    | `src/providers/stt/`        | 第一版确定         |
+| 豆包双向流式 TTS            | 文字转语音（TTS）                    | `src/providers/tts/`        | 第一版确定         |
+| 豆包搜索 Custom API         | 通用公开网页外部信息检索             | `src/search/`               | Spec-003 已实现    |
+| Zod                         | 配置和未来工具参数校验               | `src/config/`、`src/tools/` | 已确定             |
+| Vitest                      | 自动化测试                           | `tests/`                    | 已确定             |
+| Electron                    | 桌面壳、Utility Process、窗口 IPC    | `desktop/main/`             | 已实现             |
+| React + Vite                | 助手与来源窗口的本地可信 UI          | `desktop/renderer/`         | 已实现             |
+| react-markdown + remark-gfm | Agent Markdown 回答的安全 React 渲染 | `desktop/renderer/`         | 已实现并验证       |
+| WebContentsView             | 隔离显示第三方 HTTPS 源网页          | `desktop/main/`             | 基础实现已完成     |
 
 ## 不变量（来自 ADR）
 

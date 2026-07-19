@@ -374,7 +374,7 @@ const createAssistantWindow = async () => {
     width: assistantCollapsed ? collapsedSize.width : (savedBounds?.width ?? initialSize.width),
     height: assistantCollapsed ? collapsedSize.height : (savedBounds?.height ?? initialSize.height),
     minWidth: assistantCollapsed ? collapsedSize.width : 240,
-    minHeight: assistantCollapsed ? collapsedSize.height : 158,
+    minHeight: assistantCollapsed ? collapsedSize.height : 220,
     frame: false,
     transparent: true,
     resizable: true,
@@ -458,7 +458,7 @@ ipcMain.handle('assistant:set-collapsed', (event, collapsed: boolean) => {
     schedulePersistWindowState();
     return;
   }
-  assistantWindow.setMinimumSize(240, 158);
+  assistantWindow.setMinimumSize(240, 220);
   const restored = expandedAssistantBounds
     ? keepTitleBarVisible(expandedAssistantBounds, currentDisplay.workArea)
     : getExpandedBounds(

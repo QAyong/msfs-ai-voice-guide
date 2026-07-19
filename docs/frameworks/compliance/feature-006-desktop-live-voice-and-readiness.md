@@ -10,7 +10,7 @@
 - 搜索到的项目内类似实现：`src/main.ts` 的 Worker 启动入口、`src/agent/guide-agent.ts` 的 `AgentSession`、`desktop/main/index.ts` 的可信 IPC 和来源安全边界。
 - 准备复用的项目模块：`loadConfig()`（配置解析）、`checkProviderConfiguration()`（Provider 自检）、`createGuideAgent()`（Agent 装配）、窗口定位和来源浏览实现。
 - 实际使用的官方前端能力：`useSession`、`SessionProvider`、`useAgent`、`useSessionMessages`、`useTrackToggle`、`useTrackVolume`、`useRpc`、`useDataChannel` 与 `RoomAudioRenderer`。
-- 实际使用的官方 Agent 能力：`AgentSession.updateOptions()`、`manual` 手动轮次、`null` 自动轮次恢复、`commitUserTurn()`、`clearUserTurn()`、VAD interruption（语音活动打断）与参与者属性。
+- 实际使用的官方 Agent 能力：`AgentSession.updateOptions()`、`manual` 手动轮次、`null` 自动轮次恢复、`commitUserTurn()`、`clearUserTurn()`、`AgentSession.interrupt()`、`input/output.setAudioEnabled()`、VAD interruption（语音活动打断）与参与者属性。
 - 官方文档 URL 与具体章节：[Tokens & grants](https://docs.livekit.io/home/server/generating-tokens/)、[Agent dispatch](https://docs.livekit.io/agents/server/agent-dispatch/)、[Text and transcriptions](https://docs.livekit.io/agents/multimodality/text/)、[Agent state](https://docs.livekit.io/frontends/build/agent-state/)、[Subscribing to tracks](https://docs.livekit.io/transport/media/subscribe/)、[Electron security](https://www.electronjs.org/docs/latest/tutorial/security)。
 - 文档不匹配或不可用时检查的本地源码/类型定义：`@livekit/agents/src/worker.ts`、`@livekit/agents/src/voice/room_io/`、`livekit-client/src/room/Room.ts`、`livekit-client/src/room/data-stream/`、`livekit-server-sdk/src/AccessToken.ts`。
 - 新增第三方依赖及理由：增加 `@livekit/components-react` 2.9.21，以官方 React Session、Agent、消息、媒体 Hook 取代 Renderer 自建语音会话状态；`livekit-server-sdk` 与 `@livekit/protocol` 继续负责官方 Token 与 Agent 分派。
@@ -27,7 +27,7 @@
 
 ## 实现后核对
 
-- 实际复用的模块或官方组件：`loadConfig()`、窗口/来源安全边界；LiveKit 官方 Session、Agent state、session messages、track toggle、RPC、Data Channel、媒体渲染、Token、Agent dispatch、自动 Turn Detector、VAD 和自动重连；Electron `utilityProcess.fork()` 隔离 Worker。
+- 实际复用的模块或官方组件：`loadConfig()`、窗口/来源安全边界；LiveKit 官方 Session、Agent state、session messages、track toggle、RPC、Data Channel、媒体渲染、音频输入输出开关、TTS interruption、Token、Agent dispatch、自动 Turn Detector、VAD 和自动重连；Electron `utilityProcess.fork()` 隔离 Worker。
 - 已删除的自建基础设施：`useVoiceSession`、`useMicrophoneTrack`、Renderer 直接监听/拼接转写，以及自定义用户轮次 committed 数据主题。
 - 保留的产品自定义边界：最小权限桌面 Token 服务、脱敏 Readiness DTO、Worker 生命周期、窗口状态、语音模式 RPC 名称、用户 speaking/listening 属性，以及 `msfs.guide.sources` 搜索来源数据包。
 - Provider 例外：LiveKit 当前没有本项目所需的火山流式 ASR 适配器，因此 `src/providers/stt/volcengine.ts` 保留最小协议适配，并在 Provider 边界去重同一 ASR 请求的重复 final utterance；Renderer 不参与该去重。
@@ -41,10 +41,12 @@
 | Lint              | `pnpm lint`                                | 通过                                                                    |
 | 构建              | `pnpm build`                               | 通过，产出主进程、Worker、Agent、Preload 与 Renderer                    |
 | 框架原生检查      | `pnpm agent:check`                         | 通过，输出仅包含 configured 状态                                        |
-| 自动化测试        | `pnpm test`                                | 通过：47 passed，8 skipped                                              |
+| 自动化测试        | `pnpm test`                                | 通过：55 passed，8 skipped                                              |
 | Electron 启动诊断 | `pnpm desktop:preview`                     | Renderer、官方 Session 与 Worker 进程成功启动；Worker 健康检查 HTTP 200 |
 | 真实连续语音冒烟  | 桌面连续对话                               | 用户确认“停止讲话 → 自动提交 → Agent 回答”闭环通过                      |
 | 模式切换回归      | PTT ↔ 连续对话                             | 共用 Session、麦克风、STT 与消息管线；仅切换官方轮次控制策略            |
+| 语音挂断/恢复     | Electron 真实操作                          | 挂断终止 TTS 并暂停音频输入输出；恢复保留模式且不自动监听               |
+| 空格键回归        | 焦点位于工具栏按钮时按住空格               | 触发 PTT，不误触挂断；用户确认通过                                      |
 | 转写去重          | 火山累计 utterance                         | 同一请求重复 final 被 Provider 拦截；interim→final 保持                 |
 
 ## 给非程序员的结论

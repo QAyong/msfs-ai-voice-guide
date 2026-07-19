@@ -1,6 +1,6 @@
 # Microsoft Flight Simulator AI 导游助手
 
-这是一个使用 TypeScript 与 LiveKit Agents 构建的实时语音导游助手。第一版目标是尽快在本地跑通“一名用户进入一间房间，与导游 Agent 自然语音对话”的闭环。
+这是一个使用 TypeScript 与 LiveKit Agents 构建的实时语音与文字导游助手。第一版目标是尽快在本地跑通“一名用户进入一间房间，与导游 Agent 自然对话”的闭环。
 
 第一版已在本机完成真实语音对话联调。当前使用 DeepSeek LLM（大语言模型）、豆包 STT（语音转文字）和豆包 TTS（文字转语音），并可选接入豆包搜索 Custom API，供模型查询天气、新闻、活动、规则、地点和知识资料等外部信息。尚未实现模拟器遥测数据接入。
 
@@ -12,6 +12,7 @@
 - [网络搜索规格](docs/specs/spec-003-web-search-and-capability-modules.md)
 - [桌面悬浮前端与来源浏览规格](docs/specs/spec-004-web-frontend-and-source-preview.md)
 - [桌面真实语音闭环与启动诊断](docs/specs/spec-006-desktop-live-voice-and-readiness.md)
+- [桌面文字输入](docs/specs/spec-007-desktop-text-input.md)
 - [基于 Mem0 的持久化对话记忆规划](docs/specs/spec-005-persistent-conversation-memory.md)
 - [前端 HTML 交互原型](prototypes/voice-chat-panel.html)
 - [架构概览](docs/architecture/overview.md)
@@ -43,9 +44,11 @@ pnpm run verify
 
 - 64×72px 收起窗口：顶部 36×14px 原生拖动把手与 48px 头像点击区明确分离。
 - 拖动结束后根据光标所在显示器吸附到最近的左右工作区边缘，并支持负坐标扩展屏。
-- 可移动、可收起、可从四边和四角拉伸的语音聊天面板。
+- 可移动、可收起、可从四边和四角拉伸的语音与文字聊天面板。
 - 两种输入模式复用同一个 LiveKit Session（会话）与麦克风管线：鼠标或空格键按住说话，以及基于官方自动 Turn Detector（轮次检测器）的连续对话。
-- 使用 `@livekit/components-react` 的 `useSession`、`useAgent`、`useSessionMessages`、`useTrackToggle` 和 `RoomAudioRenderer`，不在 Renderer 自行拼接转写或维护第二套音频管线。
+- 使用 `@livekit/components-react` 的 `useSession`、`useAgent`、`useSessionMessages`、`useTrackToggle` 和 `RoomAudioRenderer`，文字发送、语音转写与回答消息复用同一官方 Session，不在 Renderer 自行拼接转写或维护第二套通信管线。
+- 单行控制台可切换文字、按住说话与连续对话；语音挂断会通过 LiveKit `AgentSession.interrupt()` 终止正在播放的 TTS，但保留 Room 和文字聊天。
+- Agent 回答使用 `react-markdown` 与 `remark-gfm` 安全渲染；消息区在底部时自动跟随，用户上翻历史后以“新消息”按钮提示。
 - 自动连接唯一 LiveKit Room、发布麦克风、播放 Agent 音频，并展示等待讲话、聆听、思考、回答、打断和重连等真实状态。
 - 由主进程签发的短期最小权限 Token；API Secret 和模型密钥不会进入 Renderer。
 - AI 回答中的真实搜索来源卡片和搜索结果入口。
