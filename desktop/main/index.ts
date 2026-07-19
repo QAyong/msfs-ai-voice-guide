@@ -176,19 +176,10 @@ const isSourceSender = (sender: Electron.WebContents) =>
     sender === sourceWindow.webContents,
   );
 
-const isSafeBrowserUrl = (value: string) => {
+const isSafeWebUrl = (value: string) => {
   try {
     const url = new URL(value);
     return ['http:', 'https:'].includes(url.protocol) && Boolean(url.hostname);
-  } catch {
-    return false;
-  }
-};
-
-const isSafeInAppUrl = (value: string) => {
-  try {
-    const url = new URL(value);
-    return url.protocol === 'https:' && Boolean(url.hostname);
   } catch {
     return false;
   }
@@ -482,7 +473,7 @@ type SourceLoadOptions = {
 
 const showRemoteSource = async (source: GuideSource, options: SourceLoadOptions = {}) => {
   const initialUrl = options.url ?? source.url;
-  if (!isLiveWindow(sourceWindow) || !sourcePreview || !isSafeInAppUrl(initialUrl)) return false;
+  if (!isLiveWindow(sourceWindow) || !sourcePreview || !isSafeWebUrl(initialUrl)) return false;
   destroySourceView();
   selectedSource = source;
   let currentUrl = initialUrl;
@@ -507,7 +498,7 @@ const showRemoteSource = async (source: GuideSource, options: SourceLoadOptions 
   });
   startSourceLoadTimer(view, currentUrl);
   view.webContents.setWindowOpenHandler((details) => {
-    if (isSafeBrowserUrl(details.url)) void shell.openExternal(details.url);
+    if (isSafeWebUrl(details.url)) void shell.openExternal(details.url);
     return { action: 'deny' };
   });
   view.webContents.session.setPermissionRequestHandler((_webContents, _permission, callback) =>
@@ -521,21 +512,21 @@ const showRemoteSource = async (source: GuideSource, options: SourceLoadOptions 
     callback({});
   });
   view.webContents.on('will-navigate', (event, targetUrl) => {
-    if (isSafeInAppUrl(targetUrl)) return;
+    if (isSafeWebUrl(targetUrl)) return;
     event.preventDefault();
     queueMicrotask(() =>
       failSourceLoad(view, currentUrl, 'blocked', '该页面尝试跳转到不受支持的地址。'),
     );
   });
   view.webContents.on('will-redirect', (event, targetUrl) => {
-    if (isSafeInAppUrl(targetUrl)) return;
+    if (isSafeWebUrl(targetUrl)) return;
     event.preventDefault();
     queueMicrotask(() =>
-      failSourceLoad(view, currentUrl, 'blocked', '该页面尝试跳转到不安全的 HTTP 地址。'),
+      failSourceLoad(view, currentUrl, 'blocked', '该页面尝试跳转到不受支持的地址。'),
     );
   });
   view.webContents.on('did-start-navigation', (_event, targetUrl, isInPlace, isMainFrame) => {
-    if (!isMainFrame || isInPlace || !isSafeInAppUrl(targetUrl) || sourceView !== view) return;
+    if (!isMainFrame || isInPlace || !isSafeWebUrl(targetUrl) || sourceView !== view) return;
     currentUrl = targetUrl;
     responseStatusCode = undefined;
     detachSourceView(view);
@@ -576,7 +567,7 @@ const showRemoteSource = async (source: GuideSource, options: SourceLoadOptions 
       if (!isMainFrame || sourceView !== view) return;
       failSourceLoad(
         view,
-        isSafeInAppUrl(validatedUrl) ? validatedUrl : currentUrl,
+        isSafeWebUrl(validatedUrl) ? validatedUrl : currentUrl,
         responseStatusCode && responseStatusCode >= 400 ? 'http' : 'network',
         responseStatusCode && responseStatusCode >= 400
           ? `网站返回了 HTTP ${responseStatusCode}，页面无法在应用内显示。`
@@ -816,16 +807,8 @@ ipcMain.handle('assistant:set-always-on-top', (event, enabled: boolean) => {
 });
 
 ipcMain.handle('source:open', async (event, url: string) => {
-  if (
-    !isLiveWindow(assistantWindow) ||
-    !isAssistantSender(event.sender) ||
-    !isSafeBrowserUrl(url)
-  ) {
+  if (!isLiveWindow(assistantWindow) || !isAssistantSender(event.sender) || !isSafeWebUrl(url)) {
     return false;
-  }
-  if (!isSafeInAppUrl(url)) {
-    await shell.openExternal(url);
-    return true;
   }
   const hostname = new URL(url).hostname;
   const preview = guideSourcesMessageSchema.parse({
@@ -868,10 +851,6 @@ ipcMain.handle('source:select', async (event, url: string) => {
   if (!isSourceSender(event.sender) || !sourcePreview) return false;
   const source = sourcePreview.sources.find((candidate) => candidate.url === url);
   if (!source) return false;
-  if (source.openMode === 'external') {
-    await shell.openExternal(source.url);
-    return true;
-  }
   return showRemoteSource(source);
 });
 
@@ -916,7 +895,7 @@ ipcMain.handle('source:open-current-external', async (event) => {
     sourceWindowState && sourceWindowState.mode !== 'preview'
       ? sourceWindowState.currentUrl
       : selectedSource.url;
-  if (!isSafeBrowserUrl(currentUrl)) return false;
+  if (!isSafeWebUrl(currentUrl)) return false;
   await shell.openExternal(currentUrl);
   return true;
 });
@@ -927,7 +906,7 @@ ipcMain.handle('source:close', (event) => {
 
 ipcMain.handle('external:open', (event, url: string) => {
   const trustedSender = isAssistantSender(event.sender) || isSourceSender(event.sender);
-  return trustedSender && isSafeBrowserUrl(url) ? shell.openExternal(url) : undefined;
+  return trustedSender && isSafeWebUrl(url) ? shell.openExternal(url) : undefined;
 });
 
 app.whenReady().then(async () => {

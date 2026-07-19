@@ -7,7 +7,10 @@ export type SourceLayoutMode = z.infer<typeof sourceLayoutModeSchema>;
 const sourceSelectionSchema = z.object({
   preview: guideSourcesMessageSchema,
   source: guideSourceSchema,
-  currentUrl: z.string().url().startsWith('https://'),
+  currentUrl: z
+    .string()
+    .url()
+    .refine((value) => ['http:', 'https:'].includes(new URL(value).protocol)),
   layoutMode: sourceLayoutModeSchema,
 });
 

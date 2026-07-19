@@ -219,7 +219,7 @@ function normalizeSources(
       title: cleanText(result.title) ?? hostname,
       siteName: cleanText(result.siteName) ?? hostname,
       url,
-      openMode: new URL(url).protocol === 'https:' ? 'in_app' : 'external',
+      openMode: 'in_app',
       ...(summary ? { summary } : {}),
       ...(content ? { content } : {}),
       ...(iconUrl ? { iconUrl } : {}),
@@ -231,8 +231,7 @@ function normalizeSources(
 }
 
 function normalizeMediaUrl(value: string | undefined): string | undefined {
-  const url = normalizeUrl(value);
-  return url && new URL(url).protocol === 'https:' ? url : undefined;
+  return normalizeUrl(value);
 }
 
 function normalizeUrl(value: string | undefined): string | undefined {

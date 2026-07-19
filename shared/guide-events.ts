@@ -1,29 +1,27 @@
 import { z } from 'zod';
 
-export const guideSourceSchema = z
-  .object({
-    rank: z.number().int().nonnegative(),
-    title: z.string().trim().min(1),
-    siteName: z.string().trim().min(1),
-    url: z
-      .string()
-      .url()
-      .refine((value) => ['http:', 'https:'].includes(new URL(value).protocol)),
-    openMode: z.enum(['in_app', 'external']),
-    summary: z.string().trim().min(1).optional(),
-    iconUrl: z.string().url().startsWith('https://').optional(),
-    thumbnailUrl: z.string().url().startsWith('https://').optional(),
-    publishTime: z.string().trim().min(1).optional(),
-  })
-  .superRefine((source, context) => {
-    const protocol = new URL(source.url).protocol;
-    if (
-      (protocol === 'https:' && source.openMode !== 'in_app') ||
-      (protocol === 'http:' && source.openMode !== 'external')
-    ) {
-      context.addIssue({ code: 'custom', message: '打开方式与来源协议不匹配' });
-    }
-  });
+export const guideSourceSchema = z.object({
+  rank: z.number().int().nonnegative(),
+  title: z.string().trim().min(1),
+  siteName: z.string().trim().min(1),
+  url: z
+    .string()
+    .url()
+    .refine((value) => ['http:', 'https:'].includes(new URL(value).protocol)),
+  openMode: z.literal('in_app'),
+  summary: z.string().trim().min(1).optional(),
+  iconUrl: z
+    .string()
+    .url()
+    .refine((value) => ['http:', 'https:'].includes(new URL(value).protocol))
+    .optional(),
+  thumbnailUrl: z
+    .string()
+    .url()
+    .refine((value) => ['http:', 'https:'].includes(new URL(value).protocol))
+    .optional(),
+  publishTime: z.string().trim().min(1).optional(),
+});
 
 export type GuideSource = z.infer<typeof guideSourceSchema>;
 

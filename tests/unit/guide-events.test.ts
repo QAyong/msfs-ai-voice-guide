@@ -23,7 +23,7 @@ describe('guide source events', () => {
     ).toMatchObject({ type: 'guide.sources', sources: [{ title: '苏黎世湖' }] });
   });
 
-  it('allows HTTP only as external and rejects unsafe or mismatched payloads', () => {
+  it('opens HTTP in the app and rejects unsupported protocols or external mode', () => {
     expect(parseGuideSourcesMessage('not-json')).toBeNull();
     expect(
       parseGuideSourcesMessage(
@@ -35,7 +35,8 @@ describe('guide source events', () => {
               title: 'HTTP 来源',
               siteName: 'Example',
               url: 'http://example.com',
-              openMode: 'external',
+              openMode: 'in_app',
+              iconUrl: 'http://example.com/favicon.ico',
             },
           ],
         }),
@@ -48,10 +49,10 @@ describe('guide source events', () => {
           sources: [
             {
               rank: 1,
-              title: 'bad',
-              siteName: 'bad',
+              title: '外部模式',
+              siteName: 'Example',
               url: 'http://example.com',
-              openMode: 'in_app',
+              openMode: 'external',
             },
           ],
         }),

@@ -55,4 +55,20 @@ describe('source preview window state', () => {
       }).success,
     ).toBe(false);
   });
+
+  it('accepts an HTTP page as an in-app source', () => {
+    const httpSource = {
+      ...preview.sources[0]!,
+      url: 'http://example.com/legacy',
+    };
+    expect(
+      sourceWindowStateSchema.safeParse({
+        mode: 'ready',
+        preview: { ...preview, sources: [httpSource] },
+        source: httpSource,
+        currentUrl: httpSource.url,
+        layoutMode: 'portrait',
+      }).success,
+    ).toBe(true);
+  });
 });

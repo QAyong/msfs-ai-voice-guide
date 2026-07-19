@@ -129,7 +129,7 @@ describe('SearchService', () => {
           title: '苏黎世湖旧站资料',
           siteName: '旧站',
           url: 'http://legacy.example.test/zurich',
-          openMode: 'external',
+          openMode: 'in_app',
           summary: '苏黎世湖历史资料。',
         },
       ],
