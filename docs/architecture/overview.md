@@ -74,7 +74,7 @@ sequenceDiagram
 
 ## 桌面端边界
 
-桌面端采用两个视觉窗口：常驻的语音聊天窗口，以及按需出现的伴随来源浏览窗。Electron 主进程负责透明置顶窗口、多显示器定位、来源窗安全策略、短期 Token 和窗口状态保存；独立 Utility Process 自动运行 Agent Worker。可信 Renderer 连接唯一 LiveKit Room，发布并复用麦克风音轨，播放远端回答，并接收真实转写、Agent 状态和搜索来源。
+桌面端采用两个视觉窗口：常驻的语音聊天窗口，以及按需出现的伴随来源浏览窗。Electron 主进程负责透明置顶窗口、多显示器定位、来源窗安全策略、短期 Token 和窗口状态保存；独立 Utility Process 自动运行 Agent Worker。可信 Renderer 通过 `@livekit/components-react` 的 Session（会话）模型连接唯一 LiveKit Room，发布并复用麦克风音轨，播放远端回答，并接收真实转写、Agent 状态和搜索来源。
 
 ```mermaid
 graph TD
@@ -142,8 +142,10 @@ sequenceDiagram
 
 ## LiveKit 集成准则
 
-- LiveKit Agents SDK 只在 `src/agent/`（以及必要的 `src/providers/` 适配代码）使用；桌面 Renderer 使用浏览器侧 `livekit-client`，两者职责分离。
-- 桌面按住说话首次创建 `LocalAudioTrack`，松开后静音但复用同一轨道；Web Audio `AnalyserNode` 只分析这条本地轨道，不复制采集链路。
+- LiveKit Agents SDK 只在 `src/agent/`（以及必要的 `src/providers/` 适配代码）使用；桌面 Renderer 使用官方 `@livekit/components-react` 与浏览器侧 `livekit-client`，两者职责分离。
+- Renderer 的连接、Agent 状态、会话消息、麦克风切换和回答播放分别以官方 `useSession`、`useAgent`、`useSessionMessages`、`useTrackToggle` 与 `RoomAudioRenderer` 为唯一状态源；不得恢复自建 Room/转写拼接 Hook。
+- 按住说话和连续对话复用同一个 Session、STT、消息和麦克风管线。按住说话使用 `manual`（手动轮次），连续对话用 `null` 恢复官方自动 Turn Detector；不得把保存的 detector 对象重新传入运行时 `updateOptions()`。
+- VAD（语音活动检测）产生 speaking/listening 用户状态；Turn Detector 决定何时提交轮次；interruption（打断）决定 Agent 回答时是否让出。这三个概念不得在 UI 或 Agent 编排中混用。
 - Renderer 不得持有 LiveKit API Key 或 API Secret。可信主进程签发权限最小、有效期短且显式分派 Agent 的参与者 Token。
 - 进程入口、worker/dispatcher 和会话创建按照当前安装版本的官方文档实现；实现前在 `node_modules` 中核对导出的 TypeScript 类型。
 - 使用 LiveKit 已有的房间、音频发布订阅、会话及中断机制；不自行实现 WebSocket 信令、音频流协议或 VAD（语音活动检测）替代品。
@@ -173,6 +175,7 @@ sequenceDiagram
 | -------------------------- | --------------------------------- | --------------------------- | ------------------ |
 | LiveKit Agents Node.js SDK | 实时语音 Agent 生命周期与会话     | `src/agent/`                | 已实现并验证       |
 | LiveKit JavaScript SDK     | 桌面 Room、麦克风与回答音频       | `desktop/renderer/`         | 已实现             |
+| LiveKit React Components   | 官方 Session、Agent 状态与消息 UI | `desktop/renderer/`         | 已实现并验证       |
 | LiveKit Server / Cloud     | 本地联调房间基础设施              | 本地运行环境                | 本机 Server 已验证 |
 | DeepSeek                   | 对话理解与生成（LLM）             | `src/providers/llm/`        | 当前基线           |
 | 豆包流式 ASR               | 语音转文字（STT）                 | `src/providers/stt/`        | 第一版确定         |

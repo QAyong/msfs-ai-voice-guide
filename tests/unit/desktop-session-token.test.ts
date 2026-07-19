@@ -21,7 +21,7 @@ const config = loadConfig({
 });
 
 describe('desktop LiveKit session token', () => {
-  it('creates a short-lived, room-scoped token with explicit agent dispatch', async () => {
+  it('creates a short-lived, room-scoped token with RPC data permission and agent dispatch', async () => {
     const session = await createDesktopSessionCredentials(config);
     const grants = await new TokenVerifier(config.livekit.apiKey, config.livekit.apiSecret).verify(
       session.token,
@@ -36,7 +36,7 @@ describe('desktop LiveKit session token', () => {
       room: session.roomName,
       canPublish: true,
       canSubscribe: true,
-      canPublishData: false,
+      canPublishData: true,
     });
     expect(grants.roomConfig?.agents[0]?.agentName).toBe(config.livekit.agentName);
     expect(payload.exp - payload.nbf).toBeLessThanOrEqual(15 * 60 + 1);

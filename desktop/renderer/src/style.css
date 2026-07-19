@@ -232,10 +232,41 @@ button {
 }
 .voice-area {
   display: grid;
-  min-height: 52px;
+  min-height: 78px;
+  gap: 6px;
   padding: 7px 10px 8px;
   border-top: 1px solid rgba(20, 24, 31, 0.07);
   place-items: center;
+}
+.voice-mode-switch {
+  display: grid;
+  width: 188px;
+  grid-template-columns: 1fr 1fr;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid rgba(63, 84, 116, 0.13);
+  border-radius: 999px;
+  background: #f1f4f8;
+}
+.voice-mode-switch button {
+  min-height: 22px;
+  padding: 3px 9px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: #748094;
+  cursor: pointer;
+  font-size: 10px;
+  font-weight: 700;
+}
+.voice-mode-switch button[aria-pressed='true'] {
+  background: #fff;
+  color: #2454a4;
+  box-shadow: 0 1px 5px rgba(28, 50, 82, 0.13);
+}
+.voice-mode-switch button:disabled {
+  cursor: wait;
+  opacity: 0.65;
 }
 .voice-button {
   position: relative;
@@ -261,6 +292,10 @@ button {
     background 140ms ease,
     color 140ms ease,
     box-shadow 140ms ease;
+}
+.voice-button:disabled {
+  cursor: wait;
+  opacity: 0.76;
 }
 .voice-button--idle:hover {
   border-color: #9fbeff;

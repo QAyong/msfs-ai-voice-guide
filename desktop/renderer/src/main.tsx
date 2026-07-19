@@ -1,6 +1,19 @@
-import { StrictMode, useEffect, useRef, useState } from 'react';
+import { StrictMode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { createRoot } from 'react-dom/client';
+import {
+  RoomAudioRenderer,
+  SessionProvider,
+  useAgent,
+  useDataChannel,
+  useRpc,
+  useSession,
+  useSessionMessages,
+  useTrackToggle,
+  useTrackVolume,
+  type UseSessionReturn,
+} from '@livekit/components-react';
+import { ConnectionState, serializers, TokenSource, Track } from 'livekit-client';
 import { BrowserIcon } from '@phosphor-icons/react/dist/csr/Browser';
 import { CheckIcon } from '@phosphor-icons/react/dist/csr/Check';
 import { GearSixIcon } from '@phosphor-icons/react/dist/csr/GearSix';
@@ -11,8 +24,21 @@ import { SpeakerHighIcon } from '@phosphor-icons/react/dist/csr/SpeakerHigh';
 import { SparkleIcon } from '@phosphor-icons/react/dist/csr/Sparkle';
 import { WarningCircleIcon } from '@phosphor-icons/react/dist/csr/WarningCircle';
 import { XIcon } from '@phosphor-icons/react/dist/csr/X';
-import { useMicrophoneTrack } from './useMicrophoneTrack.js';
-import { useVoiceSession } from './useVoiceSession.js';
+import type { DesktopReadiness } from '../../../shared/desktop-contracts.js';
+import {
+  guideSourcesTopic,
+  parseGuideSourcesMessage,
+  type GuideSource,
+} from '../../../shared/guide-events.js';
+import {
+  guideVoiceAttributes,
+  guideVoiceRpc,
+  isGuideUserState,
+  isVoiceInputMode,
+  type GuideVoiceRpcMethod,
+  type VoiceInputMode,
+} from '../../../shared/voice-control.js';
+import { resolveVoiceStatus } from './voice-ui-state.js';
 import './style.css';
 
 const preferenceStorageKey = 'cloudpath-guide-preferences';
@@ -25,6 +51,7 @@ type Preferences = {
   agentVolume: number;
   openSourcesInApp: boolean;
   interfaceMotion: boolean;
+  voiceInputMode: VoiceInputMode;
 };
 
 const defaultPreferences: Preferences = {
@@ -32,6 +59,7 @@ const defaultPreferences: Preferences = {
   agentVolume: 0.85,
   openSourcesInApp: true,
   interfaceMotion: true,
+  voiceInputMode: 'push_to_talk',
 };
 
 const readPreferences = (): Preferences => {
@@ -42,6 +70,9 @@ const readPreferences = (): Preferences => {
     return {
       ...parsed,
       agentVolume: Math.min(1, Math.max(0, Number(parsed.agentVolume) || 0)),
+      voiceInputMode: isVoiceInputMode(parsed.voiceInputMode)
+        ? parsed.voiceInputMode
+        : defaultPreferences.voiceInputMode,
     };
   } catch {
     return defaultPreferences;
@@ -225,48 +256,381 @@ const QuitDialog = ({ onClose }: QuitDialogProps) => {
   );
 };
 
+type AssistantViewProps = {
+  preferences: Preferences;
+  readiness: DesktopReadiness | null;
+  retry(): Promise<void>;
+  session: UseSessionReturn;
+  starting: boolean;
+  startupError: string;
+  updatePreference<Key extends keyof Preferences>(key: Key, value: Preferences[Key]): void;
+};
+
+type DisplayMessage = {
+  id: string;
+  role: 'user' | 'assistant';
+  sources: GuideSource[];
+  text: string;
+};
+
 const Assistant = () => {
+  const { preferences, updatePreference } = usePreferences();
+  const [readiness, setReadiness] = useState<DesktopReadiness | null>(null);
+  const [starting, setStarting] = useState(true);
+  const [startupError, setStartupError] = useState('');
+  const connectAbortRef = useRef<AbortController | null>(null);
+
+  const tokenSource = useMemo(
+    () =>
+      TokenSource.literal(async () => {
+        const result = await window.desktop?.createLiveKitSession();
+        if (!result) throw new Error('桌面端连接接口不可用');
+        if (!result.ok) {
+          setReadiness(result.readiness);
+          throw new Error(result.readiness.message);
+        }
+        setReadiness(null);
+        return {
+          participantToken: result.credentials.token,
+          serverUrl: result.credentials.serverUrl,
+        };
+      }),
+    [],
+  );
+  const session = useSession(tokenSource, { agentConnectTimeoutMilliseconds: 30_000 });
+  const sessionRef = useRef(session);
+  sessionRef.current = session;
+
+  const startSession = useCallback(async () => {
+    connectAbortRef.current?.abort();
+    const controller = new AbortController();
+    connectAbortRef.current = controller;
+    setStarting(true);
+    setStartupError('');
+    try {
+      const current = sessionRef.current;
+      if (current.connectionState !== ConnectionState.Disconnected) await current.end();
+      await current.start({
+        signal: controller.signal,
+        tracks: { microphone: { enabled: false } },
+      });
+    } catch (error) {
+      if (!controller.signal.aborted) {
+        setStartupError(error instanceof Error ? error.message : '语音服务连接失败');
+      }
+    } finally {
+      if (!controller.signal.aborted) setStarting(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void startSession();
+    return () => {
+      connectAbortRef.current?.abort();
+      void sessionRef.current.end();
+    };
+  }, [startSession]);
+
+  return (
+    <SessionProvider session={session}>
+      <RoomAudioRenderer volume={preferences.agentVolume} />
+      <AssistantView
+        preferences={preferences}
+        readiness={readiness}
+        retry={startSession}
+        session={session}
+        starting={starting}
+        startupError={startupError}
+        updatePreference={updatePreference}
+      />
+    </SessionProvider>
+  );
+};
+
+const AssistantView = ({
+  preferences,
+  readiness,
+  retry,
+  session,
+  starting,
+  startupError,
+  updatePreference,
+}: AssistantViewProps) => {
   const [collapsed, setCollapsed] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [menuDirection, setMenuDirection] = useState<MenuDirection>('down');
   const [browserDialog, setBrowserDialog] = useState<UtilityDialog | null>(null);
+  const [voiceTransitioning, setVoiceTransitioning] = useState(false);
+  const [controlError, setControlError] = useState('');
+  const [microphoneError, setMicrophoneError] = useState('');
+  const [sourcesByMessage, setSourcesByMessage] = useState<Record<string, GuideSource[]>>({});
   const menuCloseTimer = useRef<number | null>(null);
-  const { preferences, updatePreference } = usePreferences();
-  const voice = useVoiceSession(preferences.agentVolume);
-  const microphone = useMicrophoneTrack(voice.prepareMicrophone);
-  const listening = microphone.state === 'listening';
+  const pushToTalkPressedRef = useRef(false);
+  const pushToTalkTurnActiveRef = useRef(false);
+  const pushToTalkStartRef = useRef<Promise<void> | null>(null);
+  const pushToTalkFinishRef = useRef<Promise<void> | null>(null);
+  const continuousTransitionRef = useRef(false);
+  const latestAgentMessageIdRef = useRef<string | null>(null);
+  const pendingSourcesRef = useRef<GuideSource[] | null>(null);
+  const agentStateRef = useRef<string>('disconnected');
+  const agent = useAgent();
+  const { messages } = useSessionMessages();
+  const { perform } = useRpc();
+  agentStateRef.current = agent.state;
 
-  const statusLabel = listening
-    ? '聆听中'
-    : voice.connectionState === 'checking' || voice.connectionState === 'connecting'
-      ? '连接中'
-      : voice.connectionState === 'reconnecting'
-        ? '重新连接'
-        : voice.connectionState === 'setup_required'
-          ? '待配置'
-          : voice.connectionState === 'error' || voice.connectionState === 'disconnected'
-            ? '连接异常'
-            : voice.agentState === 'thinking'
-              ? '思考中'
-              : voice.agentState === 'speaking'
-                ? '回答中'
-                : voice.agentState === 'initializing' || !voice.agentState
-                  ? '等待导游'
-                  : '在线';
+  const publishOptions = useMemo(() => ({ name: 'desktop-microphone' }), []);
+  const microphone = useTrackToggle({
+    source: Track.Source.Microphone,
+    room: session.room,
+    initialState: false,
+    captureOptions: {
+      autoGainControl: true,
+      echoCancellation: true,
+      noiseSuppression: true,
+    },
+    publishOptions,
+    onDeviceError: (error) => setMicrophoneError(error.message),
+  });
+  const microphoneLevel = useTrackVolume(session.local.microphoneTrack);
+  const continuousActive = preferences.voiceInputMode === 'continuous' && microphone.enabled;
 
-  const voiceButtonState =
-    microphone.state === 'error'
-      ? 'error'
-      : voice.connectionState === 'checking' ||
-          voice.connectionState === 'connecting' ||
-          voice.connectionState === 'reconnecting'
-        ? 'requesting'
-        : microphone.state;
+  const displayMessages = useMemo<DisplayMessage[]>(() => {
+    return messages
+      .filter((message) => message.type === 'userTranscript' || message.type === 'agentTranscript')
+      .map<DisplayMessage>((message) => ({
+        id: message.id,
+        role: message.type === 'userTranscript' ? 'user' : 'assistant',
+        sources: sourcesByMessage[message.id] ?? [],
+        text: message.message,
+      }))
+      .filter((message) => message.text.trim().length > 0)
+      .slice(-8);
+  }, [messages, sourcesByMessage]);
 
+  const latestAgentMessageId =
+    [...displayMessages].reverse().find((message) => message.role === 'assistant')?.id ?? null;
+  latestAgentMessageIdRef.current = latestAgentMessageId;
+
+  useEffect(() => {
+    if (!latestAgentMessageId || !pendingSourcesRef.current) return;
+    const nextSources = pendingSourcesRef.current;
+    pendingSourcesRef.current = null;
+    setSourcesByMessage((current) => ({ ...current, [latestAgentMessageId]: nextSources }));
+  }, [latestAgentMessageId]);
+
+  const onSourcesMessage = useCallback((message: { payload: Uint8Array }) => {
+    const parsed = parseGuideSourcesMessage(new TextDecoder().decode(message.payload));
+    if (!parsed) return;
+    const currentMessageId = latestAgentMessageIdRef.current;
+    if (currentMessageId && agentStateRef.current === 'speaking') {
+      setSourcesByMessage((current) => ({ ...current, [currentMessageId]: parsed.sources }));
+    } else {
+      pendingSourcesRef.current = parsed.sources;
+    }
+  }, []);
+  useDataChannel(guideSourcesTopic, onSourcesMessage);
+
+  const performGuideRpc = useCallback(
+    async (method: GuideVoiceRpcMethod) => {
+      if (!agent.identity) throw new Error('语音导游尚未加入会话');
+      await perform(
+        {
+          destinationIdentity: agent.identity,
+          method,
+          payload: '',
+          responseTimeout: 10_000,
+        },
+        serializers.raw(),
+      );
+    },
+    [agent.identity, perform],
+  );
+
+  const agentFailure = agent.state === 'failed' ? agent.failureReasons.join('；') : '';
+  const errorMessage = microphoneError || controlError || startupError || agentFailure;
+  const userStateValue = agent.attributes[guideVoiceAttributes.userState];
+  const userState = isGuideUserState(userStateValue) ? userStateValue : undefined;
+  const statusLabel = resolveVoiceStatus({
+    agentState: agent.state,
+    connectionState: session.connectionState,
+    continuousActive,
+    hasError: Boolean(errorMessage),
+    starting,
+    ...(userState ? { userState } : {}),
+  });
   const setupBlocked =
-    voice.connectionState === 'setup_required' ||
-    voice.connectionState === 'error' ||
-    voice.connectionState === 'disconnected';
+    Boolean(startupError) ||
+    Boolean(readiness) ||
+    agent.state === 'failed' ||
+    (!starting && session.connectionState === ConnectionState.Disconnected);
+  const interactionBlocked = setupBlocked || !agent.canListen;
+  const voiceButtonState = microphoneError
+    ? 'error'
+    : voiceTransitioning || microphone.pending || starting || agent.isPending
+      ? 'requesting'
+      : microphone.enabled
+        ? 'listening'
+        : 'idle';
+
+  const beginPushToTalk = useCallback(() => {
+    if (
+      preferences.voiceInputMode !== 'push_to_talk' ||
+      interactionBlocked ||
+      pushToTalkPressedRef.current ||
+      pushToTalkFinishRef.current
+    ) {
+      return;
+    }
+    setControlError('');
+    setMicrophoneError('');
+    pushToTalkPressedRef.current = true;
+    const startPromise = (async () => {
+      await performGuideRpc(guideVoiceRpc.startTurn);
+      pushToTalkTurnActiveRef.current = true;
+      if (!pushToTalkPressedRef.current) {
+        pushToTalkTurnActiveRef.current = false;
+        await performGuideRpc(guideVoiceRpc.cancelTurn);
+        return;
+      }
+      await microphone.toggle(true);
+    })()
+      .catch(async (error) => {
+        pushToTalkPressedRef.current = false;
+        setControlError(error instanceof Error ? error.message : '按住说话启动失败');
+        if (pushToTalkTurnActiveRef.current) {
+          pushToTalkTurnActiveRef.current = false;
+          await performGuideRpc(guideVoiceRpc.cancelTurn).catch(() => undefined);
+        }
+        await microphone.toggle(false).catch(() => undefined);
+      })
+      .finally(() => {
+        if (pushToTalkStartRef.current === startPromise) pushToTalkStartRef.current = null;
+      });
+    pushToTalkStartRef.current = startPromise;
+  }, [interactionBlocked, microphone, performGuideRpc, preferences.voiceInputMode]);
+
+  const finishPushToTalk = useCallback(
+    (cancel = false) => {
+      pushToTalkPressedRef.current = false;
+      if (pushToTalkFinishRef.current) return pushToTalkFinishRef.current;
+      const startPromise = pushToTalkStartRef.current;
+      const finishPromise = (async () => {
+        await startPromise?.catch(() => undefined);
+        if (!pushToTalkTurnActiveRef.current) {
+          await microphone.toggle(false);
+          return;
+        }
+        pushToTalkTurnActiveRef.current = false;
+        try {
+          await performGuideRpc(cancel ? guideVoiceRpc.cancelTurn : guideVoiceRpc.endTurn);
+        } finally {
+          await microphone.toggle(false);
+        }
+      })()
+        .catch(async (error) => {
+          setControlError(error instanceof Error ? error.message : '按住说话结束失败');
+          await microphone.toggle(false).catch(() => undefined);
+        })
+        .finally(() => {
+          if (pushToTalkFinishRef.current === finishPromise) pushToTalkFinishRef.current = null;
+        });
+      pushToTalkFinishRef.current = finishPromise;
+      return finishPromise;
+    },
+    [microphone, performGuideRpc],
+  );
+
+  const startContinuousConversation = useCallback(async () => {
+    if (continuousTransitionRef.current || continuousActive || interactionBlocked) return;
+    continuousTransitionRef.current = true;
+    setVoiceTransitioning(true);
+    setControlError('');
+    setMicrophoneError('');
+    try {
+      await performGuideRpc(guideVoiceRpc.startContinuous);
+      await microphone.toggle(true);
+    } catch (error) {
+      setControlError(error instanceof Error ? error.message : '连续对话启动失败');
+      await microphone.toggle(false).catch(() => undefined);
+      await performGuideRpc(guideVoiceRpc.stopContinuous).catch(() => undefined);
+    } finally {
+      continuousTransitionRef.current = false;
+      setVoiceTransitioning(false);
+    }
+  }, [continuousActive, interactionBlocked, microphone, performGuideRpc]);
+
+  const stopContinuousConversation = useCallback(async () => {
+    if (continuousTransitionRef.current) return;
+    continuousTransitionRef.current = true;
+    setVoiceTransitioning(true);
+    setControlError('');
+    try {
+      await microphone.toggle(false);
+      await performGuideRpc(guideVoiceRpc.stopContinuous);
+    } catch (error) {
+      setControlError(error instanceof Error ? error.message : '连续对话停止失败');
+      await microphone.toggle(false).catch(() => undefined);
+    } finally {
+      continuousTransitionRef.current = false;
+      setVoiceTransitioning(false);
+    }
+  }, [microphone, performGuideRpc]);
+
+  const changeVoiceInputMode = useCallback(
+    async (nextMode: VoiceInputMode) => {
+      if (continuousTransitionRef.current || nextMode === preferences.voiceInputMode) return;
+      if (preferences.voiceInputMode === 'push_to_talk') await finishPushToTalk(true);
+      else await stopContinuousConversation();
+      updatePreference('voiceInputMode', nextMode);
+    },
+    [finishPushToTalk, preferences.voiceInputMode, stopContinuousConversation, updatePreference],
+  );
+
+  useEffect(() => {
+    if (preferences.voiceInputMode !== 'push_to_talk') return;
+    const isEditableTarget = (target: EventTarget | null) => {
+      const element = target instanceof HTMLElement ? target : null;
+      return (
+        element?.isContentEditable ||
+        element instanceof HTMLInputElement ||
+        element instanceof HTMLTextAreaElement ||
+        element instanceof HTMLSelectElement
+      );
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (
+        event.code !== 'Space' ||
+        event.repeat ||
+        event.altKey ||
+        event.ctrlKey ||
+        event.metaKey ||
+        isEditableTarget(event.target)
+      ) {
+        return;
+      }
+      const targetButton =
+        event.target instanceof HTMLElement ? event.target.closest('button') : null;
+      if (targetButton && !targetButton.classList.contains('voice-button')) return;
+      event.preventDefault();
+      beginPushToTalk();
+    };
+    const onKeyUp = (event: KeyboardEvent) => {
+      if (event.code !== 'Space' || !pushToTalkPressedRef.current) return;
+      event.preventDefault();
+      void finishPushToTalk();
+    };
+    const onBlur = () => {
+      if (pushToTalkPressedRef.current) void finishPushToTalk(true);
+    };
+    window.addEventListener('keydown', onKeyDown);
+    window.addEventListener('keyup', onKeyUp);
+    window.addEventListener('blur', onBlur);
+    return () => {
+      window.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener('keyup', onKeyUp);
+      window.removeEventListener('blur', onBlur);
+    };
+  }, [beginPushToTalk, finishPushToTalk, preferences.voiceInputMode]);
 
   useEffect(
     () => () => {
@@ -274,7 +638,6 @@ const Assistant = () => {
     },
     [],
   );
-
   useEffect(() => {
     void window.desktop?.getAssistantState().then((state) => setCollapsed(state.collapsed));
   }, []);
@@ -284,20 +647,17 @@ const Assistant = () => {
     window.clearTimeout(menuCloseTimer.current);
     menuCloseTimer.current = null;
   };
-
   const openMenu = async () => {
     clearMenuCloseTimer();
     const direction = (await window.desktop?.setBallMenuOpen(true)) ?? 'down';
     setMenuDirection(direction);
     setMenuOpen(true);
   };
-
   const closeMenu = async () => {
     clearMenuCloseTimer();
     setMenuOpen(false);
     await window.desktop?.setBallMenuOpen(false);
   };
-
   const scheduleMenuClose = () => {
     clearMenuCloseTimer();
     menuCloseTimer.current = window.setTimeout(() => {
@@ -305,13 +665,11 @@ const Assistant = () => {
       void closeMenu();
     }, 180);
   };
-
   const changeCollapsed = async (next: boolean) => {
     if (!next) await closeMenu();
     setCollapsed(next);
     await window.desktop?.setCollapsed(next);
   };
-
   const openUtility = async (kind: UtilityDialog) => {
     await closeMenu();
     if (window.desktop) {
@@ -321,7 +679,6 @@ const Assistant = () => {
     }
     setBrowserDialog(kind);
   };
-
   const openSource = async (url: string) => {
     if (!window.desktop) {
       window.open(url, '_blank', 'noopener,noreferrer');
@@ -329,10 +686,6 @@ const Assistant = () => {
     }
     if (preferences.openSourcesInApp) await window.desktop.openSource(url);
     else await window.desktop.openExternal(url);
-  };
-
-  const openConfiguration = async () => {
-    await window.desktop?.openConfiguration();
   };
 
   if (collapsed) {
@@ -414,7 +767,12 @@ const Assistant = () => {
       <header className="drag-bar">
         <span className="avatar">云</span>
         <span className="name">云迹导游</span>
-        <span className={`status status--${voice.connectionState}`}>{statusLabel}</span>
+        <span
+          className={`status status--${session.connectionState}`}
+          title={errorMessage || undefined}
+        >
+          {statusLabel}
+        </span>
         <button className="text-button no-drag" onClick={() => void changeCollapsed(true)}>
           收起
         </button>
@@ -423,35 +781,35 @@ const Assistant = () => {
         {setupBlocked ? (
           <div className="readiness-card" role="status">
             <WarningCircleIcon size={24} weight="duotone" aria-hidden="true" />
-            <strong>
-              {voice.readiness?.message ?? voice.errorMessage ?? '语音服务暂时不可用'}
-            </strong>
-            {(voice.readiness?.issues ?? []).slice(0, 4).map((issue) => (
+            <strong>{readiness?.message ?? errorMessage ?? '语音服务暂时不可用'}</strong>
+            {(readiness?.issues ?? agent.failureReasons ?? []).slice(0, 4).map((issue) => (
               <small key={issue}>{issue}</small>
             ))}
             <div className="readiness-actions">
-              {voice.connectionState === 'setup_required' ? (
-                <button type="button" onClick={() => void openConfiguration()}>
+              {readiness?.status === 'setup_required' ? (
+                <button type="button" onClick={() => void window.desktop?.openConfiguration()}>
                   打开配置文件
                 </button>
               ) : null}
-              <button type="button" onClick={() => void voice.retry()}>
+              <button type="button" onClick={() => void retry()}>
                 重新检测
               </button>
             </div>
           </div>
-        ) : voice.messages.length === 0 ? (
+        ) : displayMessages.length === 0 ? (
           <div className="empty-conversation">
             <span className="empty-conversation-icon" aria-hidden="true">
               <SparkleIcon size={22} weight="duotone" />
             </span>
-            <strong>
-              {voice.connectionState === 'connected' ? '可以开始对话了' : '正在准备语音导游'}
-            </strong>
-            <small>按住下方按钮说话，松开后等待回答</small>
+            <strong>{session.isConnected ? '可以开始对话了' : '正在准备语音导游'}</strong>
+            <small>
+              {preferences.voiceInputMode === 'continuous'
+                ? '点击开始后即可持续自然对话'
+                : '按住按钮或空格键说话，松开后等待回答'}
+            </small>
           </div>
         ) : (
-          voice.messages.map((message) =>
+          displayMessages.map((message) =>
             message.role === 'user' ? (
               <p key={message.id} className="bubble user">
                 {message.text}
@@ -478,68 +836,96 @@ const Assistant = () => {
         )}
       </section>
       <footer className="voice-area">
+        <div className="voice-mode-switch" role="group" aria-label="语音输入模式">
+          <button
+            type="button"
+            className="no-drag"
+            disabled={voiceTransitioning}
+            aria-pressed={preferences.voiceInputMode === 'push_to_talk'}
+            onClick={() => void changeVoiceInputMode('push_to_talk')}
+          >
+            按住说话
+          </button>
+          <button
+            type="button"
+            className="no-drag"
+            disabled={voiceTransitioning}
+            aria-pressed={preferences.voiceInputMode === 'continuous'}
+            onClick={() => void changeVoiceInputMode('continuous')}
+          >
+            连续对话
+          </button>
+        </div>
         <button
           className={`voice-button no-drag voice-button--${voiceButtonState}`}
           type="button"
-          aria-label={listening ? '正在聆听，松开结束' : '按住说话'}
-          aria-pressed={listening}
-          title={microphone.errorMessage || undefined}
+          aria-label={
+            preferences.voiceInputMode === 'continuous'
+              ? continuousActive
+                ? '结束连续对话'
+                : '开始连续对话'
+              : microphone.enabled
+                ? '正在聆听，松开结束'
+                : '按住说话，或按住空格键说话'
+          }
+          aria-pressed={microphone.enabled}
+          disabled={interactionBlocked || voiceTransitioning}
+          title={
+            errorMessage ||
+            (preferences.voiceInputMode === 'push_to_talk' ? '也可以按住空格键说话' : undefined)
+          }
           onContextMenu={(event) => event.preventDefault()}
           onPointerDown={(event) => {
-            if (event.button !== 0) return;
-            if (setupBlocked) {
-              void voice.retry();
-              return;
-            }
+            if (preferences.voiceInputMode !== 'push_to_talk' || event.button !== 0) return;
             event.currentTarget.setPointerCapture(event.pointerId);
-            void microphone.start();
+            beginPushToTalk();
           }}
           onPointerUp={(event) => {
-            if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+            if (preferences.voiceInputMode !== 'push_to_talk') return;
+            if (event.currentTarget.hasPointerCapture(event.pointerId))
               event.currentTarget.releasePointerCapture(event.pointerId);
-            }
-            void microphone.stop();
+            void finishPushToTalk();
           }}
-          onPointerCancel={() => void microphone.stop()}
-          onKeyDown={(event) => {
-            if ((event.key === ' ' || event.key === 'Enter') && !event.repeat && !setupBlocked) {
-              event.preventDefault();
-              void microphone.start();
-            }
+          onPointerCancel={() => {
+            if (preferences.voiceInputMode === 'push_to_talk') void finishPushToTalk(true);
           }}
-          onKeyUp={(event) => {
-            if (event.key === ' ' || event.key === 'Enter') {
-              event.preventDefault();
-              void microphone.stop();
-            }
+          onClick={() => {
+            if (preferences.voiceInputMode !== 'continuous') return;
+            if (continuousActive) void stopContinuousConversation();
+            else void startContinuousConversation();
           }}
         >
           <MicrophoneIcon
             className="voice-microphone"
             size={18}
-            weight={listening ? 'bold' : 'regular'}
+            weight={microphone.enabled ? 'bold' : 'regular'}
             aria-hidden="true"
           />
           <span className="voice-level" aria-hidden="true">
             {[0.72, 1, 0.84, 0.62, 0.46].map((weight, index) => (
               <span
-                // The stable index maps to a fixed visualizer bar.
                 key={index}
                 className="voice-level-bar"
-                style={{ transform: `scaleY(${0.16 + microphone.level * weight * 0.84})` }}
+                style={{ transform: `scaleY(${0.16 + microphoneLevel * weight * 0.84})` }}
               />
             ))}
           </span>
           <span className="voice-label">
             {voiceButtonState === 'requesting'
-              ? '正在连接'
+              ? agent.isPending
+                ? '等待导游'
+                : '正在切换'
               : voiceButtonState === 'error'
                 ? '麦克风不可用'
                 : setupBlocked
                   ? '重新连接'
-                  : listening
-                    ? '松开结束'
-                    : '按住说话'}
+                  : preferences.voiceInputMode === 'continuous'
+                    ? continuousActive
+                      ? '结束连续对话'
+                      : '开始连续对话'
+                    : microphone.enabled
+                      ? '松开结束'
+                      : '按住说话'}
           </span>
         </button>
       </footer>

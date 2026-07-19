@@ -25,7 +25,7 @@ export async function createDesktopSessionCredentials(
     room: roomName,
     canPublish: true,
     canSubscribe: true,
-    canPublishData: false,
+    canPublishData: true,
   });
   accessToken.roomConfig = new RoomConfiguration({
     agents: [new RoomAgentDispatch({ agentName: config.livekit.agentName })],

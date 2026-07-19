@@ -4,7 +4,7 @@
 
 第一版已在本机完成真实语音对话联调。当前使用 DeepSeek LLM（大语言模型）、豆包 STT（语音转文字）和豆包 TTS（文字转语音），并可选接入豆包搜索 Custom API，供模型查询天气、新闻、活动、规则、地点和知识资料等外部信息。尚未实现模拟器遥测数据接入。
 
-桌面前端已接通真实 LiveKit Room：应用自动校验配置并启动隔离的 Agent Worker，主进程签发短期 Token，Renderer 发布按住说话的麦克风音轨、播放 Agent 语音，并显示真实转写、Agent 状态和搜索来源。正式 `.exe` 安装包与发布流程仍未实现。
+桌面前端已接通真实 LiveKit Room：应用自动校验配置并启动隔离的 Agent Worker，主进程签发短期 Token；Renderer 使用 LiveKit 官方 React Session 组件管理房间、麦克风、消息和回答音频，同时支持鼠标/空格键按住说话与连续自然对话。正式 `.exe` 安装包与发布流程仍未实现。
 
 ## 文档入口
 
@@ -44,8 +44,9 @@ pnpm run verify
 - 64×72px 收起窗口：顶部 36×14px 原生拖动把手与 48px 头像点击区明确分离。
 - 拖动结束后根据光标所在显示器吸附到最近的左右工作区边缘，并支持负坐标扩展屏。
 - 可移动、可收起、可从四边和四角拉伸的语音聊天面板。
-- 居中的紧凑按住说话胶囊：首次按下申请麦克风权限，之后复用并静音/恢复同一条 LiveKit 本地音轨；激活时显示实时音量柱。
-- 自动连接唯一 LiveKit Room、发布麦克风、播放 Agent 音频，并展示真实转写与连接/思考/回答状态。
+- 两种输入模式复用同一个 LiveKit Session（会话）与麦克风管线：鼠标或空格键按住说话，以及基于官方自动 Turn Detector（轮次检测器）的连续对话。
+- 使用 `@livekit/components-react` 的 `useSession`、`useAgent`、`useSessionMessages`、`useTrackToggle` 和 `RoomAudioRenderer`，不在 Renderer 自行拼接转写或维护第二套音频管线。
+- 自动连接唯一 LiveKit Room、发布麦克风、播放 Agent 音频，并展示等待讲话、聆听、思考、回答、打断和重连等真实状态。
 - 由主进程签发的短期最小权限 Token；API Secret 和模型密钥不会进入 Renderer。
 - AI 回答中的真实搜索来源卡片和搜索结果入口。
 - 自动启动/检查 Agent Worker、首次配置引导、脱敏故障提示、重试、音量/置顶/窗口状态保存。
@@ -74,6 +75,6 @@ pnpm search:smoke
 1. 启动本机 LiveKit Server，并在 `.env` 中填写 `ws://127.0.0.1:7880`、`devkey`、`secret`、DeepSeek Key 与豆包语音凭据。
 2. 使用 `pnpm agent:check` 检查配置（不会输出密钥，也不会发起远程请求）。
 3. 执行 `pnpm build`，再执行 `pnpm desktop:preview`。桌面应用会自动启动 Agent Worker、创建独立房间并分派 `msfs-voice-guide`。
-4. 在桌面窗口按住说话，松开后等待语音回答；无需另外启动 Worker、生成 Token 或打开 LiveKit Meet。
+4. 在桌面窗口按住说话并松开，或切换“连续对话”后直接讲话；系统会在轮次结束后自动回答，无需另外启动 Worker、生成 Token 或打开 LiveKit Meet。
 
 Agent Worker 仍依赖可访问的 LiveKit Server；服务未启动、凭据错误或麦克风被拒绝时，桌面应用会显示可重试的脱敏提示。包含 Docker 启动和关闭命令的完整步骤见[本地冒烟测试](docs/testing/local-agent-smoke.md)。

@@ -14,12 +14,76 @@ import { closeWebSocket, connectWebSocket } from '../volcengine/websocket.js';
 type SttConfig = AppConfig['volcengine']['stt'];
 
 type AsrSession = {
+  finalTranscriptKeys: Set<string>;
   socket: WebSocket;
   requestId: string;
   sequence: number;
   pendingAudio?: Buffer;
   finished: Promise<void>;
 };
+
+export type VolcengineUtterance = {
+  endTime: number;
+  final: boolean;
+  key: string;
+  startTime: number;
+  text: string;
+};
+
+const readFiniteNumber = (value: unknown): number | undefined => {
+  if (value === null || value === undefined || value === '') return undefined;
+  const number = typeof value === 'number' ? value : Number(value);
+  return Number.isFinite(number) ? number : undefined;
+};
+
+export function shouldEmitVolcengineUtterance(
+  utterance: VolcengineUtterance,
+  finalTranscriptKeys: Set<string>,
+): boolean {
+  if (!utterance.final) return true;
+  if (finalTranscriptKeys.has(utterance.key)) return false;
+  finalTranscriptKeys.add(utterance.key);
+  return true;
+}
+
+export function parseVolcengineUtterances(payload: Buffer): VolcengineUtterance[] {
+  let body: unknown;
+  try {
+    body = JSON.parse(payload.toString('utf8'));
+  } catch {
+    return [];
+  }
+  if (!body || typeof body !== 'object') return [];
+
+  const result = (body as { result?: unknown }).result;
+  const firstResult = Array.isArray(result) ? result[0] : result;
+  if (!firstResult || typeof firstResult !== 'object') return [];
+  const utterances = (firstResult as { utterances?: unknown }).utterances;
+  if (!Array.isArray(utterances)) return [];
+
+  return utterances.flatMap((utterance) => {
+    if (!utterance || typeof utterance !== 'object') return [];
+    const value = utterance as Record<string, unknown>;
+    const text = String(value.text ?? '').trim();
+    if (!text) return [];
+
+    const startMs = readFiniteNumber(value.start_time ?? value.startTime);
+    const endMs = readFiniteNumber(value.end_time ?? value.endTime);
+    const providerId = value.id ?? value.utterance_id ?? value.utteranceId;
+    const key = providerId
+      ? String(providerId)
+      : `${startMs ?? 'unknown'}:${endMs ?? 'unknown'}:${text}`;
+    return [
+      {
+        endTime: (endMs ?? 0) / 1_000,
+        final: value.definite === true,
+        key,
+        startTime: (startMs ?? 0) / 1_000,
+        text,
+      },
+    ];
+  });
+}
 
 function frameToBuffer(frame: AudioFrame): Buffer {
   return Buffer.from(frame.data.buffer, frame.data.byteOffset, frame.data.byteLength);
@@ -130,6 +194,7 @@ class VolcengineSpeechStream extends stt.SpeechStream {
 
     const socket = await connectWebSocket(this.#config.endpoint, headers, this.abortSignal);
     const session: AsrSession = {
+      finalTranscriptKeys: new Set(),
       socket,
       requestId,
       sequence: 1,
@@ -195,7 +260,7 @@ class VolcengineSpeechStream extends stt.SpeechStream {
             return;
           }
           if (message.payload.length > 0) {
-            this.#emitTranscripts(message.payload, session.requestId);
+            this.#emitTranscripts(message.payload, session);
           }
           if (message.sequence !== undefined && message.sequence < 0) {
             resolve();
@@ -214,50 +279,23 @@ class VolcengineSpeechStream extends stt.SpeechStream {
     });
   }
 
-  #emitTranscripts(payload: Buffer, requestId: string): void {
-    let body: unknown;
-    try {
-      body = JSON.parse(payload.toString('utf8'));
-    } catch {
-      return;
-    }
-    if (!body || typeof body !== 'object') {
-      return;
-    }
-
-    const result = (body as { result?: unknown }).result;
-    const firstResult = Array.isArray(result) ? result[0] : result;
-    if (!firstResult || typeof firstResult !== 'object') {
-      return;
-    }
-    const utterances = (firstResult as { utterances?: unknown }).utterances;
-    if (!Array.isArray(utterances)) {
-      return;
-    }
-
-    for (const utterance of utterances) {
-      if (!utterance || typeof utterance !== 'object') {
-        continue;
-      }
-      const text = String((utterance as { text?: unknown }).text ?? '').trim();
-      if (!text) {
-        continue;
-      }
-      const definite = (utterance as { definite?: unknown }).definite === true;
+  #emitTranscripts(payload: Buffer, session: AsrSession): void {
+    for (const utterance of parseVolcengineUtterances(payload)) {
+      if (!shouldEmitVolcengineUtterance(utterance, session.finalTranscriptKeys)) continue;
       this.queue.put({
-        type: definite
+        type: utterance.final
           ? stt.SpeechEventType.FINAL_TRANSCRIPT
           : stt.SpeechEventType.INTERIM_TRANSCRIPT,
         alternatives: [
           {
-            text,
+            text: utterance.text,
             language: this.#config.language as LanguageCode,
-            startTime: 0,
-            endTime: 0,
+            startTime: utterance.startTime,
+            endTime: utterance.endTime,
             confidence: 0,
           },
         ],
-        requestId,
+        requestId: session.requestId,
       });
     }
   }
