@@ -1,6 +1,8 @@
 export {};
 
 import type { DesktopReadiness, DesktopSessionResult } from '../../../shared/desktop-contracts.js';
+import type { GuideSourcesMessage } from '../../../shared/guide-events.js';
+import type { SourceWindowState } from '../../../shared/source-preview.js';
 
 declare global {
   interface Window {
@@ -14,6 +16,13 @@ declare global {
       quitApp(): Promise<void>;
       setAlwaysOnTop(enabled: boolean): Promise<void>;
       openSource(url: string): Promise<boolean>;
+      openSourcePreview(preview: GuideSourcesMessage): Promise<boolean>;
+      getSourceState(): Promise<SourceWindowState | null>;
+      onSourceState(callback: (state: SourceWindowState) => void): () => void;
+      selectSource(url: string): Promise<boolean>;
+      backToSources(): Promise<boolean>;
+      retrySource(): Promise<boolean>;
+      openCurrentSourceExternal(): Promise<boolean>;
       closeSource(): Promise<void>;
       openExternal(url: string): Promise<void>;
       getReadiness(): Promise<DesktopReadiness>;

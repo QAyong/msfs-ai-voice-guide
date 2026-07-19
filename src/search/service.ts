@@ -11,6 +11,45 @@ import type {
 
 const MAX_EVIDENCE_LENGTH = 4_000;
 
+const webResultSchema = z.object({
+  Title: z.string().optional(),
+  SiteName: z.string().optional(),
+  Url: z.string().optional(),
+  Summary: z.string().optional(),
+  Content: z.string().optional(),
+  PublishTime: z.string().optional(),
+});
+
+const globalDocumentSchema = z.object({
+  Rank: z.number().int().nonnegative().optional(),
+  Url: z.string().optional(),
+  Title: z.string().optional(),
+  HostInfo: z
+    .object({
+      Hostname: z.string().optional(),
+      IconUrl: z.string().optional(),
+    })
+    .optional(),
+  DocumentInfo: z
+    .object({
+      PublishTime: z.string().optional(),
+    })
+    .optional(),
+  Snippets: z
+    .array(
+      z.object({
+        Text: z.string().optional(),
+        Image: z
+          .object({
+            Url: z.string().optional(),
+            ImageUrl: z.string().optional(),
+          })
+          .optional(),
+      }),
+    )
+    .optional(),
+});
+
 const searchInputSchema = z.object({
   query: z.string().trim().min(2).max(500),
   site: z
@@ -33,17 +72,11 @@ const apiResponseSchema = z
     Result: z
       .object({
         ErrorCode: z.unknown().optional(),
-        WebResults: z
-          .array(
-            z.object({
-              Title: z.string().optional(),
-              SiteName: z.string().optional(),
-              Url: z.string().optional(),
-              Summary: z.string().optional(),
-              Content: z.string().optional(),
-              PublishTime: z.string().optional(),
-            }),
-          )
+        WebResults: z.array(webResultSchema).optional(),
+        GlobalSearchResp: z
+          .object({
+            Documents: z.array(globalDocumentSchema).optional(),
+          })
           .optional(),
       })
       .optional(),
@@ -109,7 +142,29 @@ export class SearchService {
       return failure('api_error', requestId);
     }
 
-    const sources = normalizeSources(parsed.Result?.WebResults ?? []);
+    const sources = normalizeSources([
+      ...(parsed.Result?.WebResults ?? []).map((result, index) => ({
+        rank: index + 1,
+        title: result.Title,
+        siteName: result.SiteName,
+        url: result.Url,
+        summary: result.Summary,
+        content: result.Content,
+        publishTime: result.PublishTime,
+      })),
+      ...(parsed.Result?.GlobalSearchResp?.Documents ?? []).map((document, index) => ({
+        rank: document.Rank ?? index + 1,
+        title: document.Title,
+        siteName: document.HostInfo?.Hostname,
+        url: document.Url,
+        summary: document.Snippets?.find((snippet) => cleanText(snippet.Text))?.Text,
+        iconUrl: document.HostInfo?.IconUrl,
+        thumbnailUrl: document.Snippets?.map(
+          (snippet) => snippet.Image?.Url ?? snippet.Image?.ImageUrl,
+        ).find((url) => normalizeMediaUrl(url)),
+        publishTime: document.DocumentInfo?.PublishTime,
+      })),
+    ]);
     if (sources.length === 0) {
       return noResults(requestId);
     }
@@ -134,34 +189,50 @@ async function parseResponse(
 
 function normalizeSources(
   results: Array<{
-    Title?: string | undefined;
-    SiteName?: string | undefined;
-    Url?: string | undefined;
-    Summary?: string | undefined;
-    Content?: string | undefined;
-    PublishTime?: string | undefined;
+    rank: number;
+    title?: string | undefined;
+    siteName?: string | undefined;
+    url?: string | undefined;
+    summary?: string | undefined;
+    content?: string | undefined;
+    iconUrl?: string | undefined;
+    thumbnailUrl?: string | undefined;
+    publishTime?: string | undefined;
   }>,
 ): SearchSource[] {
   const seenUrls = new Set<string>();
   const sources: SearchSource[] = [];
   for (const result of results) {
-    const url = normalizeUrl(result.Url);
-    const summary = cleanText(result.Summary);
-    const content = cleanText(result.Content);
+    const url = normalizeUrl(result.url);
+    const summary = cleanText(result.summary);
+    const content = cleanText(result.content);
     if (!url || (!summary && !content) || seenUrls.has(url)) {
       continue;
     }
     seenUrls.add(url);
+    const hostname = new URL(url).hostname;
+    const iconUrl = normalizeMediaUrl(result.iconUrl);
+    const thumbnailUrl = normalizeMediaUrl(result.thumbnailUrl);
+    const publishTime = cleanText(result.publishTime);
     sources.push({
-      title: cleanText(result.Title) ?? '',
-      siteName: cleanText(result.SiteName) ?? '',
+      rank: result.rank,
+      title: cleanText(result.title) ?? hostname,
+      siteName: cleanText(result.siteName) ?? hostname,
       url,
+      openMode: new URL(url).protocol === 'https:' ? 'in_app' : 'external',
       ...(summary ? { summary } : {}),
       ...(content ? { content } : {}),
-      ...(result.PublishTime ? { publishTime: result.PublishTime } : {}),
+      ...(iconUrl ? { iconUrl } : {}),
+      ...(thumbnailUrl ? { thumbnailUrl } : {}),
+      ...(publishTime ? { publishTime } : {}),
     });
   }
   return sources;
+}
+
+function normalizeMediaUrl(value: string | undefined): string | undefined {
+  const url = normalizeUrl(value);
+  return url && new URL(url).protocol === 'https:' ? url : undefined;
 }
 
 function normalizeUrl(value: string | undefined): string | undefined {

@@ -23,11 +23,15 @@ import {
 } from '@livekit/components-react';
 import { ConnectionState, serializers, TokenSource, Track } from 'livekit-client';
 import { BrowserIcon } from '@phosphor-icons/react/dist/csr/Browser';
+import { ArrowLeftIcon } from '@phosphor-icons/react/dist/csr/ArrowLeft';
+import { ArrowSquareOutIcon } from '@phosphor-icons/react/dist/csr/ArrowSquareOut';
 import { CaretDownIcon } from '@phosphor-icons/react/dist/csr/CaretDown';
 import { CaretUpIcon } from '@phosphor-icons/react/dist/csr/CaretUp';
+import { CircleNotchIcon } from '@phosphor-icons/react/dist/csr/CircleNotch';
 import { CheckIcon } from '@phosphor-icons/react/dist/csr/Check';
 import { GearSixIcon } from '@phosphor-icons/react/dist/csr/GearSix';
 import { KeyboardIcon } from '@phosphor-icons/react/dist/csr/Keyboard';
+import { MagnifyingGlassIcon } from '@phosphor-icons/react/dist/csr/MagnifyingGlass';
 import { MicrophoneIcon } from '@phosphor-icons/react/dist/csr/Microphone';
 import { PaperPlaneTiltIcon } from '@phosphor-icons/react/dist/csr/PaperPlaneTilt';
 import { PhoneCallIcon } from '@phosphor-icons/react/dist/csr/PhoneCall';
@@ -43,8 +47,9 @@ import type { DesktopReadiness } from '../../../shared/desktop-contracts.js';
 import {
   guideSourcesTopic,
   parseGuideSourcesMessage,
-  type GuideSource,
+  type GuideSourcesMessage,
 } from '../../../shared/guide-events.js';
+import type { SourceWindowState } from '../../../shared/source-preview.js';
 import {
   guideVoiceAttributes,
   guideVoiceRpc,
@@ -55,7 +60,7 @@ import {
 } from '../../../shared/voice-control.js';
 import { resolveVoiceStatus } from './voice-ui-state.js';
 import { MessageMarkdown } from './message-markdown.js';
-import { createDisplayMessages } from './session-messages.js';
+import { createDisplayMessages, shouldAttachSourcePreview } from './session-messages.js';
 import './style.css';
 
 const preferenceStorageKey = 'cloudpath-guide-preferences';
@@ -387,7 +392,13 @@ const AssistantView = ({
   const [textInputError, setTextInputError] = useState('');
   const [voiceModeMenuOpen, setVoiceModeMenuOpen] = useState(false);
   const [hasUnreadMessages, setHasUnreadMessages] = useState(false);
-  const [sourcesByMessage, setSourcesByMessage] = useState<Record<string, GuideSource[]>>({});
+  const [sourcesByMessage, setSourcesByMessage] = useState<Record<string, GuideSourcesMessage>>({});
+  const [pendingSources, setPendingSources] = useState<{
+    preview: GuideSourcesMessage;
+    anchorMessageId: string | null;
+    anchorMessageText: string;
+    receivedDuringTurn: boolean;
+  } | null>(null);
   const menuCloseTimer = useRef<number | null>(null);
   const messagesRef = useRef<HTMLElement | null>(null);
   const followLatestMessageRef = useRef(true);
@@ -401,13 +412,11 @@ const AssistantView = ({
   const pushToTalkFinishRef = useRef<Promise<void> | null>(null);
   const continuousTransitionRef = useRef(false);
   const latestAgentMessageIdRef = useRef<string | null>(null);
-  const pendingSourcesRef = useRef<GuideSource[] | null>(null);
-  const agentStateRef = useRef<string>('disconnected');
+  const latestAgentMessageTextRef = useRef('');
   const textInputRef = useRef<HTMLTextAreaElement | null>(null);
   const agent = useAgent();
   const { isSending: isSendingText, messages, send: sendText } = useSessionMessages();
   const { perform } = useRpc();
-  agentStateRef.current = agent.state;
 
   const publishOptions = useMemo(() => ({ name: 'desktop-microphone' }), []);
   const microphone = useTrackToggle({
@@ -463,7 +472,7 @@ const AssistantView = ({
       return;
     }
 
-    const renderSignature = `${latestMessage.id}:${latestMessage.text}:${latestMessage.sources.map((source) => source.url).join('|')}`;
+    const renderSignature = `${latestMessage.id}:${latestMessage.text}:${latestMessage.sourcePreview?.sources.map((source) => source.url).join('|') ?? ''}`;
     if (renderSignature === latestRenderedMessageRef.current) return;
 
     const isNewLocalMessage =
@@ -484,25 +493,41 @@ const AssistantView = ({
 
   const latestAgentMessageId =
     [...displayMessages].reverse().find((message) => message.role === 'assistant')?.id ?? null;
+  const latestAgentMessageText =
+    [...displayMessages].reverse().find((message) => message.role === 'assistant')?.text ?? '';
   latestAgentMessageIdRef.current = latestAgentMessageId;
+  latestAgentMessageTextRef.current = latestAgentMessageText;
 
   useEffect(() => {
-    if (!latestAgentMessageId || !pendingSourcesRef.current) return;
-    const nextSources = pendingSourcesRef.current;
-    pendingSourcesRef.current = null;
-    setSourcesByMessage((current) => ({ ...current, [latestAgentMessageId]: nextSources }));
-  }, [latestAgentMessageId]);
+    if (!latestAgentMessageId || !pendingSources) return;
+    if (
+      !shouldAttachSourcePreview(
+        pendingSources,
+        { id: latestAgentMessageId, text: latestAgentMessageText },
+        agent.state,
+      )
+    )
+      return;
+    setSourcesByMessage((current) => ({
+      ...current,
+      [latestAgentMessageId]: pendingSources.preview,
+    }));
+    setPendingSources(null);
+  }, [agent.state, latestAgentMessageId, latestAgentMessageText, pendingSources]);
 
-  const onSourcesMessage = useCallback((message: { payload: Uint8Array }) => {
-    const parsed = parseGuideSourcesMessage(new TextDecoder().decode(message.payload));
-    if (!parsed) return;
-    const currentMessageId = latestAgentMessageIdRef.current;
-    if (currentMessageId && agentStateRef.current === 'speaking') {
-      setSourcesByMessage((current) => ({ ...current, [currentMessageId]: parsed.sources }));
-    } else {
-      pendingSourcesRef.current = parsed.sources;
-    }
-  }, []);
+  const onSourcesMessage = useCallback(
+    (message: { payload: Uint8Array }) => {
+      const parsed = parseGuideSourcesMessage(new TextDecoder().decode(message.payload));
+      if (!parsed) return;
+      setPendingSources({
+        preview: parsed,
+        anchorMessageId: latestAgentMessageIdRef.current,
+        anchorMessageText: latestAgentMessageTextRef.current,
+        receivedDuringTurn: agent.state === 'thinking' || agent.state === 'speaking',
+      });
+    },
+    [agent.state],
+  );
   useDataChannel(guideSourcesTopic, onSourcesMessage);
 
   const performGuideRpc = useCallback(
@@ -846,6 +871,15 @@ const AssistantView = ({
     if (preferences.openSourcesInApp) await window.desktop.openSource(url);
     else await window.desktop.openExternal(url);
   };
+  const openSourcePreview = async (preview: GuideSourcesMessage) => {
+    if (!window.desktop) {
+      const firstSource = preview.sources[0];
+      if (firstSource) window.open(firstSource.url, '_blank', 'noopener,noreferrer');
+      return;
+    }
+    if (preferences.openSourcesInApp) await window.desktop.openSourcePreview(preview);
+    else if (preview.sources[0]) await window.desktop.openExternal(preview.sources[0].url);
+  };
 
   if (collapsed) {
     return (
@@ -996,19 +1030,16 @@ const AssistantView = ({
                   <div className="bubble markdown-content">
                     <MessageMarkdown onOpenLink={openSource}>{message.text}</MessageMarkdown>
                   </div>
-                  {message.sources.map((source) => (
+                  {message.sourcePreview ? (
                     <button
-                      key={source.url}
-                      className="source-card no-drag"
-                      onClick={() => void openSource(source.url)}
+                      className="source-preview-pill no-drag"
+                      onClick={() => void openSourcePreview(message.sourcePreview!)}
                     >
-                      <span className="source-mark">源</span>
-                      <span>
-                        <b>{source.title}</b>
-                        <small>{source.siteName} · 原始网页</small>
-                      </span>
+                      <BrowserIcon size={13} weight="duotone" aria-hidden="true" />
+                      <span>已检索 {message.sourcePreview.sources.length} 个网页来源</span>
+                      <CaretDownIcon size={11} weight="bold" aria-hidden="true" />
                     </button>
-                  ))}
+                  ) : null}
                 </div>
               ),
             )
@@ -1247,18 +1278,167 @@ const AssistantView = ({
   );
 };
 
-const Source = () => (
-  <main className="source-shell">
-    <header className="source-bar drag-bar">
-      <span className="source-title">来源网页</span>
-      <span className="source-domain">仅加载 HTTPS 原始页面</span>
-      <button className="text-button no-drag" onClick={() => void window.desktop?.closeSource()}>
-        关闭
-      </button>
-    </header>
-    <div className="source-placeholder">正在安全加载来源网页…</div>
-  </main>
-);
+const Source = () => {
+  const [state, setState] = useState<SourceWindowState | null>(null);
+  const listRef = useRef<HTMLDivElement | null>(null);
+  const previewScrollTopRef = useRef(0);
+
+  useEffect(() => {
+    void window.desktop?.getSourceState().then((nextState) => {
+      if (nextState) setState(nextState);
+    });
+    return window.desktop?.onSourceState(setState);
+  }, []);
+
+  useLayoutEffect(() => {
+    if (state?.mode === 'preview' && listRef.current) {
+      listRef.current.scrollTop = previewScrollTopRef.current;
+    }
+  }, [state?.mode]);
+
+  const hostname =
+    state && state.mode !== 'preview' ? new URL(state.currentUrl).hostname : undefined;
+  const rememberListPosition = () => {
+    previewScrollTopRef.current = listRef.current?.scrollTop ?? 0;
+  };
+
+  return (
+    <main className="source-shell">
+      <header className="source-bar drag-bar">
+        {state && state.mode !== 'preview' ? (
+          <button
+            type="button"
+            className="source-icon-button no-drag"
+            aria-label="返回搜索来源"
+            title="返回搜索来源"
+            onClick={() => void window.desktop?.backToSources()}
+          >
+            <ArrowLeftIcon size={17} aria-hidden="true" />
+          </button>
+        ) : (
+          <MagnifyingGlassIcon size={17} color="#476eae" aria-hidden="true" />
+        )}
+        <span className="source-heading">
+          <b>{state?.mode === 'preview' ? '搜索来源' : (hostname ?? '来源网页')}</b>
+          <small>
+            {state?.mode === 'preview'
+              ? `${state.preview.sources.length} 个可查看来源`
+              : state?.mode === 'loading'
+                ? '正在加载原始页面'
+                : state?.mode === 'error'
+                  ? '页面加载失败'
+                  : '原始页面'}
+          </small>
+        </span>
+        {state && state.mode !== 'preview' ? (
+          <button
+            type="button"
+            className="source-icon-button no-drag"
+            aria-label="在系统浏览器打开"
+            title="在系统浏览器打开"
+            onClick={() => void window.desktop?.openCurrentSourceExternal()}
+          >
+            <ArrowSquareOutIcon size={16} aria-hidden="true" />
+          </button>
+        ) : null}
+        <button
+          className="source-icon-button no-drag"
+          aria-label="关闭来源窗口"
+          title="关闭"
+          onClick={() => void window.desktop?.closeSource()}
+        >
+          <XIcon size={16} aria-hidden="true" />
+        </button>
+      </header>
+      {!state ? (
+        <div className="source-status" role="status">
+          <CircleNotchIcon className="source-spinner" size={22} aria-hidden="true" />
+          <span>正在准备来源预览…</span>
+        </div>
+      ) : state.mode === 'preview' ? (
+        <div
+          ref={listRef}
+          className="source-results"
+          onScroll={rememberListPosition}
+          aria-label="搜索来源列表"
+        >
+          {state.preview.query ? <p className="source-query">“{state.preview.query}”</p> : null}
+          {state.preview.sources.map((source) => (
+            <button
+              type="button"
+              className="source-result no-drag"
+              key={source.url}
+              onClick={() => {
+                rememberListPosition();
+                void window.desktop?.selectSource(source.url);
+              }}
+            >
+              <span className="source-result-meta">
+                {source.iconUrl ? (
+                  <img
+                    src={source.iconUrl}
+                    alt=""
+                    onError={(event) => {
+                      event.currentTarget.style.display = 'none';
+                    }}
+                  />
+                ) : (
+                  <span>源</span>
+                )}
+                <b>{source.siteName}</b>
+                {source.publishTime ? <time>{source.publishTime.slice(0, 10)}</time> : null}
+              </span>
+              <span className="source-result-body">
+                <span>
+                  <strong>{source.title}</strong>
+                  {source.summary ? <small>{source.summary}</small> : null}
+                </span>
+                {source.thumbnailUrl ? (
+                  <img
+                    src={source.thumbnailUrl}
+                    alt=""
+                    onError={(event) => {
+                      event.currentTarget.style.display = 'none';
+                    }}
+                  />
+                ) : null}
+              </span>
+              {source.openMode === 'external' ? <em>该来源使用 HTTP，将在系统浏览器打开</em> : null}
+            </button>
+          ))}
+        </div>
+      ) : state.mode === 'error' ? (
+        <div className="source-error" role="alert">
+          <WarningCircleIcon size={30} weight="duotone" aria-hidden="true" />
+          <strong>无法打开这个网页</strong>
+          <span>{state.source.title}</span>
+          <p>{state.message}</p>
+          <small>{state.currentUrl}</small>
+          <div>
+            <button type="button" onClick={() => void window.desktop?.retrySource()}>
+              重试
+            </button>
+            <button type="button" onClick={() => void window.desktop?.openCurrentSourceExternal()}>
+              系统浏览器打开
+            </button>
+            <button type="button" onClick={() => void window.desktop?.backToSources()}>
+              返回来源列表
+            </button>
+          </div>
+        </div>
+      ) : state.mode === 'loading' ? (
+        <div className="source-status" role="status">
+          <CircleNotchIcon className="source-spinner" size={24} aria-hidden="true" />
+          <strong>正在加载网页</strong>
+          <span>{state.source.title}</span>
+          <span>{hostname}</span>
+        </div>
+      ) : (
+        <div className="source-remote-placeholder" aria-label="原始网页已加载" />
+      )}
+    </main>
+  );
+};
 
 const SettingsRoute = () => {
   const { preferences, updatePreference } = usePreferences();

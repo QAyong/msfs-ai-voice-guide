@@ -1,22 +1,37 @@
 import { z } from 'zod';
 
-export const guideSourceSchema = z.object({
-  title: z.string().trim().min(1),
-  siteName: z.string().trim().min(1),
-  url: z
-    .string()
-    .url()
-    .refine((value) => new URL(value).protocol === 'https:'),
-  summary: z.string().trim().min(1).optional(),
-  publishTime: z.string().trim().min(1).optional(),
-});
+export const guideSourceSchema = z
+  .object({
+    rank: z.number().int().nonnegative(),
+    title: z.string().trim().min(1),
+    siteName: z.string().trim().min(1),
+    url: z
+      .string()
+      .url()
+      .refine((value) => ['http:', 'https:'].includes(new URL(value).protocol)),
+    openMode: z.enum(['in_app', 'external']),
+    summary: z.string().trim().min(1).optional(),
+    iconUrl: z.string().url().startsWith('https://').optional(),
+    thumbnailUrl: z.string().url().startsWith('https://').optional(),
+    publishTime: z.string().trim().min(1).optional(),
+  })
+  .superRefine((source, context) => {
+    const protocol = new URL(source.url).protocol;
+    if (
+      (protocol === 'https:' && source.openMode !== 'in_app') ||
+      (protocol === 'http:' && source.openMode !== 'external')
+    ) {
+      context.addIssue({ code: 'custom', message: '打开方式与来源协议不匹配' });
+    }
+  });
 
 export type GuideSource = z.infer<typeof guideSourceSchema>;
 
 export const guideSourcesMessageSchema = z.object({
   type: z.literal('guide.sources'),
   query: z.string().trim().min(1).optional(),
-  sources: z.array(guideSourceSchema).max(8),
+  requestId: z.string().trim().min(1).optional(),
+  sources: z.array(guideSourceSchema).max(10),
 });
 
 export type GuideSourcesMessage = z.infer<typeof guideSourcesMessageSchema>;

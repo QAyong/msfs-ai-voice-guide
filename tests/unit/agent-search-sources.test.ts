@@ -22,7 +22,7 @@ const createEvent = (output: unknown): voice.FunctionToolsExecutedEvent => ({
 });
 
 describe('agent search source events', () => {
-  it('keeps valid HTTPS source metadata and removes duplicate URLs', () => {
+  it('keeps valid source metadata and removes duplicate URLs', () => {
     const source = {
       title: '苏黎世湖',
       siteName: 'Wikipedia',
@@ -31,17 +31,20 @@ describe('agent search source events', () => {
       content: '不应发送给桌面端的长正文',
     };
     const message = extractGuideSources(
-      createEvent({ status: 'ok', sources: [source, { ...source }] }),
+      createEvent({ status: 'ok', requestId: 'request-1', sources: [source, { ...source }] }),
     );
 
     expect(message).toEqual({
       type: 'guide.sources',
       query: '苏黎世湖',
+      requestId: 'request-1',
       sources: [
         {
+          rank: 1,
           title: '苏黎世湖',
           siteName: 'Wikipedia',
-          url: source.url,
+          url: new URL(source.url).toString(),
+          openMode: 'in_app',
           summary: '湖泊资料',
         },
       ],
@@ -49,15 +52,32 @@ describe('agent search source events', () => {
     expect(JSON.stringify(message)).not.toContain('长正文');
   });
 
-  it('does not publish invalid, insecure, or unsuccessful search output', () => {
+  it('cleans each source independently and sends HTTP sources to the system browser', () => {
     expect(
       extractGuideSources(
         createEvent({
           status: 'ok',
-          sources: [{ title: '不安全', siteName: 'example', url: 'http://example.com' }],
+          sources: [
+            { title: '', siteName: '', url: 'http://example.com/article', summary: '有效摘要' },
+            { title: '坏协议', siteName: 'bad', url: 'javascript:alert(1)', summary: '坏项' },
+            { title: '缺少地址', siteName: 'bad', summary: '坏项' },
+          ],
         }),
       ),
-    ).toBeNull();
+    ).toMatchObject({
+      sources: [
+        {
+          rank: 1,
+          title: 'example.com',
+          siteName: 'example.com',
+          url: 'http://example.com/article',
+          openMode: 'external',
+        },
+      ],
+    });
+  });
+
+  it('does not publish unsuccessful search output', () => {
     expect(extractGuideSources(createEvent({ status: 'no_results', sources: [] }))).toBeNull();
   });
 });

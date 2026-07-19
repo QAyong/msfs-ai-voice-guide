@@ -1,17 +1,34 @@
 import type { ReceivedMessage } from '@livekit/components-react';
-import type { GuideSource } from '../../../shared/guide-events.js';
+import type { GuideSourcesMessage } from '../../../shared/guide-events.js';
 
 export type DisplayMessage = {
   id: string;
   role: 'user' | 'assistant';
-  sources: GuideSource[];
+  sourcePreview: GuideSourcesMessage | null;
   text: string;
 };
+
+export type PendingSourcePreview = {
+  anchorMessageId: string | null;
+  anchorMessageText: string;
+  receivedDuringTurn: boolean;
+};
+
+export function shouldAttachSourcePreview(
+  pending: PendingSourcePreview,
+  latestAgentMessage: Pick<DisplayMessage, 'id' | 'text'> | null,
+  agentState: string,
+): boolean {
+  if (!latestAgentMessage) return false;
+  if (latestAgentMessage.id !== pending.anchorMessageId) return true;
+  if (latestAgentMessage.text !== pending.anchorMessageText) return true;
+  return pending.receivedDuringTurn && agentState !== 'thinking' && agentState !== 'speaking';
+}
 
 export function createDisplayMessages(
   messages: readonly ReceivedMessage[],
   localParticipantIdentity: string,
-  sourcesByMessage: Readonly<Record<string, GuideSource[]>>,
+  sourcesByMessage: Readonly<Record<string, GuideSourcesMessage>>,
   limit = 8,
 ): DisplayMessage[] {
   return messages
@@ -28,7 +45,7 @@ export function createDisplayMessages(
       return {
         id: message.id,
         role,
-        sources: role === 'assistant' ? (sourcesByMessage[message.id] ?? []) : [],
+        sourcePreview: role === 'assistant' ? (sourcesByMessage[message.id] ?? null) : null,
         text,
       };
     })
