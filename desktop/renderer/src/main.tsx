@@ -1334,30 +1334,30 @@ const Source = () => {
         </span>
         {state && state.mode !== 'preview' ? (
           <>
-            <div className="source-device-toggle no-drag" role="group" aria-label="网页预览设备">
+            <div className="source-layout-toggle no-drag" role="group" aria-label="网页预览布局">
               <button
                 type="button"
-                aria-label="电脑预览"
-                aria-pressed={state.deviceMode === 'desktop'}
-                title="电脑预览"
-                onClick={() => void window.desktop?.setSourceDeviceMode('desktop')}
+                aria-label="电脑布局"
+                aria-pressed={state.layoutMode === 'desktop'}
+                title="电脑布局"
+                onClick={() => void window.desktop?.setSourceLayoutMode('desktop')}
               >
                 <DesktopIcon
                   size={17}
-                  weight={state.deviceMode === 'desktop' ? 'fill' : 'regular'}
+                  weight={state.layoutMode === 'desktop' ? 'fill' : 'regular'}
                   aria-hidden="true"
                 />
               </button>
               <button
                 type="button"
-                aria-label="iPad 预览"
-                aria-pressed={state.deviceMode === 'ipad'}
-                title="iPad 预览"
-                onClick={() => void window.desktop?.setSourceDeviceMode('ipad')}
+                aria-label="竖版布局"
+                aria-pressed={state.layoutMode === 'portrait'}
+                title="竖版布局"
+                onClick={() => void window.desktop?.setSourceLayoutMode('portrait')}
               >
                 <DeviceTabletIcon
                   size={17}
-                  weight={state.deviceMode === 'ipad' ? 'fill' : 'regular'}
+                  weight={state.layoutMode === 'portrait' ? 'fill' : 'regular'}
                   aria-hidden="true"
                 />
               </button>

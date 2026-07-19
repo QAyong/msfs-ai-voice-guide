@@ -1164,7 +1164,7 @@ html[data-motion='off'] *::after {
   background: #eef3fa;
   color: #244a85;
 }
-.source-device-toggle {
+.source-layout-toggle {
   display: flex;
   height: 28px;
   flex: 0 0 auto;
@@ -1174,7 +1174,7 @@ html[data-motion='off'] *::after {
   border-radius: 7px;
   background: rgba(238, 242, 248, 0.78);
 }
-.source-device-toggle button {
+.source-layout-toggle button {
   display: grid;
   width: 25px;
   height: 26px;
@@ -1186,11 +1186,11 @@ html[data-motion='off'] *::after {
   color: #7a8494;
   cursor: pointer;
 }
-.source-device-toggle button:hover {
+.source-layout-toggle button:hover {
   background: rgba(255, 255, 255, 0.82);
   color: #4f6078;
 }
-.source-device-toggle button[aria-pressed='true'] {
+.source-layout-toggle button[aria-pressed='true'] {
   background: #fff;
   box-shadow: 0 1px 3px rgba(28, 51, 83, 0.13);
   color: #2f6fce;
