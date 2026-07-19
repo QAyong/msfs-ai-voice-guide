@@ -4,6 +4,8 @@ export const guideVoiceRpc = {
   cancelTurn: 'msfs.guide.cancel_turn',
   startContinuous: 'msfs.guide.start_continuous',
   stopContinuous: 'msfs.guide.stop_continuous',
+  suspendVoice: 'msfs.guide.suspend_voice',
+  resumeVoice: 'msfs.guide.resume_voice',
 } as const;
 
 export type GuideVoiceRpcMethod = (typeof guideVoiceRpc)[keyof typeof guideVoiceRpc];

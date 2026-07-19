@@ -1,4 +1,12 @@
-import { StrictMode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  StrictMode,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import type { ReactNode } from 'react';
 import { createRoot } from 'react-dom/client';
 import {
@@ -15,14 +23,21 @@ import {
 } from '@livekit/components-react';
 import { ConnectionState, serializers, TokenSource, Track } from 'livekit-client';
 import { BrowserIcon } from '@phosphor-icons/react/dist/csr/Browser';
+import { CaretDownIcon } from '@phosphor-icons/react/dist/csr/CaretDown';
+import { CaretUpIcon } from '@phosphor-icons/react/dist/csr/CaretUp';
 import { CheckIcon } from '@phosphor-icons/react/dist/csr/Check';
 import { GearSixIcon } from '@phosphor-icons/react/dist/csr/GearSix';
+import { KeyboardIcon } from '@phosphor-icons/react/dist/csr/Keyboard';
 import { MicrophoneIcon } from '@phosphor-icons/react/dist/csr/Microphone';
+import { PaperPlaneTiltIcon } from '@phosphor-icons/react/dist/csr/PaperPlaneTilt';
+import { PhoneCallIcon } from '@phosphor-icons/react/dist/csr/PhoneCall';
+import { PhoneDisconnectIcon } from '@phosphor-icons/react/dist/csr/PhoneDisconnect';
 import { PowerIcon } from '@phosphor-icons/react/dist/csr/Power';
 import { PushPinIcon } from '@phosphor-icons/react/dist/csr/PushPin';
 import { SpeakerHighIcon } from '@phosphor-icons/react/dist/csr/SpeakerHigh';
 import { SparkleIcon } from '@phosphor-icons/react/dist/csr/Sparkle';
 import { WarningCircleIcon } from '@phosphor-icons/react/dist/csr/WarningCircle';
+import { WaveformIcon } from '@phosphor-icons/react/dist/csr/Waveform';
 import { XIcon } from '@phosphor-icons/react/dist/csr/X';
 import type { DesktopReadiness } from '../../../shared/desktop-contracts.js';
 import {
@@ -39,6 +54,8 @@ import {
   type VoiceInputMode,
 } from '../../../shared/voice-control.js';
 import { resolveVoiceStatus } from './voice-ui-state.js';
+import { MessageMarkdown } from './message-markdown.js';
+import { createDisplayMessages } from './session-messages.js';
 import './style.css';
 
 const preferenceStorageKey = 'cloudpath-guide-preferences';
@@ -257,6 +274,7 @@ const QuitDialog = ({ onClose }: QuitDialogProps) => {
 };
 
 type AssistantViewProps = {
+  onVoiceChannelChange(connected: boolean): void;
   preferences: Preferences;
   readiness: DesktopReadiness | null;
   retry(): Promise<void>;
@@ -264,20 +282,17 @@ type AssistantViewProps = {
   starting: boolean;
   startupError: string;
   updatePreference<Key extends keyof Preferences>(key: Key, value: Preferences[Key]): void;
+  voiceChannelConnected: boolean;
 };
 
-type DisplayMessage = {
-  id: string;
-  role: 'user' | 'assistant';
-  sources: GuideSource[];
-  text: string;
-};
+const maximumTextMessageLength = 4000;
 
 const Assistant = () => {
   const { preferences, updatePreference } = usePreferences();
   const [readiness, setReadiness] = useState<DesktopReadiness | null>(null);
   const [starting, setStarting] = useState(true);
   const [startupError, setStartupError] = useState('');
+  const [voiceChannelConnected, setVoiceChannelConnected] = useState(true);
   const connectAbortRef = useRef<AbortController | null>(null);
 
   const tokenSource = useMemo(
@@ -333,8 +348,9 @@ const Assistant = () => {
 
   return (
     <SessionProvider session={session}>
-      <RoomAudioRenderer volume={preferences.agentVolume} />
+      <RoomAudioRenderer volume={voiceChannelConnected ? preferences.agentVolume : 0} />
       <AssistantView
+        onVoiceChannelChange={setVoiceChannelConnected}
         preferences={preferences}
         readiness={readiness}
         retry={startSession}
@@ -342,12 +358,14 @@ const Assistant = () => {
         starting={starting}
         startupError={startupError}
         updatePreference={updatePreference}
+        voiceChannelConnected={voiceChannelConnected}
       />
     </SessionProvider>
   );
 };
 
 const AssistantView = ({
+  onVoiceChannelChange,
   preferences,
   readiness,
   retry,
@@ -355,6 +373,7 @@ const AssistantView = ({
   starting,
   startupError,
   updatePreference,
+  voiceChannelConnected,
 }: AssistantViewProps) => {
   const [collapsed, setCollapsed] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -363,9 +382,20 @@ const AssistantView = ({
   const [voiceTransitioning, setVoiceTransitioning] = useState(false);
   const [controlError, setControlError] = useState('');
   const [microphoneError, setMicrophoneError] = useState('');
+  const [textComposerOpen, setTextComposerOpen] = useState(false);
+  const [textDraft, setTextDraft] = useState('');
+  const [textInputError, setTextInputError] = useState('');
+  const [voiceModeMenuOpen, setVoiceModeMenuOpen] = useState(false);
+  const [hasUnreadMessages, setHasUnreadMessages] = useState(false);
   const [sourcesByMessage, setSourcesByMessage] = useState<Record<string, GuideSource[]>>({});
   const menuCloseTimer = useRef<number | null>(null);
+  const messagesRef = useRef<HTMLElement | null>(null);
+  const followLatestMessageRef = useRef(true);
+  const programmaticMessageScrollRef = useRef(false);
+  const latestRenderedMessageRef = useRef<string | null>(null);
+  const latestRenderedMessageIdRef = useRef<string | null>(null);
   const pushToTalkPressedRef = useRef(false);
+  const pushToTalkSpaceCapturedRef = useRef(false);
   const pushToTalkTurnActiveRef = useRef(false);
   const pushToTalkStartRef = useRef<Promise<void> | null>(null);
   const pushToTalkFinishRef = useRef<Promise<void> | null>(null);
@@ -373,8 +403,9 @@ const AssistantView = ({
   const latestAgentMessageIdRef = useRef<string | null>(null);
   const pendingSourcesRef = useRef<GuideSource[] | null>(null);
   const agentStateRef = useRef<string>('disconnected');
+  const textInputRef = useRef<HTMLTextAreaElement | null>(null);
   const agent = useAgent();
-  const { messages } = useSessionMessages();
+  const { isSending: isSendingText, messages, send: sendText } = useSessionMessages();
   const { perform } = useRpc();
   agentStateRef.current = agent.state;
 
@@ -394,18 +425,62 @@ const AssistantView = ({
   const microphoneLevel = useTrackVolume(session.local.microphoneTrack);
   const continuousActive = preferences.voiceInputMode === 'continuous' && microphone.enabled;
 
-  const displayMessages = useMemo<DisplayMessage[]>(() => {
-    return messages
-      .filter((message) => message.type === 'userTranscript' || message.type === 'agentTranscript')
-      .map<DisplayMessage>((message) => ({
-        id: message.id,
-        role: message.type === 'userTranscript' ? 'user' : 'assistant',
-        sources: sourcesByMessage[message.id] ?? [],
-        text: message.message,
-      }))
-      .filter((message) => message.text.trim().length > 0)
-      .slice(-8);
-  }, [messages, sourcesByMessage]);
+  const displayMessages = useMemo(
+    () => createDisplayMessages(messages, session.room.localParticipant.identity, sourcesByMessage),
+    [messages, session.room.localParticipant.identity, sourcesByMessage],
+  );
+
+  const scrollToLatestMessage = useCallback((behavior: ScrollBehavior = 'auto') => {
+    const messageList = messagesRef.current;
+    if (!messageList) return;
+    followLatestMessageRef.current = true;
+    programmaticMessageScrollRef.current = behavior === 'smooth';
+    setHasUnreadMessages(false);
+    messageList.scrollTo({ top: messageList.scrollHeight, behavior });
+  }, []);
+
+  const updateMessageScrollPosition = useCallback(() => {
+    const messageList = messagesRef.current;
+    if (!messageList) return;
+    const distanceFromBottom =
+      messageList.scrollHeight - messageList.scrollTop - messageList.clientHeight;
+    const isFollowingLatest = distanceFromBottom <= 48;
+    if (programmaticMessageScrollRef.current) {
+      if (isFollowingLatest) programmaticMessageScrollRef.current = false;
+      else return;
+    }
+    followLatestMessageRef.current = isFollowingLatest;
+    if (isFollowingLatest) setHasUnreadMessages(false);
+  }, []);
+
+  useLayoutEffect(() => {
+    if (collapsed) return;
+    const latestMessage = displayMessages.at(-1);
+    if (!latestMessage) {
+      latestRenderedMessageRef.current = null;
+      latestRenderedMessageIdRef.current = null;
+      setHasUnreadMessages(false);
+      return;
+    }
+
+    const renderSignature = `${latestMessage.id}:${latestMessage.text}:${latestMessage.sources.map((source) => source.url).join('|')}`;
+    if (renderSignature === latestRenderedMessageRef.current) return;
+
+    const isNewLocalMessage =
+      latestMessage.role === 'user' && latestMessage.id !== latestRenderedMessageIdRef.current;
+    latestRenderedMessageRef.current = renderSignature;
+    latestRenderedMessageIdRef.current = latestMessage.id;
+
+    if (followLatestMessageRef.current || isNewLocalMessage) {
+      scrollToLatestMessage(isNewLocalMessage && preferences.interfaceMotion ? 'smooth' : 'auto');
+    } else {
+      setHasUnreadMessages(true);
+    }
+  }, [collapsed, displayMessages, preferences.interfaceMotion, scrollToLatestMessage]);
+
+  useLayoutEffect(() => {
+    if (!collapsed && followLatestMessageRef.current) scrollToLatestMessage('auto');
+  }, [collapsed, scrollToLatestMessage, textComposerOpen]);
 
   const latestAgentMessageId =
     [...displayMessages].reverse().find((message) => message.role === 'assistant')?.id ?? null;
@@ -463,7 +538,10 @@ const AssistantView = ({
     Boolean(readiness) ||
     agent.state === 'failed' ||
     (!starting && session.connectionState === ConnectionState.Disconnected);
-  const interactionBlocked = setupBlocked || !agent.canListen;
+  const voiceChannelActive = voiceChannelConnected && !setupBlocked;
+  const interactionBlocked = setupBlocked || !agent.canListen || !voiceChannelConnected;
+  const textInputBlocked = setupBlocked || !agent.isConnected;
+  const visibleStatusLabel = !voiceChannelConnected && !setupBlocked ? '语音已挂断' : statusLabel;
   const voiceButtonState = microphoneError
     ? 'error'
     : voiceTransitioning || microphone.pending || starting || agent.isPending
@@ -471,6 +549,24 @@ const AssistantView = ({
       : microphone.enabled
         ? 'listening'
         : 'idle';
+
+  const submitTextMessage = useCallback(async () => {
+    const message = textDraft.trim();
+    if (!message || textInputBlocked || isSendingText) return;
+
+    setTextInputError('');
+    try {
+      await sendText(message);
+      setTextDraft((current) => (current === textDraft ? '' : current));
+    } catch (error) {
+      setTextInputError(error instanceof Error ? error.message : '文字消息发送失败，请重试');
+    }
+  }, [isSendingText, sendText, textDraft, textInputBlocked]);
+
+  useEffect(() => {
+    if (!textComposerOpen) return;
+    window.requestAnimationFrame(() => textInputRef.current?.focus());
+  }, [textComposerOpen]);
 
   const beginPushToTalk = useCallback(() => {
     if (
@@ -586,6 +682,53 @@ const AssistantView = ({
     [finishPushToTalk, preferences.voiceInputMode, stopContinuousConversation, updatePreference],
   );
 
+  const selectVoiceInputMode = useCallback(
+    async (nextMode: VoiceInputMode) => {
+      await changeVoiceInputMode(nextMode);
+      setVoiceModeMenuOpen(false);
+    },
+    [changeVoiceInputMode],
+  );
+
+  const hangUpVoiceChannel = useCallback(async () => {
+    setVoiceModeMenuOpen(false);
+    setControlError('');
+    onVoiceChannelChange(false);
+    setVoiceTransitioning(true);
+    try {
+      if (preferences.voiceInputMode === 'push_to_talk') await finishPushToTalk(true);
+      else await microphone.toggle(false);
+      await performGuideRpc(guideVoiceRpc.suspendVoice);
+    } catch (error) {
+      setControlError(error instanceof Error ? error.message : '挂断语音失败');
+      await microphone.toggle(false).catch(() => undefined);
+    } finally {
+      setVoiceTransitioning(false);
+    }
+  }, [
+    finishPushToTalk,
+    microphone,
+    onVoiceChannelChange,
+    performGuideRpc,
+    preferences.voiceInputMode,
+  ]);
+
+  const connectVoiceChannel = useCallback(async () => {
+    setControlError('');
+    setMicrophoneError('');
+    setVoiceTransitioning(true);
+    try {
+      if (setupBlocked) await retry();
+      else await performGuideRpc(guideVoiceRpc.resumeVoice);
+      onVoiceChannelChange(true);
+    } catch (error) {
+      setControlError(error instanceof Error ? error.message : '恢复语音失败');
+      onVoiceChannelChange(false);
+    } finally {
+      setVoiceTransitioning(false);
+    }
+  }, [onVoiceChannelChange, performGuideRpc, retry, setupBlocked]);
+
   useEffect(() => {
     if (preferences.voiceInputMode !== 'push_to_talk') return;
     const isEditableTarget = (target: EventTarget | null) => {
@@ -600,37 +743,53 @@ const AssistantView = ({
     const onKeyDown = (event: KeyboardEvent) => {
       if (
         event.code !== 'Space' ||
-        event.repeat ||
         event.altKey ||
         event.ctrlKey ||
         event.metaKey ||
-        isEditableTarget(event.target)
+        isEditableTarget(event.target) ||
+        browserDialog ||
+        voiceModeMenuOpen ||
+        collapsed
       ) {
         return;
       }
-      const targetButton =
-        event.target instanceof HTMLElement ? event.target.closest('button') : null;
-      if (targetButton && !targetButton.classList.contains('voice-button')) return;
       event.preventDefault();
+      pushToTalkSpaceCapturedRef.current = true;
+      if (event.repeat || !voiceChannelActive) return;
       beginPushToTalk();
     };
     const onKeyUp = (event: KeyboardEvent) => {
-      if (event.code !== 'Space' || !pushToTalkPressedRef.current) return;
+      if (event.code !== 'Space' || !pushToTalkSpaceCapturedRef.current) return;
       event.preventDefault();
-      void finishPushToTalk();
+      pushToTalkSpaceCapturedRef.current = false;
+      if (pushToTalkPressedRef.current) void finishPushToTalk();
     };
     const onBlur = () => {
+      pushToTalkSpaceCapturedRef.current = false;
       if (pushToTalkPressedRef.current) void finishPushToTalk(true);
     };
-    window.addEventListener('keydown', onKeyDown);
-    window.addEventListener('keyup', onKeyUp);
-    window.addEventListener('blur', onBlur);
-    return () => {
-      window.removeEventListener('keydown', onKeyDown);
-      window.removeEventListener('keyup', onKeyUp);
-      window.removeEventListener('blur', onBlur);
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') onBlur();
     };
-  }, [beginPushToTalk, finishPushToTalk, preferences.voiceInputMode]);
+    window.addEventListener('keydown', onKeyDown, true);
+    window.addEventListener('keyup', onKeyUp, true);
+    window.addEventListener('blur', onBlur);
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    return () => {
+      window.removeEventListener('keydown', onKeyDown, true);
+      window.removeEventListener('keyup', onKeyUp, true);
+      window.removeEventListener('blur', onBlur);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+    };
+  }, [
+    beginPushToTalk,
+    browserDialog,
+    collapsed,
+    finishPushToTalk,
+    preferences.voiceInputMode,
+    voiceChannelActive,
+    voiceModeMenuOpen,
+  ]);
 
   useEffect(
     () => () => {
@@ -768,165 +927,320 @@ const AssistantView = ({
         <span className="avatar">云</span>
         <span className="name">云迹导游</span>
         <span
-          className={`status status--${session.connectionState}`}
+          className={`status status--${session.connectionState} ${!voiceChannelConnected && !setupBlocked ? 'status--voice-disconnected' : ''}`}
           title={errorMessage || undefined}
         >
-          {statusLabel}
+          {visibleStatusLabel}
         </span>
         <button className="text-button no-drag" onClick={() => void changeCollapsed(true)}>
           收起
         </button>
       </header>
-      <section className="messages" aria-label="最近对话">
-        {setupBlocked ? (
-          <div className="readiness-card" role="status">
-            <WarningCircleIcon size={24} weight="duotone" aria-hidden="true" />
-            <strong>{readiness?.message ?? errorMessage ?? '语音服务暂时不可用'}</strong>
-            {(readiness?.issues ?? agent.failureReasons ?? []).slice(0, 4).map((issue) => (
-              <small key={issue}>{issue}</small>
-            ))}
-            <div className="readiness-actions">
-              {readiness?.status === 'setup_required' ? (
-                <button type="button" onClick={() => void window.desktop?.openConfiguration()}>
-                  打开配置文件
-                </button>
-              ) : null}
-              <button type="button" onClick={() => void retry()}>
-                重新检测
-              </button>
-            </div>
-          </div>
-        ) : displayMessages.length === 0 ? (
-          <div className="empty-conversation">
-            <span className="empty-conversation-icon" aria-hidden="true">
-              <SparkleIcon size={22} weight="duotone" />
-            </span>
-            <strong>{session.isConnected ? '可以开始对话了' : '正在准备语音导游'}</strong>
-            <small>
-              {preferences.voiceInputMode === 'continuous'
-                ? '点击开始后即可持续自然对话'
-                : '按住按钮或空格键说话，松开后等待回答'}
-            </small>
-          </div>
-        ) : (
-          displayMessages.map((message) =>
-            message.role === 'user' ? (
-              <p key={message.id} className="bubble user">
-                {message.text}
-              </p>
-            ) : (
-              <div key={message.id} className="guide-reply">
-                <p className="bubble">{message.text}</p>
-                {message.sources.map((source) => (
-                  <button
-                    key={source.url}
-                    className="source-card no-drag"
-                    onClick={() => void openSource(source.url)}
-                  >
-                    <span className="source-mark">源</span>
-                    <span>
-                      <b>{source.title}</b>
-                      <small>{source.siteName} · 原始网页</small>
-                    </span>
-                  </button>
-                ))}
-              </div>
-            ),
-          )
-        )}
-      </section>
-      <footer className="voice-area">
-        <div className="voice-mode-switch" role="group" aria-label="语音输入模式">
-          <button
-            type="button"
-            className="no-drag"
-            disabled={voiceTransitioning}
-            aria-pressed={preferences.voiceInputMode === 'push_to_talk'}
-            onClick={() => void changeVoiceInputMode('push_to_talk')}
-          >
-            按住说话
-          </button>
-          <button
-            type="button"
-            className="no-drag"
-            disabled={voiceTransitioning}
-            aria-pressed={preferences.voiceInputMode === 'continuous'}
-            onClick={() => void changeVoiceInputMode('continuous')}
-          >
-            连续对话
-          </button>
-        </div>
-        <button
-          className={`voice-button no-drag voice-button--${voiceButtonState}`}
-          type="button"
-          aria-label={
-            preferences.voiceInputMode === 'continuous'
-              ? continuousActive
-                ? '结束连续对话'
-                : '开始连续对话'
-              : microphone.enabled
-                ? '正在聆听，松开结束'
-                : '按住说话，或按住空格键说话'
-          }
-          aria-pressed={microphone.enabled}
-          disabled={interactionBlocked || voiceTransitioning}
-          title={
-            errorMessage ||
-            (preferences.voiceInputMode === 'push_to_talk' ? '也可以按住空格键说话' : undefined)
-          }
-          onContextMenu={(event) => event.preventDefault()}
-          onPointerDown={(event) => {
-            if (preferences.voiceInputMode !== 'push_to_talk' || event.button !== 0) return;
-            event.currentTarget.setPointerCapture(event.pointerId);
-            beginPushToTalk();
-          }}
-          onPointerUp={(event) => {
-            if (preferences.voiceInputMode !== 'push_to_talk') return;
-            if (event.currentTarget.hasPointerCapture(event.pointerId))
-              event.currentTarget.releasePointerCapture(event.pointerId);
-            void finishPushToTalk();
-          }}
-          onPointerCancel={() => {
-            if (preferences.voiceInputMode === 'push_to_talk') void finishPushToTalk(true);
-          }}
-          onClick={() => {
-            if (preferences.voiceInputMode !== 'continuous') return;
-            if (continuousActive) void stopContinuousConversation();
-            else void startContinuousConversation();
+      <div className="messages-shell">
+        <section
+          ref={messagesRef}
+          className="messages"
+          aria-label="最近对话"
+          aria-live="polite"
+          onScroll={updateMessageScrollPosition}
+          onWheel={() => {
+            programmaticMessageScrollRef.current = false;
           }}
         >
-          <MicrophoneIcon
-            className="voice-microphone"
-            size={18}
-            weight={microphone.enabled ? 'bold' : 'regular'}
+          {setupBlocked ? (
+            <div className="readiness-card" role="status">
+              <WarningCircleIcon size={24} weight="duotone" aria-hidden="true" />
+              <strong>{readiness?.message ?? errorMessage ?? '语音服务暂时不可用'}</strong>
+              {(readiness?.issues ?? agent.failureReasons ?? []).slice(0, 4).map((issue) => (
+                <small key={issue}>{issue}</small>
+              ))}
+              <div className="readiness-actions">
+                {readiness?.status === 'setup_required' ? (
+                  <button type="button" onClick={() => void window.desktop?.openConfiguration()}>
+                    打开配置文件
+                  </button>
+                ) : null}
+                <button type="button" onClick={() => void retry()}>
+                  重新检测
+                </button>
+              </div>
+            </div>
+          ) : displayMessages.length === 0 ? (
+            <div className="empty-conversation">
+              <span className="empty-conversation-icon" aria-hidden="true">
+                <SparkleIcon size={22} weight="duotone" />
+              </span>
+              <strong>
+                {!voiceChannelConnected
+                  ? '语音已挂断'
+                  : session.isConnected
+                    ? '可以开始对话了'
+                    : '正在准备语音导游'}
+              </strong>
+              <small>
+                {!voiceChannelConnected
+                  ? '仍可使用文字输入，连接语音后恢复上次模式'
+                  : preferences.voiceInputMode === 'continuous'
+                    ? '点击开始后即可持续自然对话'
+                    : '按住按钮或空格键说话，松开后等待回答'}
+              </small>
+            </div>
+          ) : (
+            displayMessages.map((message) =>
+              message.role === 'user' ? (
+                <p key={message.id} className="bubble user">
+                  {message.text}
+                </p>
+              ) : (
+                <div key={message.id} className="guide-reply">
+                  <div className="bubble markdown-content">
+                    <MessageMarkdown onOpenLink={openSource}>{message.text}</MessageMarkdown>
+                  </div>
+                  {message.sources.map((source) => (
+                    <button
+                      key={source.url}
+                      className="source-card no-drag"
+                      onClick={() => void openSource(source.url)}
+                    >
+                      <span className="source-mark">源</span>
+                      <span>
+                        <b>{source.title}</b>
+                        <small>{source.siteName} · 原始网页</small>
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              ),
+            )
+          )}
+        </section>
+        {hasUnreadMessages ? (
+          <button
+            type="button"
+            className="new-message-button no-drag"
+            onClick={() => scrollToLatestMessage(preferences.interfaceMotion ? 'smooth' : 'auto')}
+          >
+            <span>新消息</span>
+            <CaretDownIcon size={12} weight="bold" aria-hidden="true" />
+          </button>
+        ) : null}
+      </div>
+      {textComposerOpen ? (
+        <form
+          id="text-composer"
+          className="text-composer no-drag"
+          aria-label="文字输入"
+          onSubmit={(event) => {
+            event.preventDefault();
+            void submitTextMessage();
+          }}
+        >
+          <div className="text-composer-row">
+            <textarea
+              ref={textInputRef}
+              aria-label="输入文字消息"
+              aria-describedby={textInputError ? 'text-input-error' : undefined}
+              disabled={textInputBlocked}
+              maxLength={maximumTextMessageLength}
+              placeholder={textInputBlocked ? '连接导游后即可输入文字' : '输入文字，Enter 发送'}
+              rows={1}
+              value={textDraft}
+              onChange={(event) => {
+                setTextDraft(event.target.value);
+                if (textInputError) setTextInputError('');
+              }}
+              onKeyDown={(event) => {
+                if (event.key === 'Escape') {
+                  setTextComposerOpen(false);
+                  return;
+                }
+                if (event.key !== 'Enter' || event.shiftKey || event.nativeEvent.isComposing) {
+                  return;
+                }
+                event.preventDefault();
+                void submitTextMessage();
+              }}
+            />
+            <button
+              type="submit"
+              className="text-send-button"
+              aria-label={isSendingText ? '正在发送文字消息' : '发送文字消息'}
+              disabled={textInputBlocked || isSendingText || !textDraft.trim()}
+              title="发送"
+            >
+              <PaperPlaneTiltIcon size={16} weight="bold" aria-hidden="true" />
+            </button>
+          </div>
+          {textInputError ? (
+            <small id="text-input-error" className="text-input-error" role="alert">
+              {textInputError}
+            </small>
+          ) : null}
+        </form>
+      ) : null}
+      <footer className="input-console no-drag">
+        <button
+          type="button"
+          className={`console-text-button ${textComposerOpen ? 'is-active' : ''}`}
+          aria-expanded={textComposerOpen}
+          aria-controls="text-composer"
+          onClick={() => {
+            setVoiceModeMenuOpen(false);
+            setTextComposerOpen((open) => !open);
+          }}
+          title={textComposerOpen ? '收起文字输入' : '展开文字输入'}
+        >
+          <KeyboardIcon
+            size={16}
+            weight={textComposerOpen ? 'fill' : 'regular'}
             aria-hidden="true"
           />
-          <span className="voice-level" aria-hidden="true">
-            {[0.72, 1, 0.84, 0.62, 0.46].map((weight, index) => (
-              <span
-                key={index}
-                className="voice-level-bar"
-                style={{ transform: `scaleY(${0.16 + microphoneLevel * weight * 0.84})` }}
+          <span>文字</span>
+          {textComposerOpen ? (
+            <CaretDownIcon size={12} weight="bold" aria-hidden="true" />
+          ) : (
+            <CaretUpIcon size={12} weight="bold" aria-hidden="true" />
+          )}
+        </button>
+
+        <div
+          className="voice-mode-control"
+          onBlur={(event) => {
+            if (!event.currentTarget.contains(event.relatedTarget)) setVoiceModeMenuOpen(false);
+          }}
+        >
+          {voiceModeMenuOpen ? (
+            <div className="voice-mode-menu" role="menu" aria-label="选择语音模式">
+              <button
+                type="button"
+                role="menuitemradio"
+                aria-checked={preferences.voiceInputMode === 'push_to_talk'}
+                onClick={() => void selectVoiceInputMode('push_to_talk')}
+              >
+                <MicrophoneIcon size={16} aria-hidden="true" />
+                <span>按住说话</span>
+                {preferences.voiceInputMode === 'push_to_talk' ? (
+                  <CheckIcon size={13} weight="bold" aria-hidden="true" />
+                ) : null}
+              </button>
+              <button
+                type="button"
+                role="menuitemradio"
+                aria-checked={preferences.voiceInputMode === 'continuous'}
+                onClick={() => void selectVoiceInputMode('continuous')}
+              >
+                <WaveformIcon size={16} aria-hidden="true" />
+                <span>连续对话</span>
+                {preferences.voiceInputMode === 'continuous' ? (
+                  <CheckIcon size={13} weight="bold" aria-hidden="true" />
+                ) : null}
+              </button>
+            </div>
+          ) : null}
+          <div className={`voice-mode-split voice-mode-split--${voiceButtonState}`}>
+            <button
+              className={`voice-button no-drag voice-button--${voiceButtonState}`}
+              type="button"
+              aria-label={
+                preferences.voiceInputMode === 'continuous'
+                  ? continuousActive
+                    ? '结束连续对话'
+                    : '开始连续对话'
+                  : microphone.enabled
+                    ? '正在聆听，松开结束'
+                    : '按住说话，或按住空格键说话'
+              }
+              aria-pressed={microphone.enabled}
+              disabled={interactionBlocked || voiceTransitioning}
+              title={
+                errorMessage ||
+                (!voiceChannelConnected
+                  ? '请先连接语音'
+                  : preferences.voiceInputMode === 'push_to_talk'
+                    ? '也可以按住空格键说话'
+                    : undefined)
+              }
+              onContextMenu={(event) => event.preventDefault()}
+              onPointerDown={(event) => {
+                if (preferences.voiceInputMode !== 'push_to_talk' || event.button !== 0) return;
+                event.currentTarget.setPointerCapture(event.pointerId);
+                beginPushToTalk();
+              }}
+              onPointerUp={(event) => {
+                if (preferences.voiceInputMode !== 'push_to_talk') return;
+                if (event.currentTarget.hasPointerCapture(event.pointerId))
+                  event.currentTarget.releasePointerCapture(event.pointerId);
+                void finishPushToTalk();
+              }}
+              onPointerCancel={() => {
+                if (preferences.voiceInputMode === 'push_to_talk') void finishPushToTalk(true);
+              }}
+              onClick={() => {
+                if (preferences.voiceInputMode !== 'continuous') return;
+                if (continuousActive) void stopContinuousConversation();
+                else void startContinuousConversation();
+              }}
+            >
+              <MicrophoneIcon
+                className="voice-microphone"
+                size={17}
+                weight={microphone.enabled ? 'bold' : 'regular'}
+                aria-hidden="true"
               />
-            ))}
-          </span>
-          <span className="voice-label">
-            {voiceButtonState === 'requesting'
-              ? agent.isPending
-                ? '等待导游'
-                : '正在切换'
-              : voiceButtonState === 'error'
-                ? '麦克风不可用'
-                : setupBlocked
-                  ? '重新连接'
-                  : preferences.voiceInputMode === 'continuous'
-                    ? continuousActive
-                      ? '结束连续对话'
-                      : '开始连续对话'
-                    : microphone.enabled
-                      ? '松开结束'
-                      : '按住说话'}
-          </span>
+              <span className="voice-level" aria-hidden="true">
+                {[0.72, 1, 0.84, 0.62, 0.46].map((weight, index) => (
+                  <span
+                    key={index}
+                    className="voice-level-bar"
+                    style={{ transform: `scaleY(${0.16 + microphoneLevel * weight * 0.84})` }}
+                  />
+                ))}
+              </span>
+              <span className="voice-label">
+                {voiceButtonState === 'requesting'
+                  ? agent.isPending
+                    ? '等待导游'
+                    : '正在切换'
+                  : voiceButtonState === 'error'
+                    ? '麦克风不可用'
+                    : preferences.voiceInputMode === 'continuous'
+                      ? continuousActive
+                        ? '结束连续对话'
+                        : '连续对话'
+                      : microphone.enabled
+                        ? '松开结束'
+                        : '按住说话'}
+              </span>
+            </button>
+            <button
+              type="button"
+              className="voice-mode-menu-toggle"
+              aria-label="切换语音模式"
+              aria-haspopup="menu"
+              aria-expanded={voiceModeMenuOpen}
+              disabled={voiceTransitioning}
+              onClick={() => setVoiceModeMenuOpen((open) => !open)}
+              title="切换语音模式"
+            >
+              <CaretDownIcon size={13} weight="bold" aria-hidden="true" />
+            </button>
+          </div>
+        </div>
+
+        <button
+          type="button"
+          className={`voice-channel-button ${voiceChannelActive ? 'is-connected' : 'is-disconnected'}`}
+          aria-label={voiceChannelActive ? '挂断语音连接' : '连接语音'}
+          aria-pressed={voiceChannelActive}
+          disabled={voiceTransitioning || starting}
+          onClick={() => void (voiceChannelActive ? hangUpVoiceChannel() : connectVoiceChannel())}
+          title={voiceChannelActive ? '挂断语音连接' : '连接语音'}
+        >
+          {voiceChannelActive ? (
+            <PhoneDisconnectIcon size={18} weight="bold" aria-hidden="true" />
+          ) : (
+            <PhoneCallIcon size={18} weight="bold" aria-hidden="true" />
+          )}
         </button>
       </footer>
     </main>

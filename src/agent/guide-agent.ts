@@ -78,6 +78,19 @@ export default defineAgent({
       setInputMode('push_to_talk');
       return 'ok';
     });
+    participant?.registerRpcMethod(guideVoiceRpc.suspendVoice, async () => {
+      session.input.setAudioEnabled(false);
+      session.output.setAudioEnabled(false);
+      session.clearUserTurn();
+      await session.interrupt({ force: true }).await;
+      return 'ok';
+    });
+    participant?.registerRpcMethod(guideVoiceRpc.resumeVoice, async () => {
+      await session.interrupt({ force: true }).await;
+      session.input.setAudioEnabled(false);
+      session.output.setAudioEnabled(true);
+      return 'ok';
+    });
     session.on(voice.AgentSessionEventTypes.FunctionToolsExecuted, (event) => {
       const message = extractGuideSources(event);
       if (!message || !participant) return;
