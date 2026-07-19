@@ -21,6 +21,7 @@ import { ensureLocalEnvironmentFile, reloadLocalEnvironment } from './environmen
 import { checkDesktopConfiguration } from './readiness.js';
 import { createDesktopSessionCredentials } from './session-token.js';
 import { getIpadDeviceMetrics, getSourceUserAgent } from './source-device-mode.js';
+import { isLiveWindow, releaseWindowReference } from './window-lifecycle.js';
 import {
   dockToNearestSide,
   getExpandedBounds,
@@ -85,7 +86,7 @@ const attachDevelopmentDiagnostics = (window: BrowserWindow) => {
 };
 
 const persistWindowState = () => {
-  if (!assistantWindow) return;
+  if (!isLiveWindow(assistantWindow)) return;
   const assistantBounds = assistantWindow.getBounds();
   const persistedAssistant = assistantMenuOpen
     ? {
@@ -98,7 +99,7 @@ const persistWindowState = () => {
         height: collapsedSize.height,
       }
     : assistantBounds;
-  const sourceBounds = sourceWindow?.getBounds();
+  const sourceBounds = isLiveWindow(sourceWindow) ? sourceWindow.getBounds() : undefined;
   const next: StoredWindowState = {
     assistant: persistedAssistant,
     ...(expandedAssistantBounds ? { expandedAssistant: expandedAssistantBounds } : {}),
@@ -155,10 +156,25 @@ const loadRenderer = async (window: BrowserWindow, hash: string) => {
 };
 
 const isAssistantSender = (sender: Electron.WebContents) =>
-  Boolean(assistantWindow && sender === assistantWindow.webContents);
+  Boolean(
+    isLiveWindow(assistantWindow) &&
+    !assistantWindow.webContents.isDestroyed() &&
+    sender === assistantWindow.webContents,
+  );
 
 const isUtilitySender = (sender: Electron.WebContents) =>
-  Boolean(utilityWindow && sender === utilityWindow.webContents);
+  Boolean(
+    isLiveWindow(utilityWindow) &&
+    !utilityWindow.webContents.isDestroyed() &&
+    sender === utilityWindow.webContents,
+  );
+
+const isSourceSender = (sender: Electron.WebContents) =>
+  Boolean(
+    isLiveWindow(sourceWindow) &&
+    !sourceWindow.webContents.isDestroyed() &&
+    sender === sourceWindow.webContents,
+  );
 
 const isSafeBrowserUrl = (value: string) => {
   try {
@@ -179,8 +195,9 @@ const isSafeInAppUrl = (value: string) => {
 };
 
 const setAssistantBounds = (bounds: Electron.Rectangle) => {
-  if (!assistantWindow) return;
-  const currentBounds = assistantWindow.getBounds();
+  if (!isLiveWindow(assistantWindow)) return;
+  const window = assistantWindow;
+  const currentBounds = window.getBounds();
   if (
     currentBounds.x === bounds.x &&
     currentBounds.y === bounds.y &&
@@ -189,25 +206,26 @@ const setAssistantBounds = (bounds: Electron.Rectangle) => {
   )
     return;
   isPositioningAssistant = true;
-  assistantWindow.setBounds(bounds);
+  window.setBounds(bounds);
   setTimeout(() => {
     isPositioningAssistant = false;
   }, 0);
 };
 
 const setAssistantMenuOpen = (open: boolean): MenuDirection => {
-  if (!assistantWindow || !assistantCollapsed || assistantMenuOpen === open) {
+  if (!isLiveWindow(assistantWindow) || !assistantCollapsed || assistantMenuOpen === open) {
     return assistantMenuDirection;
   }
 
-  const bounds = assistantWindow.getBounds();
+  const window = assistantWindow;
+  const bounds = window.getBounds();
   if (open) {
     const display = screen.getDisplayMatching(bounds);
     const extraHeight = collapsedMenuSize.height - collapsedSize.height;
     const spaceBelow = display.workArea.y + display.workArea.height - (bounds.y + bounds.height);
     const spaceAbove = bounds.y - display.workArea.y;
     assistantMenuDirection = spaceBelow >= extraHeight || spaceBelow >= spaceAbove ? 'down' : 'up';
-    assistantWindow.setMinimumSize(collapsedMenuSize.width, collapsedMenuSize.height);
+    window.setMinimumSize(collapsedMenuSize.width, collapsedMenuSize.height);
     setAssistantBounds({
       x: bounds.x,
       y: assistantMenuDirection === 'up' ? bounds.y - extraHeight : bounds.y,
@@ -219,7 +237,7 @@ const setAssistantMenuOpen = (open: boolean): MenuDirection => {
   }
 
   const extraHeight = bounds.height - collapsedSize.height;
-  assistantWindow.setMinimumSize(collapsedSize.width, collapsedSize.height);
+  window.setMinimumSize(collapsedSize.width, collapsedSize.height);
   setAssistantBounds({
     x: bounds.x,
     y: assistantMenuDirection === 'up' ? bounds.y + extraHeight : bounds.y,
@@ -231,7 +249,7 @@ const setAssistantMenuOpen = (open: boolean): MenuDirection => {
 };
 
 const positionUtilityWindow = (window: BrowserWindow) => {
-  if (!assistantWindow) return;
+  if (!isLiveWindow(assistantWindow) || !isLiveWindow(window)) return;
   const assistantBounds = assistantWindow.getBounds();
   const display = screen.getDisplayMatching(assistantBounds);
   const utilityBounds = window.getBounds();
@@ -245,10 +263,11 @@ const positionUtilityWindow = (window: BrowserWindow) => {
 };
 
 const openUtilityWindow = async (kind: UtilityKind) => {
-  if (!assistantWindow) return;
+  if (!isLiveWindow(assistantWindow)) return;
+  const parentWindow = assistantWindow;
   if (assistantMenuOpen) setAssistantMenuOpen(false);
 
-  if (utilityWindow) {
+  if (isLiveWindow(utilityWindow)) {
     if (utilityWindow.webContents.getURL().endsWith(`#${kind}`)) {
       utilityWindow.show();
       utilityWindow.focus();
@@ -258,8 +277,8 @@ const openUtilityWindow = async (kind: UtilityKind) => {
   }
 
   const size = kind === 'settings' ? settingsSize : quitDialogSize;
-  utilityWindow = new BrowserWindow({
-    parent: assistantWindow,
+  const window = new BrowserWindow({
+    parent: parentWindow,
     width: size.width,
     height: size.height,
     minWidth: size.width,
@@ -278,29 +297,34 @@ const openUtilityWindow = async (kind: UtilityKind) => {
       sandbox: true,
     },
   });
-  utilityWindow.setAlwaysOnTop(true, 'floating');
-  attachDevelopmentDiagnostics(utilityWindow);
-  utilityWindow.on('closed', () => {
-    utilityWindow = null;
+  utilityWindow = window;
+  window.setAlwaysOnTop(true, 'floating');
+  attachDevelopmentDiagnostics(window);
+  window.on('close', () => {
+    utilityWindow = releaseWindowReference(utilityWindow, window);
   });
-  utilityWindow.once('ready-to-show', () => {
-    if (!utilityWindow) return;
-    positionUtilityWindow(utilityWindow);
-    utilityWindow.show();
-    utilityWindow.focus();
+  window.on('closed', () => {
+    utilityWindow = releaseWindowReference(utilityWindow, window);
   });
-  await loadRenderer(utilityWindow, kind);
+  window.once('ready-to-show', () => {
+    if (!isLiveWindow(window)) return;
+    positionUtilityWindow(window);
+    window.show();
+    window.focus();
+  });
+  await loadRenderer(window, kind);
 };
 
 const setSourcePosition = (x: number, y: number) => {
-  if (!sourceWindow) return;
-  const bounds = sourceWindow.getBounds();
+  if (!isLiveWindow(sourceWindow)) return;
+  const window = sourceWindow;
+  const bounds = window.getBounds();
   if (bounds.x === x && bounds.y === y) return;
-  sourceWindow.setPosition(x, y);
+  window.setPosition(x, y);
 };
 
 const setSourceViewBounds = () => {
-  if (!sourceWindow || !sourceView) return;
+  if (!isLiveWindow(sourceWindow) || !sourceView || sourceView.webContents.isDestroyed()) return;
   const contentSize = sourceWindow.getContentSize();
   const width = contentSize[0] ?? 0;
   const height = contentSize[1] ?? 0;
@@ -348,28 +372,44 @@ const destroySourceView = () => {
   if (!sourceView) return;
   const view = sourceView;
   sourceView = null;
-  if (sourceViewAttached && sourceWindow) sourceWindow.contentView.removeChildView(view);
+  if (sourceViewAttached && isLiveWindow(sourceWindow)) {
+    sourceWindow.contentView.removeChildView(view);
+  }
   sourceViewAttached = false;
-  view.webContents.session.webRequest.onHeadersReceived(null);
-  view.webContents.close();
+  if (!view.webContents.isDestroyed()) {
+    view.webContents.session.webRequest.onHeadersReceived(null);
+    view.webContents.close();
+  }
 };
 
 const publishSourceWindowState = (state: SourceWindowState) => {
   sourceWindowState = state;
-  if (sourceWindow && !sourceWindow.webContents.isDestroyed()) {
+  if (isLiveWindow(sourceWindow) && !sourceWindow.webContents.isDestroyed()) {
     sourceWindow.webContents.send('source:state', state);
   }
 };
 
 const attachSourceView = (view: WebContentsView) => {
-  if (!sourceWindow || sourceView !== view || sourceViewAttached) return;
+  if (
+    !isLiveWindow(sourceWindow) ||
+    view.webContents.isDestroyed() ||
+    sourceView !== view ||
+    sourceViewAttached
+  )
+    return;
   sourceWindow.contentView.addChildView(view);
   sourceViewAttached = true;
   setSourceViewBounds();
 };
 
 const detachSourceView = (view: WebContentsView) => {
-  if (!sourceWindow || sourceView !== view || !sourceViewAttached) return;
+  if (
+    !isLiveWindow(sourceWindow) ||
+    view.webContents.isDestroyed() ||
+    sourceView !== view ||
+    !sourceViewAttached
+  )
+    return;
   sourceWindow.contentView.removeChildView(view);
   sourceViewAttached = false;
 };
@@ -408,7 +448,7 @@ const startSourceLoadTimer = (view: WebContentsView, currentUrl: string) => {
 };
 
 const dockAssistantWindow = (useCursorDisplay = true) => {
-  if (!assistantWindow) return;
+  if (!isLiveWindow(assistantWindow)) return;
   const bounds = assistantWindow.getBounds();
   const display = useCursorDisplay
     ? screen.getDisplayNearestPoint(screen.getCursorScreenPoint())
@@ -419,7 +459,7 @@ const dockAssistantWindow = (useCursorDisplay = true) => {
 };
 
 const constrainExpandedAssistant = (useCursorDisplay = true) => {
-  if (!assistantWindow) return;
+  if (!isLiveWindow(assistantWindow)) return;
   const bounds = assistantWindow.getBounds();
   const display = useCursorDisplay
     ? screen.getDisplayNearestPoint(screen.getCursorScreenPoint())
@@ -428,7 +468,7 @@ const constrainExpandedAssistant = (useCursorDisplay = true) => {
 };
 
 const positionSourceNextToAssistant = () => {
-  if (!assistantWindow || !sourceWindow) return;
+  if (!isLiveWindow(assistantWindow) || !isLiveWindow(sourceWindow)) return;
   const assistantBounds = assistantWindow.getBounds();
   const sourceBounds = sourceWindow.getBounds();
   const display = screen.getDisplayMatching(assistantBounds);
@@ -437,13 +477,13 @@ const positionSourceNextToAssistant = () => {
 };
 
 const handleAssistantMove = () => {
-  if (!assistantWindow || isPositioningAssistant) return;
+  if (!isLiveWindow(assistantWindow) || isPositioningAssistant) return;
   positionSourceNextToAssistant();
   schedulePersistWindowState();
 };
 
 const handleAssistantMoved = () => {
-  if (!assistantWindow || isPositioningAssistant) return;
+  if (!isLiveWindow(assistantWindow) || isPositioningAssistant) return;
   if (assistantCollapsed) dockAssistantWindow();
   else constrainExpandedAssistant();
   positionSourceNextToAssistant();
@@ -451,11 +491,11 @@ const handleAssistantMoved = () => {
 };
 
 const handleDisplayChange = () => {
-  if (assistantWindow) {
+  if (isLiveWindow(assistantWindow)) {
     if (assistantCollapsed) dockAssistantWindow(false);
     else constrainExpandedAssistant(false);
   }
-  if (!sourceWindow) return;
+  if (!isLiveWindow(sourceWindow)) return;
   positionSourceNextToAssistant();
 };
 
@@ -466,7 +506,7 @@ type SourceLoadOptions = {
 
 const showRemoteSource = async (source: GuideSource, options: SourceLoadOptions = {}) => {
   const initialUrl = options.url ?? source.url;
-  if (!sourceWindow || !sourcePreview || !isSafeInAppUrl(initialUrl)) return false;
+  if (!isLiveWindow(sourceWindow) || !sourcePreview || !isSafeInAppUrl(initialUrl)) return false;
   destroySourceView();
   selectedSource = source;
   let currentUrl = initialUrl;
@@ -605,7 +645,7 @@ const createAssistantWindow = async () => {
   assistantDockSide = storedWindowState.dockSide ?? 'right';
   expandedAssistantBounds = storedWindowState.expandedAssistant ?? null;
   const initialSize = assistantCollapsed ? collapsedSize : assistantSize;
-  assistantWindow = new BrowserWindow({
+  const window = new BrowserWindow({
     ...(savedBounds ? { x: savedBounds.x, y: savedBounds.y } : {}),
     width: assistantCollapsed ? collapsedSize.width : (savedBounds?.width ?? initialSize.width),
     height: assistantCollapsed ? collapsedSize.height : (savedBounds?.height ?? initialSize.height),
@@ -622,36 +662,43 @@ const createAssistantWindow = async () => {
       sandbox: true,
     },
   });
-  assistantWindow.setAlwaysOnTop(true, 'floating');
-  attachDevelopmentDiagnostics(assistantWindow);
-  assistantWindow.on('close', (event) => {
-    if (shutdownComplete) return;
+  assistantWindow = window;
+  window.setAlwaysOnTop(true, 'floating');
+  attachDevelopmentDiagnostics(window);
+  window.on('close', (event) => {
+    if (shutdownComplete) {
+      assistantWindow = releaseWindowReference(assistantWindow, window);
+      if (isLiveWindow(sourceWindow)) sourceWindow.close();
+      if (isLiveWindow(utilityWindow)) utilityWindow.close();
+      return;
+    }
     event.preventDefault();
     app.quit();
   });
-  assistantWindow.on('closed', () => {
-    assistantWindow = null;
-    sourceWindow?.close();
-    utilityWindow?.close();
+  window.on('closed', () => {
+    assistantWindow = releaseWindowReference(assistantWindow, window);
+    if (isLiveWindow(sourceWindow)) sourceWindow.close();
+    if (isLiveWindow(utilityWindow)) utilityWindow.close();
   });
-  assistantWindow.on('move', handleAssistantMove);
-  assistantWindow.on('moved', handleAssistantMoved);
-  assistantWindow.on('resize', () => {
+  window.on('move', handleAssistantMove);
+  window.on('moved', handleAssistantMoved);
+  window.on('resize', () => {
     if (!assistantCollapsed && !assistantMenuOpen)
-      expandedAssistantBounds = assistantWindow?.getBounds() ?? null;
+      expandedAssistantBounds = isLiveWindow(window) ? window.getBounds() : null;
     positionSourceNextToAssistant();
     schedulePersistWindowState();
   });
   if (assistantCollapsed) dockAssistantWindow(false);
   else constrainExpandedAssistant(false);
-  await loadRenderer(assistantWindow, 'assistant');
+  await loadRenderer(window, 'assistant');
 };
 
 const createSourceWindow = async () => {
-  if (!assistantWindow) return;
+  if (!isLiveWindow(assistantWindow)) return;
+  const parentWindow = assistantWindow;
   const savedSourceSize = storedWindowState.source;
-  sourceWindow = new BrowserWindow({
-    parent: assistantWindow,
+  const window = new BrowserWindow({
+    parent: parentWindow,
     width: savedSourceSize?.width ?? 440,
     height: savedSourceSize?.height ?? 600,
     minWidth: 280,
@@ -666,45 +713,53 @@ const createSourceWindow = async () => {
       sandbox: true,
     },
   });
-  sourceWindow.setAlwaysOnTop(true, 'floating');
-  attachDevelopmentDiagnostics(sourceWindow);
-  sourceWindow.on('resize', () => {
+  sourceWindow = window;
+  window.setAlwaysOnTop(true, 'floating');
+  attachDevelopmentDiagnostics(window);
+  window.on('resize', () => {
+    if (sourceWindow !== window || !isLiveWindow(window)) return;
     setSourceViewBounds();
     schedulePersistWindowState();
   });
-  sourceWindow.on('moved', positionSourceNextToAssistant);
-  sourceWindow.on('closed', () => {
+  window.on('moved', () => {
+    if (sourceWindow === window && isLiveWindow(window)) positionSourceNextToAssistant();
+  });
+  const releaseSourceWindow = () => {
+    if (sourceWindow !== window) return;
     destroySourceView();
-    sourceWindow = null;
+    sourceWindow = releaseWindowReference(sourceWindow, window);
     sourcePreview = null;
     selectedSource = null;
     sourceWindowState = null;
     sourceDeviceMode = 'ipad';
-  });
-  await loadRenderer(sourceWindow, 'source');
+  };
+  window.on('close', releaseSourceWindow);
+  window.on('closed', releaseSourceWindow);
+  await loadRenderer(window, 'source');
 };
 
 ipcMain.handle('assistant:set-collapsed', (event, collapsed: boolean) => {
-  if (!assistantWindow || !isAssistantSender(event.sender)) return;
-  const currentDisplay = screen.getDisplayMatching(assistantWindow.getBounds());
+  if (!isLiveWindow(assistantWindow) || !isAssistantSender(event.sender)) return;
+  const window = assistantWindow;
+  const currentDisplay = screen.getDisplayMatching(window.getBounds());
   if (assistantMenuOpen) setAssistantMenuOpen(false);
   assistantCollapsed = collapsed;
   if (collapsed) {
-    expandedAssistantBounds = assistantWindow.getBounds();
-    sourceWindow?.close();
-    assistantWindow.setMinimumSize(collapsedSize.width, collapsedSize.height);
-    assistantWindow.setSize(collapsedSize.width, collapsedSize.height);
+    expandedAssistantBounds = window.getBounds();
+    if (isLiveWindow(sourceWindow)) sourceWindow.close();
+    window.setMinimumSize(collapsedSize.width, collapsedSize.height);
+    window.setSize(collapsedSize.width, collapsedSize.height);
     dockAssistantWindow(false);
     schedulePersistWindowState();
     return;
   }
-  assistantWindow.setMinimumSize(240, 220);
+  window.setMinimumSize(240, 220);
   const restored = expandedAssistantBounds
     ? keepTitleBarVisible(expandedAssistantBounds, currentDisplay.workArea)
     : getExpandedBounds(
         currentDisplay.workArea,
         assistantDockSide,
-        assistantWindow.getBounds().y,
+        window.getBounds().y,
         assistantSize,
       );
   setAssistantBounds(restored);
@@ -781,7 +836,7 @@ ipcMain.handle('app:open-quit-dialog', async (event) => {
 });
 
 ipcMain.handle('utility:close', (event) => {
-  if (isUtilitySender(event.sender)) utilityWindow?.close();
+  if (isUtilitySender(event.sender) && isLiveWindow(utilityWindow)) utilityWindow.close();
 });
 
 ipcMain.handle('app:quit-confirmed', (event) => {
@@ -790,11 +845,19 @@ ipcMain.handle('app:quit-confirmed', (event) => {
 
 ipcMain.handle('assistant:set-always-on-top', (event, enabled: boolean) => {
   if (!isAssistantSender(event.sender) && !isUtilitySender(event.sender)) return;
-  assistantWindow?.setAlwaysOnTop(enabled, enabled ? 'floating' : 'normal');
+  if (isLiveWindow(assistantWindow)) {
+    assistantWindow.setAlwaysOnTop(enabled, enabled ? 'floating' : 'normal');
+  }
 });
 
 ipcMain.handle('source:open', async (event, url: string) => {
-  if (!assistantWindow || !isAssistantSender(event.sender) || !isSafeBrowserUrl(url)) return false;
+  if (
+    !isLiveWindow(assistantWindow) ||
+    !isAssistantSender(event.sender) ||
+    !isSafeBrowserUrl(url)
+  ) {
+    return false;
+  }
   if (!isSafeInAppUrl(url)) {
     await shell.openExternal(url);
     return true;
@@ -807,15 +870,15 @@ ipcMain.handle('source:open', async (event, url: string) => {
   sourceDeviceMode = 'ipad';
   sourcePreview = preview;
   selectedSource = preview.sources[0] ?? null;
-  if (!sourceWindow) await createSourceWindow();
-  if (!sourceWindow) return false;
+  if (!isLiveWindow(sourceWindow)) await createSourceWindow();
+  if (!isLiveWindow(sourceWindow)) return false;
   positionSourceNextToAssistant();
   sourceWindow.show();
   return selectedSource ? showRemoteSource(selectedSource) : false;
 });
 
 ipcMain.handle('source:open-preview', async (event, value: unknown) => {
-  if (!assistantWindow || !isAssistantSender(event.sender)) return false;
+  if (!isLiveWindow(assistantWindow) || !isAssistantSender(event.sender)) return false;
   const parsed = guideSourcesMessageSchema.safeParse(value);
   if (!parsed.success || parsed.data.sources.length === 0) return false;
   sourceDeviceMode = 'ipad';
@@ -823,8 +886,8 @@ ipcMain.handle('source:open-preview', async (event, value: unknown) => {
   selectedSource = null;
   destroySourceView();
   publishSourceWindowState({ mode: 'preview', preview: parsed.data });
-  if (!sourceWindow) await createSourceWindow();
-  if (!sourceWindow) return false;
+  if (!isLiveWindow(sourceWindow)) await createSourceWindow();
+  if (!isLiveWindow(sourceWindow)) return false;
   positionSourceNextToAssistant();
   sourceWindow.show();
   sourceWindow.focus();
@@ -833,11 +896,11 @@ ipcMain.handle('source:open-preview', async (event, value: unknown) => {
 });
 
 ipcMain.handle('source:get-state', (event) =>
-  event.sender === sourceWindow?.webContents ? sourceWindowState : null,
+  isSourceSender(event.sender) ? sourceWindowState : null,
 );
 
 ipcMain.handle('source:select', async (event, url: string) => {
-  if (event.sender !== sourceWindow?.webContents || !sourcePreview) return false;
+  if (!isSourceSender(event.sender) || !sourcePreview) return false;
   const source = sourcePreview.sources.find((candidate) => candidate.url === url);
   if (!source) return false;
   if (source.openMode === 'external') {
@@ -848,7 +911,7 @@ ipcMain.handle('source:select', async (event, url: string) => {
 });
 
 ipcMain.handle('source:back', (event) => {
-  if (event.sender !== sourceWindow?.webContents || !sourcePreview) return false;
+  if (!isSourceSender(event.sender) || !sourcePreview) return false;
   destroySourceView();
   selectedSource = null;
   publishSourceWindowState({ mode: 'preview', preview: sourcePreview });
@@ -856,7 +919,7 @@ ipcMain.handle('source:back', (event) => {
 });
 
 ipcMain.handle('source:retry', (event) => {
-  if (event.sender !== sourceWindow?.webContents || !selectedSource) return false;
+  if (!isSourceSender(event.sender) || !selectedSource) return false;
   const retryUrl =
     sourceWindowState && sourceWindowState.mode !== 'preview'
       ? sourceWindowState.currentUrl
@@ -866,7 +929,7 @@ ipcMain.handle('source:retry', (event) => {
 
 ipcMain.handle('source:set-device-mode', async (event, value: unknown) => {
   if (
-    event.sender !== sourceWindow?.webContents ||
+    !isSourceSender(event.sender) ||
     !selectedSource ||
     !sourceWindowState ||
     sourceWindowState.mode === 'preview'
@@ -908,7 +971,7 @@ ipcMain.handle('source:set-device-mode', async (event, value: unknown) => {
 });
 
 ipcMain.handle('source:open-current-external', async (event) => {
-  if (event.sender !== sourceWindow?.webContents || !selectedSource) return false;
+  if (!isSourceSender(event.sender) || !selectedSource) return false;
   const currentUrl =
     sourceWindowState && sourceWindowState.mode !== 'preview'
       ? sourceWindowState.currentUrl
@@ -919,12 +982,11 @@ ipcMain.handle('source:open-current-external', async (event) => {
 });
 
 ipcMain.handle('source:close', (event) => {
-  if (event.sender === sourceWindow?.webContents) sourceWindow.close();
+  if (isSourceSender(event.sender) && isLiveWindow(sourceWindow)) sourceWindow.close();
 });
 
 ipcMain.handle('external:open', (event, url: string) => {
-  const trustedSender =
-    event.sender === assistantWindow?.webContents || event.sender === sourceWindow?.webContents;
+  const trustedSender = isAssistantSender(event.sender) || isSourceSender(event.sender);
   return trustedSender && isSafeBrowserUrl(url) ? shell.openExternal(url) : undefined;
 });
 
@@ -962,5 +1024,5 @@ app.on('before-quit', (event) => {
   });
 });
 app.on('activate', () => {
-  if (!assistantWindow) void createAssistantWindow();
+  if (!isLiveWindow(assistantWindow)) void createAssistantWindow();
 });
