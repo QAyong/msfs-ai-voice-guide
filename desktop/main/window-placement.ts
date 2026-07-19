@@ -66,6 +66,7 @@ export const placeCompanionWindow = (
     rightSpace >= companionSize.width + gap || rightSpace >= leftSpace ? rightX : leftX;
 
   return {
+    ...companionSize,
     x: clamp(
       preferredX,
       workArea.x + margin,
@@ -76,6 +77,5 @@ export const placeCompanionWindow = (
       workArea.y + margin,
       workArea.y + workArea.height - companionSize.height - margin,
     ),
-    ...companionSize,
   };
 };

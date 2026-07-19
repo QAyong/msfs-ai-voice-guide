@@ -440,7 +440,11 @@ const positionSourceNextToAssistant = () => {
   const assistantBounds = assistantWindow.getBounds();
   const sourceBounds = sourceWindow.getBounds();
   const display = screen.getDisplayMatching(assistantBounds);
-  const placement = placeCompanionWindow(assistantBounds, sourceBounds, display.workArea);
+  const placement = placeCompanionWindow(
+    assistantBounds,
+    { width: sourceBounds.width, height: sourceBounds.height },
+    display.workArea,
+  );
   setSourcePosition(placement.x, placement.y);
 };
 
