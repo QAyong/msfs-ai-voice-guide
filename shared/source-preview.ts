@@ -1,14 +1,14 @@
 import { z } from 'zod';
 import { guideSourceSchema, guideSourcesMessageSchema } from './guide-events.js';
 
-export const sourceDeviceModeSchema = z.enum(['desktop', 'ipad']);
-export type SourceDeviceMode = z.infer<typeof sourceDeviceModeSchema>;
+export const sourceLayoutModeSchema = z.enum(['desktop', 'portrait']);
+export type SourceLayoutMode = z.infer<typeof sourceLayoutModeSchema>;
 
 const sourceSelectionSchema = z.object({
   preview: guideSourcesMessageSchema,
   source: guideSourceSchema,
   currentUrl: z.string().url().startsWith('https://'),
-  deviceMode: sourceDeviceModeSchema,
+  layoutMode: sourceLayoutModeSchema,
 });
 
 export const sourceWindowStateSchema = z.discriminatedUnion('mode', [

@@ -96,6 +96,48 @@ final result: passed
 
 ---
 
+# 来源网页布局切换设计检查
+
+**最后更新：** 2026-07-20
+
+本节取代上一节“来源网页设备切换设计检查”。控件只切换网页在现有竖版外框中的排版宽度，不再模拟 iPad、Safari、触控设备或设备像素比。
+
+## 对照证据
+
+- Source visual truth：`C:/Users/Lenovo/AppData/Local/Temp/codex-clipboard-a6109e66-2fa8-4047-8b17-458a63048af8.png`
+- Implementation screenshots：
+  - 竖版默认态：`C:/Users/Lenovo/.codex/visualizations/2026/07/19/019f7aad-a2fa-7020-a314-dc09d8568aed/source-layout-portrait.png`
+  - 电脑切换态：`C:/Users/Lenovo/.codex/visualizations/2026/07/19/019f7aad-a2fa-7020-a314-dc09d8568aed/source-layout-desktop.png`
+- 同图对照：`C:/Users/Lenovo/.codex/visualizations/2026/07/19/019f7aad-a2fa-7020-a314-dc09d8568aed/source-layout-comparison.png`
+- 运行数据：`C:/Users/Lenovo/.codex/visualizations/2026/07/19/019f7aad-a2fa-7020-a314-dc09d8568aed/source-layout-runtime.json`
+- Viewport：440×600，浅色主题，Electron 官方文档 HTTPS 页面。
+
+## 检查结果
+
+- 图标与顺序：继续使用项目既有 Phosphor `DesktopIcon` 与 `DeviceTabletIcon`，电脑在左、竖版在右；默认竖版为蓝色选中态，与参考图一致。
+- 视觉系统：保留 25×26px 按钮、54px 紧凑切换组、白色选中底和轻量阴影，并沿用应用浅色标题栏；没有引入新的图标、颜色或布局体系。
+- 文案与无障碍：按钮提示和无障碍名称改为“电脑布局”“竖版布局”，分组名称改为“网页预览布局”，避免让用户误认为是真实设备仿真。
+- 竖版排版：默认页面 `window.innerWidth` 为 768，整体缩放进现有竖版伴随窗。
+- 电脑排版：切换后同一页面 `window.innerWidth` 为 1280，外框尺寸和标题栏不变。
+- 原生滚轮：真实 `mouseWheel` 输入使 `scrollY` 从 0 增至 751.71，说明网页视图直接接收鼠标滚轮，不再经过触控模拟。
+- 状态连续性：竖版→电脑→竖版全程使用同一 `WebContentsView`（ID 3），URL、User-Agent 和 `scrollY` 均保持不变；没有页面重载或视图重建。
+- 稳定性：实现只调用 Electron 官方 `webContents.setZoomFactor`，不附加调试器，不调用 CDP 设备指标接口，不改写 User-Agent，也不启用触控模拟。
+
+## 自动验证
+
+- ESLint、主工程 TypeScript、Electron TypeScript：通过。
+- 布局预览专项测试：2 个测试文件、7 项测试通过。
+- 全量回归：24 个测试文件通过、1 个跳过；68 项通过、8 项跳过。
+- Electron/Vite 生产构建：主进程、Preload 和 Renderer 构建通过。
+
+## 设计结论
+
+参考图的双图标顺序、默认高亮和紧凑交互已保留；产品语义已从“iPad/电脑设备模拟”纠正为“竖版/电脑网页排版”。同图对照未发现 P0/P1/P2 视觉差异，真实运行验收未发现滚轮、状态保留或模式切换回归。
+
+final result: passed
+
+---
+
 # 来源网页设备切换设计检查
 
 **最后更新：** 2026-07-20
@@ -133,5 +175,15 @@ final result: passed
 - 设备预览专项测试：2 个测试文件、7 项测试通过。
 - 全量回归：23 个测试文件通过、1 个跳过；65 项通过、8 项跳过。
 - Electron/Vite 生产构建：主进程 25 个模块、Renderer 398 个模块构建通过。
+
+final result: passed
+
+---
+
+# 来源网页布局切换最终复核
+
+**最后更新：** 2026-07-20
+
+“来源网页设备切换设计检查”仅保留为历史实现记录；当前有效结论以“来源网页布局切换设计检查”为准。最新实现默认使用 768px 竖版排版，可切换至 1280px 电脑排版；外框不变、网页不重载、视图不重建，原生滚轮和滚动位置均已通过真实 Electron 窗口验证。
 
 final result: passed

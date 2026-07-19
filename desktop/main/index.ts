@@ -7,8 +7,8 @@ import {
   type GuideSourcesMessage,
 } from '../../shared/guide-events.js';
 import {
-  sourceDeviceModeSchema,
-  type SourceDeviceMode,
+  sourceLayoutModeSchema,
+  type SourceLayoutMode,
   type SourceWindowState,
 } from '../../shared/source-preview.js';
 import type {
@@ -20,7 +20,7 @@ import { EmbeddedAgentRuntime } from './agent-runtime.js';
 import { ensureLocalEnvironmentFile, reloadLocalEnvironment } from './environment.js';
 import { checkDesktopConfiguration } from './readiness.js';
 import { createDesktopSessionCredentials } from './session-token.js';
-import { getIpadDeviceMetrics, getSourceUserAgent } from './source-device-mode.js';
+import { getSourceLayoutZoom } from './source-layout-mode.js';
 import { isLiveWindow, releaseWindowReference } from './window-lifecycle.js';
 import {
   dockToNearestSide,
@@ -48,7 +48,7 @@ let sourceViewAttached = false;
 let sourcePreview: GuideSourcesMessage | null = null;
 let selectedSource: GuideSource | null = null;
 let sourceWindowState: SourceWindowState | null = null;
-let sourceDeviceMode: SourceDeviceMode = 'ipad';
+let sourceLayoutMode: SourceLayoutMode = 'portrait';
 let sourceLoadTimer: NodeJS.Timeout | null = null;
 let utilityWindow: BrowserWindow | null = null;
 let assistantCollapsed = false;
@@ -330,35 +330,12 @@ const setSourceViewBounds = () => {
   const height = contentSize[1] ?? 0;
   const viewHeight = Math.max(0, height - 48);
   sourceView.setBounds({ x: 0, y: 48, width, height: viewHeight });
-  if (sourceViewAttached) {
-    void applySourceDeviceMode(sourceView, width, viewHeight).catch((error: unknown) => {
-      if (!app.isPackaged) console.error('[source-device-mode]', error);
-    });
-  }
+  if (sourceViewAttached) applySourceLayoutMode(sourceView, width);
 };
 
-async function applySourceDeviceMode(view: WebContentsView, width: number, height: number) {
-  view.webContents.setUserAgent(
-    getSourceUserAgent(sourceDeviceMode, process.versions.chrome ?? '120.0.0.0'),
-  );
-  if (sourceDeviceMode === 'ipad') {
-    if (!view.webContents.debugger.isAttached()) view.webContents.debugger.attach('1.3');
-    await view.webContents.debugger.sendCommand(
-      'Emulation.setDeviceMetricsOverride',
-      getIpadDeviceMetrics(width, height),
-    );
-    await view.webContents.debugger.sendCommand('Emulation.setTouchEmulationEnabled', {
-      enabled: true,
-      maxTouchPoints: 5,
-    });
-    return;
-  }
-  if (!view.webContents.debugger.isAttached()) return;
-  await view.webContents.debugger.sendCommand('Emulation.setTouchEmulationEnabled', {
-    enabled: false,
-  });
-  await view.webContents.debugger.sendCommand('Emulation.clearDeviceMetricsOverride');
-  view.webContents.debugger.detach();
+function applySourceLayoutMode(view: WebContentsView, width: number) {
+  if (view.webContents.isDestroyed()) return;
+  view.webContents.setZoomFactor(getSourceLayoutZoom(sourceLayoutMode, width));
 }
 
 const clearSourceLoadTimer = () => {
@@ -428,7 +405,7 @@ const failSourceLoad = (
     preview: sourcePreview,
     source: selectedSource,
     currentUrl,
-    deviceMode: sourceDeviceMode,
+    layoutMode: sourceLayoutMode,
     error,
     message,
     ...(statusCode ? { statusCode } : {}),
@@ -501,7 +478,6 @@ const handleDisplayChange = () => {
 
 type SourceLoadOptions = {
   url?: string;
-  restoreScroll?: { x: number; y: number };
 };
 
 const showRemoteSource = async (source: GuideSource, options: SourceLoadOptions = {}) => {
@@ -510,7 +486,6 @@ const showRemoteSource = async (source: GuideSource, options: SourceLoadOptions 
   destroySourceView();
   selectedSource = source;
   let currentUrl = initialUrl;
-  let pendingScrollPosition = options.restoreScroll;
   let responseStatusCode: number | undefined;
   const view = new WebContentsView({
     webPreferences: {
@@ -522,16 +497,13 @@ const showRemoteSource = async (source: GuideSource, options: SourceLoadOptions 
   });
   sourceView = view;
   sourceViewAttached = false;
-  view.webContents.setUserAgent(
-    getSourceUserAgent(sourceDeviceMode, process.versions.chrome ?? '120.0.0.0'),
-  );
   setSourceViewBounds();
   publishSourceWindowState({
     mode: 'loading',
     preview: sourcePreview,
     source,
     currentUrl,
-    deviceMode: sourceDeviceMode,
+    layoutMode: sourceLayoutMode,
   });
   startSourceLoadTimer(view, currentUrl);
   view.webContents.setWindowOpenHandler((details) => {
@@ -572,7 +544,7 @@ const showRemoteSource = async (source: GuideSource, options: SourceLoadOptions 
       preview: sourcePreview!,
       source,
       currentUrl,
-      deviceMode: sourceDeviceMode,
+      layoutMode: sourceLayoutMode,
     });
     startSourceLoadTimer(view, currentUrl);
   });
@@ -595,15 +567,8 @@ const showRemoteSource = async (source: GuideSource, options: SourceLoadOptions 
       preview: sourcePreview,
       source,
       currentUrl,
-      deviceMode: sourceDeviceMode,
+      layoutMode: sourceLayoutMode,
     });
-    if (pendingScrollPosition) {
-      const { x, y } = pendingScrollPosition;
-      pendingScrollPosition = undefined;
-      void view.webContents
-        .executeJavaScript(`window.scrollTo(${Math.round(x)}, ${Math.round(y)})`)
-        .catch(() => undefined);
-    }
   });
   view.webContents.on(
     'did-fail-load',
@@ -731,7 +696,7 @@ const createSourceWindow = async () => {
     sourcePreview = null;
     selectedSource = null;
     sourceWindowState = null;
-    sourceDeviceMode = 'ipad';
+    sourceLayoutMode = 'portrait';
   };
   window.on('close', releaseSourceWindow);
   window.on('closed', releaseSourceWindow);
@@ -867,7 +832,7 @@ ipcMain.handle('source:open', async (event, url: string) => {
     type: 'guide.sources',
     sources: [{ rank: 1, title: hostname, siteName: hostname, url, openMode: 'in_app' }],
   });
-  sourceDeviceMode = 'ipad';
+  sourceLayoutMode = 'portrait';
   sourcePreview = preview;
   selectedSource = preview.sources[0] ?? null;
   if (!isLiveWindow(sourceWindow)) await createSourceWindow();
@@ -881,7 +846,7 @@ ipcMain.handle('source:open-preview', async (event, value: unknown) => {
   if (!isLiveWindow(assistantWindow) || !isAssistantSender(event.sender)) return false;
   const parsed = guideSourcesMessageSchema.safeParse(value);
   if (!parsed.success || parsed.data.sources.length === 0) return false;
-  sourceDeviceMode = 'ipad';
+  sourceLayoutMode = 'portrait';
   sourcePreview = parsed.data;
   selectedSource = null;
   destroySourceView();
@@ -927,7 +892,7 @@ ipcMain.handle('source:retry', (event) => {
   return showRemoteSource(selectedSource, { url: retryUrl });
 });
 
-ipcMain.handle('source:set-device-mode', async (event, value: unknown) => {
+ipcMain.handle('source:set-layout-mode', (event, value: unknown) => {
   if (
     !isSourceSender(event.sender) ||
     !selectedSource ||
@@ -936,38 +901,13 @@ ipcMain.handle('source:set-device-mode', async (event, value: unknown) => {
   ) {
     return false;
   }
-  const parsed = sourceDeviceModeSchema.safeParse(value);
-  if (!parsed.success || parsed.data === sourceDeviceMode) return parsed.success;
+  const parsed = sourceLayoutModeSchema.safeParse(value);
+  if (!parsed.success || parsed.data === sourceLayoutMode) return parsed.success;
 
-  const currentUrl = sourceWindowState.currentUrl;
-  let restoreScroll: { x: number; y: number } | undefined;
-  if (sourceWindowState.mode === 'ready' && sourceView) {
-    try {
-      const position: unknown = await sourceView.webContents.executeJavaScript(
-        '({ x: window.scrollX, y: window.scrollY })',
-      );
-      if (
-        position &&
-        typeof position === 'object' &&
-        'x' in position &&
-        'y' in position &&
-        typeof position.x === 'number' &&
-        typeof position.y === 'number' &&
-        Number.isFinite(position.x) &&
-        Number.isFinite(position.y)
-      ) {
-        restoreScroll = { x: position.x, y: position.y };
-      }
-    } catch {
-      // Scroll restoration is a convenience; device switching must still continue.
-    }
-  }
-
-  sourceDeviceMode = parsed.data;
-  return showRemoteSource(selectedSource, {
-    url: currentUrl,
-    ...(restoreScroll ? { restoreScroll } : {}),
-  });
+  sourceLayoutMode = parsed.data;
+  publishSourceWindowState({ ...sourceWindowState, layoutMode: sourceLayoutMode });
+  setSourceViewBounds();
+  return true;
 });
 
 ipcMain.handle('source:open-current-external', async (event) => {
