@@ -1,9 +1,13 @@
 export type SearchSource = {
+  rank: number;
   title: string;
   siteName: string;
   url: string;
+  openMode: 'in_app' | 'external';
   summary?: string;
   content?: string;
+  iconUrl?: string;
+  thumbnailUrl?: string;
   publishTime?: string;
 };
 

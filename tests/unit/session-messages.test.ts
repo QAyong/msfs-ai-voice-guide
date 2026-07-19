@@ -1,7 +1,10 @@
 import type { ReceivedMessage } from '@livekit/components-react';
 import type { Participant } from 'livekit-client';
 import { describe, expect, it } from 'vitest';
-import { createDisplayMessages } from '../../desktop/renderer/src/session-messages.js';
+import {
+  createDisplayMessages,
+  shouldAttachSourcePreview,
+} from '../../desktop/renderer/src/session-messages.js';
 
 const participant = (identity: string) => ({ identity }) as Participant;
 
@@ -35,19 +38,19 @@ describe('official session message display', () => {
       {
         id: 'typed-user',
         role: 'user',
-        sources: [],
+        sourcePreview: null,
         text: '苏黎世湖有多深？',
       },
       {
         id: 'voice-user',
         role: 'user',
-        sources: [],
+        sourcePreview: null,
         text: '再介绍一下周围的山。',
       },
       {
         id: 'agent-answer',
         role: 'assistant',
-        sources: [],
+        sourcePreview: null,
         text: '苏黎世湖最深处约为一百四十米。',
       },
     ]);
@@ -71,27 +74,30 @@ describe('official session message display', () => {
       },
     ];
     const source = {
+      rank: 1,
       siteName: '示例天气站',
       title: '今日天气',
       url: 'https://example.com/weather',
+      openMode: 'in_app' as const,
     };
+    const preview = { type: 'guide.sources' as const, query: '今日天气', sources: [source] };
 
     expect(
       createDisplayMessages(messages, 'desktop-user', {
-        'user-message': [source],
-        'agent-message': [source],
+        'user-message': preview,
+        'agent-message': preview,
       }),
     ).toEqual([
       {
         id: 'user-message',
         role: 'user',
-        sources: [],
+        sourcePreview: null,
         text: '查询今天的天气',
       },
       {
         id: 'agent-message',
         role: 'assistant',
-        sources: [source],
+        sourcePreview: preview,
         text: '今天有小雨。',
       },
     ]);
@@ -118,5 +124,38 @@ describe('official session message display', () => {
     expect(
       createDisplayMessages(messages, 'desktop-user', {}, 3).map((message) => message.id),
     ).toEqual(['message-7', 'message-8', 'message-9']);
+  });
+
+  it('attaches a preview only to the answer created or continued after the tool call', () => {
+    const pending = {
+      anchorMessageId: 'acknowledgement',
+      anchorMessageText: '我来查一下。',
+      receivedDuringTurn: true,
+    };
+
+    expect(
+      shouldAttachSourcePreview(
+        pending,
+        { id: 'acknowledgement', text: '我来查一下。' },
+        'thinking',
+      ),
+    ).toBe(false);
+    expect(
+      shouldAttachSourcePreview(pending, { id: 'answer', text: '查询结果如下。' }, 'speaking'),
+    ).toBe(true);
+    expect(
+      shouldAttachSourcePreview(
+        pending,
+        { id: 'acknowledgement', text: '我来查一下。查询结果如下。' },
+        'speaking',
+      ),
+    ).toBe(true);
+    expect(
+      shouldAttachSourcePreview(
+        pending,
+        { id: 'acknowledgement', text: '我来查一下。' },
+        'listening',
+      ),
+    ).toBe(true);
   });
 });

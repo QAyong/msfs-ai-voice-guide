@@ -1,18 +1,27 @@
 import type { voice } from '@livekit/agents';
 import { z } from 'zod';
 import {
-  guideSourceSchema,
   guideSourcesMessageSchema,
+  type GuideSource,
   type GuideSourcesMessage,
 } from '../../shared/guide-events.js';
 
 const searchResultSchema = z.object({
   status: z.literal('ok'),
-  sources: z.array(
-    guideSourceSchema.extend({
-      content: z.string().optional(),
-    }),
-  ),
+  requestId: z.string().trim().min(1).optional(),
+  sources: z.array(z.unknown()),
+});
+
+const rawSourceSchema = z.object({
+  rank: z.number().int().nonnegative().optional(),
+  title: z.string().optional(),
+  siteName: z.string().optional(),
+  url: z.string(),
+  openMode: z.enum(['in_app', 'external']).optional(),
+  summary: z.string().optional(),
+  iconUrl: z.string().optional(),
+  thumbnailUrl: z.string().optional(),
+  publishTime: z.string().optional(),
 });
 
 const searchArgumentsSchema = z.object({ query: z.string().trim().min(1).optional() });
@@ -29,25 +38,22 @@ export function extractGuideSources(
       const searchResult = searchResultSchema.safeParse(JSON.parse(output.output));
       if (!searchResult.success) continue;
       const args = searchArgumentsSchema.safeParse(JSON.parse(call.args));
-      const uniqueSources = Array.from(
-        new Map(
-          searchResult.data.sources.map((source) => [
-            source.url,
-            {
-              title: source.title,
-              siteName: source.siteName,
-              url: source.url,
-              ...(source.summary ? { summary: source.summary } : {}),
-              ...(source.publishTime ? { publishTime: source.publishTime } : {}),
-            },
-          ]),
-        ).values(),
-      ).slice(0, 8);
+      const seenUrls = new Set<string>();
+      const uniqueSources = searchResult.data.sources
+        .map((source, sourceIndex) => normalizeGuideSource(source, sourceIndex))
+        .filter((source): source is GuideSource => {
+          if (!source || seenUrls.has(source.url)) return false;
+          seenUrls.add(source.url);
+          return true;
+        })
+        .sort((left, right) => left.rank - right.rank)
+        .slice(0, 10);
       if (uniqueSources.length === 0) continue;
 
       return guideSourcesMessageSchema.parse({
         type: 'guide.sources',
         ...(args.success && args.data.query ? { query: args.data.query } : {}),
+        ...(searchResult.data.requestId ? { requestId: searchResult.data.requestId } : {}),
         sources: uniqueSources,
       });
     } catch {
@@ -55,4 +61,54 @@ export function extractGuideSources(
     }
   }
   return null;
+}
+
+function normalizeGuideSource(value: unknown, index: number): GuideSource | null {
+  const parsed = rawSourceSchema.safeParse(value);
+  if (!parsed.success) return null;
+  try {
+    const url = new URL(parsed.data.url);
+    if (!['http:', 'https:'].includes(url.protocol) || !url.hostname) return null;
+    const hostname = url.hostname;
+    const title = cleanLabel(parsed.data.title) ?? hostname;
+    const siteName = cleanLabel(parsed.data.siteName) ?? hostname;
+    const openMode = url.protocol === 'https:' ? 'in_app' : 'external';
+    const candidate = {
+      rank: parsed.data.rank ?? index + 1,
+      title,
+      siteName,
+      url: url.toString(),
+      openMode,
+      ...(cleanLabel(parsed.data.summary) ? { summary: cleanLabel(parsed.data.summary) } : {}),
+      ...(safeHttpsUrl(parsed.data.iconUrl) ? { iconUrl: safeHttpsUrl(parsed.data.iconUrl) } : {}),
+      ...(safeHttpsUrl(parsed.data.thumbnailUrl)
+        ? { thumbnailUrl: safeHttpsUrl(parsed.data.thumbnailUrl) }
+        : {}),
+      ...(cleanLabel(parsed.data.publishTime)
+        ? { publishTime: cleanLabel(parsed.data.publishTime) }
+        : {}),
+    };
+    const validated = guideSourcesMessageSchema.shape.sources.element.safeParse(candidate);
+    return validated.success ? validated.data : null;
+  } catch {
+    return null;
+  }
+}
+
+function cleanLabel(value: string | undefined): string | undefined {
+  const cleaned = value
+    ?.replace(/<[^>]*>/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return cleaned || undefined;
+}
+
+function safeHttpsUrl(value: string | undefined): string | undefined {
+  if (!value) return undefined;
+  try {
+    const url = new URL(value);
+    return url.protocol === 'https:' && url.hostname ? url.toString() : undefined;
+  } catch {
+    return undefined;
+  }
 }

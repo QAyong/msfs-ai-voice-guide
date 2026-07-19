@@ -49,16 +49,88 @@ describe('SearchService', () => {
       requestId: 'request-123',
       sources: [
         {
+          rank: 1,
           title: '故宫博物院',
           siteName: '故宫博物院',
           url: 'https://www.dpm.org.cn/about',
+          openMode: 'in_app',
           summary: '北京 故宫 历史',
         },
         {
+          rank: 3,
           title: '故宫文物藏品',
           siteName: '故宫博物院',
           url: 'https://www.dpm.org.cn/collection',
+          openMode: 'in_app',
           content: '北京故宫的历史文物藏品。',
+        },
+      ],
+    });
+  });
+
+  it('maps GlobalSearch documents into the single preview contract and keeps mixed protocols', async () => {
+    const service = new SearchService(serviceConfig, async () =>
+      Response.json({
+        ResponseMetadata: { RequestId: 'global-1' },
+        Result: {
+          GlobalSearchResp: {
+            TotalDocCount: 20,
+            Documents: [
+              {
+                Rank: 7,
+                Url: 'https://travel.example.test/zurich',
+                Title: '苏黎世湖旅行指南',
+                HostInfo: {
+                  Hostname: '',
+                  IconUrl: 'https://travel.example.test/favicon.ico',
+                },
+                DocumentInfo: { PublishTime: '2026-07-15' },
+                Snippets: [
+                  { Text: '<b>苏黎世湖</b>沿岸景点与历史。' },
+                  { Image: { Url: 'https://travel.example.test/lake.jpg' } },
+                ],
+              },
+              {
+                Rank: 8,
+                Url: 'http://legacy.example.test/zurich',
+                Title: '苏黎世湖旧站资料',
+                HostInfo: { Hostname: '旧站' },
+                Snippets: [{ Text: '苏黎世湖历史资料。' }],
+              },
+              {
+                Rank: 9,
+                Url: 'javascript:alert(1)',
+                Title: '坏来源',
+                Snippets: [{ Text: '坏项' }],
+              },
+            ],
+          },
+        },
+      }),
+    );
+
+    await expect(service.search({ query: '苏黎世湖历史' })).resolves.toEqual({
+      status: 'ok',
+      requestId: 'global-1',
+      sources: [
+        {
+          rank: 7,
+          title: '苏黎世湖旅行指南',
+          siteName: 'travel.example.test',
+          url: 'https://travel.example.test/zurich',
+          openMode: 'in_app',
+          summary: '苏黎世湖 沿岸景点与历史。',
+          iconUrl: 'https://travel.example.test/favicon.ico',
+          thumbnailUrl: 'https://travel.example.test/lake.jpg',
+          publishTime: '2026-07-15',
+        },
+        {
+          rank: 8,
+          title: '苏黎世湖旧站资料',
+          siteName: '旧站',
+          url: 'http://legacy.example.test/zurich',
+          openMode: 'external',
+          summary: '苏黎世湖历史资料。',
         },
       ],
     });

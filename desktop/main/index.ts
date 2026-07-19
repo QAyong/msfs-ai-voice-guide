@@ -1,6 +1,12 @@
 import { app, BrowserWindow, ipcMain, screen, shell, WebContentsView } from 'electron';
 import { join } from 'node:path';
 import type { AppConfig } from '../../src/config/schema.js';
+import {
+  guideSourcesMessageSchema,
+  type GuideSource,
+  type GuideSourcesMessage,
+} from '../../shared/guide-events.js';
+import type { SourceWindowState } from '../../shared/source-preview.js';
 import type {
   DesktopReadiness,
   DesktopSessionResult,
@@ -24,6 +30,7 @@ const collapsedSize = { width: 64, height: 72 };
 const collapsedMenuSize = { width: 64, height: 174 };
 const settingsSize = { width: 372, height: 536 };
 const quitDialogSize = { width: 328, height: 224 };
+const sourceLoadTimeoutMs = 15_000;
 
 type MenuDirection = 'up' | 'down';
 type UtilityKind = 'settings' | 'quit';
@@ -31,6 +38,11 @@ type UtilityKind = 'settings' | 'quit';
 let assistantWindow: BrowserWindow | null = null;
 let sourceWindow: BrowserWindow | null = null;
 let sourceView: WebContentsView | null = null;
+let sourceViewAttached = false;
+let sourcePreview: GuideSourcesMessage | null = null;
+let selectedSource: GuideSource | null = null;
+let sourceWindowState: SourceWindowState | null = null;
+let sourceLoadTimer: NodeJS.Timeout | null = null;
 let utilityWindow: BrowserWindow | null = null;
 let assistantCollapsed = false;
 let assistantMenuOpen = false;
@@ -142,7 +154,16 @@ const isAssistantSender = (sender: Electron.WebContents) =>
 const isUtilitySender = (sender: Electron.WebContents) =>
   Boolean(utilityWindow && sender === utilityWindow.webContents);
 
-const isSafeExternalUrl = (value: string) => {
+const isSafeBrowserUrl = (value: string) => {
+  try {
+    const url = new URL(value);
+    return ['http:', 'https:'].includes(url.protocol) && Boolean(url.hostname);
+  } catch {
+    return false;
+  }
+};
+
+const isSafeInAppUrl = (value: string) => {
   try {
     const url = new URL(value);
     return url.protocol === 'https:' && Boolean(url.hostname);
@@ -280,10 +301,73 @@ const setSourceViewBounds = () => {
   sourceView.setBounds({ x: 0, y: 48, width, height: Math.max(0, height - 48) });
 };
 
+const clearSourceLoadTimer = () => {
+  if (!sourceLoadTimer) return;
+  clearTimeout(sourceLoadTimer);
+  sourceLoadTimer = null;
+};
+
 const destroySourceView = () => {
+  clearSourceLoadTimer();
   if (!sourceView) return;
-  sourceView.webContents.close();
+  const view = sourceView;
   sourceView = null;
+  if (sourceViewAttached && sourceWindow) sourceWindow.contentView.removeChildView(view);
+  sourceViewAttached = false;
+  view.webContents.session.webRequest.onHeadersReceived(null);
+  view.webContents.close();
+};
+
+const publishSourceWindowState = (state: SourceWindowState) => {
+  sourceWindowState = state;
+  if (sourceWindow && !sourceWindow.webContents.isDestroyed()) {
+    sourceWindow.webContents.send('source:state', state);
+  }
+};
+
+const attachSourceView = (view: WebContentsView) => {
+  if (!sourceWindow || sourceView !== view || sourceViewAttached) return;
+  sourceWindow.contentView.addChildView(view);
+  sourceViewAttached = true;
+  setSourceViewBounds();
+};
+
+const detachSourceView = (view: WebContentsView) => {
+  if (!sourceWindow || sourceView !== view || !sourceViewAttached) return;
+  sourceWindow.contentView.removeChildView(view);
+  sourceViewAttached = false;
+};
+
+const failSourceLoad = (
+  view: WebContentsView,
+  currentUrl: string,
+  error: Extract<SourceWindowState, { mode: 'error' }>['error'],
+  message: string,
+  statusCode?: number,
+) => {
+  if (!sourcePreview || !selectedSource || sourceView !== view) return;
+  destroySourceView();
+  publishSourceWindowState({
+    mode: 'error',
+    preview: sourcePreview,
+    source: selectedSource,
+    currentUrl,
+    error,
+    message,
+    ...(statusCode ? { statusCode } : {}),
+  });
+};
+
+const startSourceLoadTimer = (view: WebContentsView, currentUrl: string) => {
+  clearSourceLoadTimer();
+  sourceLoadTimer = setTimeout(() => {
+    failSourceLoad(
+      view,
+      currentUrl,
+      'timeout',
+      '网页在 15 秒内没有完成加载，请重试或改用系统浏览器打开。',
+    );
+  }, sourceLoadTimeoutMs);
 };
 
 const dockAssistantWindow = (useCursorDisplay = true) => {
@@ -338,29 +422,123 @@ const handleDisplayChange = () => {
   positionSourceNextToAssistant();
 };
 
-const showRemoteSource = async (url: string) => {
-  if (!sourceWindow || !isSafeExternalUrl(url)) return;
+const showRemoteSource = async (source: GuideSource) => {
+  if (!sourceWindow || !sourcePreview || !isSafeInAppUrl(source.url)) return false;
   destroySourceView();
-  sourceView = new WebContentsView({
+  selectedSource = source;
+  let currentUrl = source.url;
+  let responseStatusCode: number | undefined;
+  const view = new WebContentsView({
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,
+      partition: 'persist:source-preview',
       sandbox: true,
     },
   });
-  sourceWindow.contentView.addChildView(sourceView);
-  sourceView.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
-  sourceView.webContents.session.setPermissionRequestHandler(
-    (_webContents, _permission, callback) => callback(false),
+  sourceView = view;
+  sourceViewAttached = false;
+  publishSourceWindowState({
+    mode: 'loading',
+    preview: sourcePreview,
+    source,
+    currentUrl,
+  });
+  startSourceLoadTimer(view, currentUrl);
+  view.webContents.setWindowOpenHandler((details) => {
+    if (isSafeBrowserUrl(details.url)) void shell.openExternal(details.url);
+    return { action: 'deny' };
+  });
+  view.webContents.session.setPermissionRequestHandler((_webContents, _permission, callback) =>
+    callback(false),
   );
-  sourceView.webContents.on('will-navigate', (event, targetUrl) => {
-    if (!isSafeExternalUrl(targetUrl)) event.preventDefault();
+  view.webContents.session.webRequest.onHeadersReceived((details, callback) => {
+    if (details.webContentsId === view.webContents.id && details.resourceType === 'mainFrame') {
+      responseStatusCode = details.statusCode;
+      currentUrl = details.url;
+    }
+    callback({});
   });
-  sourceView.webContents.on('will-redirect', (event, targetUrl) => {
-    if (!isSafeExternalUrl(targetUrl)) event.preventDefault();
+  view.webContents.on('will-navigate', (event, targetUrl) => {
+    if (isSafeInAppUrl(targetUrl)) return;
+    event.preventDefault();
+    queueMicrotask(() =>
+      failSourceLoad(view, currentUrl, 'blocked', '该页面尝试跳转到不受支持的地址。'),
+    );
   });
-  setSourceViewBounds();
-  await sourceView.webContents.loadURL(url);
+  view.webContents.on('will-redirect', (event, targetUrl) => {
+    if (isSafeInAppUrl(targetUrl)) return;
+    event.preventDefault();
+    queueMicrotask(() =>
+      failSourceLoad(view, currentUrl, 'blocked', '该页面尝试跳转到不安全的 HTTP 地址。'),
+    );
+  });
+  view.webContents.on('did-start-navigation', (_event, targetUrl, isInPlace, isMainFrame) => {
+    if (!isMainFrame || isInPlace || !isSafeInAppUrl(targetUrl) || sourceView !== view) return;
+    currentUrl = targetUrl;
+    responseStatusCode = undefined;
+    detachSourceView(view);
+    publishSourceWindowState({
+      mode: 'loading',
+      preview: sourcePreview!,
+      source,
+      currentUrl,
+    });
+    startSourceLoadTimer(view, currentUrl);
+  });
+  view.webContents.on('did-finish-load', () => {
+    if (!sourcePreview || sourceView !== view) return;
+    if (responseStatusCode && responseStatusCode >= 400) {
+      failSourceLoad(
+        view,
+        currentUrl,
+        'http',
+        `网站返回了 HTTP ${responseStatusCode}，页面无法在应用内显示。`,
+        responseStatusCode,
+      );
+      return;
+    }
+    clearSourceLoadTimer();
+    attachSourceView(view);
+    publishSourceWindowState({
+      mode: 'ready',
+      preview: sourcePreview,
+      source,
+      currentUrl,
+    });
+  });
+  view.webContents.on(
+    'did-fail-load',
+    (_event, errorCode, errorDescription, validatedUrl, isMainFrame) => {
+      if (!isMainFrame || sourceView !== view) return;
+      failSourceLoad(
+        view,
+        isSafeInAppUrl(validatedUrl) ? validatedUrl : currentUrl,
+        responseStatusCode && responseStatusCode >= 400 ? 'http' : 'network',
+        responseStatusCode && responseStatusCode >= 400
+          ? `网站返回了 HTTP ${responseStatusCode}，页面无法在应用内显示。`
+          : `网络加载失败（${errorCode}：${errorDescription}）。`,
+        responseStatusCode && responseStatusCode >= 400 ? responseStatusCode : undefined,
+      );
+    },
+  );
+  view.webContents.on('render-process-gone', () => {
+    failSourceLoad(view, currentUrl, 'renderer', '网页渲染进程意外退出，请重试。');
+  });
+  try {
+    await view.webContents.loadURL(source.url);
+    return sourceView === view;
+  } catch (error) {
+    if (sourceView === view) {
+      failSourceLoad(
+        view,
+        currentUrl,
+        'network',
+        error instanceof Error ? `网络加载失败：${error.message}` : '网络加载失败。',
+      );
+    }
+    return false;
+  }
 };
 
 const createAssistantWindow = async () => {
@@ -440,6 +618,9 @@ const createSourceWindow = async () => {
   sourceWindow.on('closed', () => {
     destroySourceView();
     sourceWindow = null;
+    sourcePreview = null;
+    selectedSource = null;
+    sourceWindowState = null;
   });
   await loadRenderer(sourceWindow, 'source');
 };
@@ -554,12 +735,78 @@ ipcMain.handle('assistant:set-always-on-top', (event, enabled: boolean) => {
 });
 
 ipcMain.handle('source:open', async (event, url: string) => {
-  if (!assistantWindow || !isAssistantSender(event.sender) || !isSafeExternalUrl(url)) return false;
+  if (!assistantWindow || !isAssistantSender(event.sender) || !isSafeBrowserUrl(url)) return false;
+  if (!isSafeInAppUrl(url)) {
+    await shell.openExternal(url);
+    return true;
+  }
+  const hostname = new URL(url).hostname;
+  const preview = guideSourcesMessageSchema.parse({
+    type: 'guide.sources',
+    sources: [{ rank: 1, title: hostname, siteName: hostname, url, openMode: 'in_app' }],
+  });
+  sourcePreview = preview;
+  selectedSource = preview.sources[0] ?? null;
   if (!sourceWindow) await createSourceWindow();
   if (!sourceWindow) return false;
   positionSourceNextToAssistant();
   sourceWindow.show();
-  await showRemoteSource(url);
+  return selectedSource ? showRemoteSource(selectedSource) : false;
+});
+
+ipcMain.handle('source:open-preview', async (event, value: unknown) => {
+  if (!assistantWindow || !isAssistantSender(event.sender)) return false;
+  const parsed = guideSourcesMessageSchema.safeParse(value);
+  if (!parsed.success || parsed.data.sources.length === 0) return false;
+  sourcePreview = parsed.data;
+  selectedSource = null;
+  destroySourceView();
+  publishSourceWindowState({ mode: 'preview', preview: parsed.data });
+  if (!sourceWindow) await createSourceWindow();
+  if (!sourceWindow) return false;
+  positionSourceNextToAssistant();
+  sourceWindow.show();
+  sourceWindow.focus();
+  publishSourceWindowState({ mode: 'preview', preview: parsed.data });
+  return true;
+});
+
+ipcMain.handle('source:get-state', (event) =>
+  event.sender === sourceWindow?.webContents ? sourceWindowState : null,
+);
+
+ipcMain.handle('source:select', async (event, url: string) => {
+  if (event.sender !== sourceWindow?.webContents || !sourcePreview) return false;
+  const source = sourcePreview.sources.find((candidate) => candidate.url === url);
+  if (!source) return false;
+  if (source.openMode === 'external') {
+    await shell.openExternal(source.url);
+    return true;
+  }
+  return showRemoteSource(source);
+});
+
+ipcMain.handle('source:back', (event) => {
+  if (event.sender !== sourceWindow?.webContents || !sourcePreview) return false;
+  destroySourceView();
+  selectedSource = null;
+  publishSourceWindowState({ mode: 'preview', preview: sourcePreview });
+  return true;
+});
+
+ipcMain.handle('source:retry', (event) => {
+  if (event.sender !== sourceWindow?.webContents || !selectedSource) return false;
+  return showRemoteSource(selectedSource);
+});
+
+ipcMain.handle('source:open-current-external', async (event) => {
+  if (event.sender !== sourceWindow?.webContents || !selectedSource) return false;
+  const currentUrl =
+    sourceWindowState && sourceWindowState.mode !== 'preview'
+      ? sourceWindowState.currentUrl
+      : selectedSource.url;
+  if (!isSafeBrowserUrl(currentUrl)) return false;
+  await shell.openExternal(currentUrl);
   return true;
 });
 
@@ -570,7 +817,7 @@ ipcMain.handle('source:close', (event) => {
 ipcMain.handle('external:open', (event, url: string) => {
   const trustedSender =
     event.sender === assistantWindow?.webContents || event.sender === sourceWindow?.webContents;
-  return trustedSender && isSafeExternalUrl(url) ? shell.openExternal(url) : undefined;
+  return trustedSender && isSafeBrowserUrl(url) ? shell.openExternal(url) : undefined;
 });
 
 app.whenReady().then(async () => {
