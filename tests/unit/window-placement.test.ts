@@ -41,4 +41,17 @@ describe('desktop multi-display window placement', () => {
       ),
     ).toEqual({ x: -780, y: 120, width: 440, height: 600 });
   });
+
+  it('does not let stale coordinates in full companion bounds override the new placement', () => {
+    const fullCompanionBounds = { x: 740, y: 216, width: 440, height: 600 };
+
+    expect(
+      placeCompanionWindow({ x: 2437, y: 157, width: 602, height: 832 }, fullCompanionBounds, {
+        x: 1920,
+        y: -35,
+        width: 1536,
+        height: 961,
+      }),
+    ).toEqual({ x: 1985, y: 157, width: 440, height: 600 });
+  });
 });
