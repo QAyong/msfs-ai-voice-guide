@@ -23,6 +23,7 @@ src/
     stt/           # 豆包流式 ASR 工厂/适配器
     tts/           # 豆包双向流式 TTS 工厂/适配器
   search/         # 共享搜索服务：API 请求、结果清洗与相关性保护
+  memory/         # 未来持久化记忆边界；Mem0 只能位于供应商适配层（Spec-005）
   tools/          # LiveKit 可调用的业务工具包装层
   cli/            # CLI 命令行入口，复用共享业务服务
   shared/         # 无业务归属的小型通用工具
@@ -40,12 +41,16 @@ prototypes/       # 桌面前端早期交互参考，不作为生产客户端入
 | 功能需求 | `docs/specs/`                   | 功能边界与可验证验收标准     |
 | 架构概览 | `docs/architecture/overview.md` | 模块关系、数据流和外部依赖   |
 | Bug 记录 | `docs/bugs/`                    | 非微小问题的 Issue 化记录    |
+| 框架登记 | `docs/frameworks/registry.md`   | 实际依赖版本与官方依据       |
+| 框架合规 | `docs/frameworks/compliance/`   | 功能实施前后的复用与验证证据 |
 
 ## 代码组织原则
 
 - 使用 TypeScript、pnpm、Zod（运行时配置与工具参数校验）和 Vitest（核心测试）。
 - `src/agent/` 仅负责 LiveKit 生命周期和依赖装配，不能承载提示词、环境变量解析或未来业务工具逻辑。
 - `src/search/` 是与 LiveKit 无关的共享搜索服务；Agent 工具和 CLI 必须复用它，不得各自实现搜索请求、清洗和相关性判断。
+- Spec-005 实施后，`src/memory/` 是与 LiveKit 和 Mem0 SDK 解耦的长期记忆边界；Agent 只组合服务，Mem0 依赖只能出现在供应商适配器中。
+- LiveKit `ChatContext` 负责当前 Session，长期记忆负责跨 Session 用户信息，`searchWeb` 负责公开网页事实；三者不得互相替代或混存。
 - `src/tools/` 只负责将共享业务能力包装成 LiveKit Tool（工具）；`src/cli/` 只负责命令行参数、输出和退出码。
 - `searchWeb` 是模型获取公开网页外部信息的通用入口，可用于天气、新闻、活动、规则和知识查询；时效性结果必须保留并关注来源时间。
 - Agent 不得通过 `child_process` 启动 CLI 执行搜索；CLI 是共享服务的入口，不是实时 Agent 的运行时依赖。
@@ -71,7 +76,7 @@ prototypes/       # 桌面前端早期交互参考，不作为生产客户端入
 - 多用户共用一个 Agent 房间、房间级群聊策略。
 - Microsoft Flight Simulator 遥测、位置、高度、航向或航线数据接入。
 - 专用天气 API、新闻 API 或其他独立业务数据 Provider；通用网页查询统一走现有 `searchWeb`。
-- 云端部署、Docker、持久化存储、账号体系和运营后台。
+- 当前版本不实现云端部署、账号体系和运营后台；持久化记忆作为 Spec-005 的未来需求，实施前不得默认启用第三方云端上传。
 - DeepSeek 与豆包语音以外的 Provider，以及运行时 Provider 切换。
 
 ## 约束来源
