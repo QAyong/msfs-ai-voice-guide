@@ -93,3 +93,45 @@
 - 激活态截图使用临时本地测试状态核验视觉样式；测试状态已通过页面刷新清除，未写入产品代码。
 
 final result: passed
+
+---
+
+# 来源网页设备切换设计检查
+
+**最后更新：** 2026-07-20
+
+## 对照证据
+
+- Source visual truth：`C:/Users/Lenovo/AppData/Local/Temp/codex-clipboard-a6109e66-2fa8-4047-8b17-458a63048af8.png`
+- Implementation screenshots：
+  - iPad 默认态：`C:/Users/Lenovo/.codex/visualizations/2026/07/19/019f7aad-a2fa-7020-a314-dc09d8568aed/source-device-ipad.png`
+  - 电脑切换态：`C:/Users/Lenovo/.codex/visualizations/2026/07/19/019f7aad-a2fa-7020-a314-dc09d8568aed/source-device-desktop.png`
+- Viewport：440×600，浅色主题，HTTPS 原网页加载状态。
+- Full-view comparison：`C:/Users/Lenovo/.codex/visualizations/2026/07/19/019f7aad-a2fa-7020-a314-dc09d8568aed/source-device-full-comparison.png`
+- Focused region comparison：`C:/Users/Lenovo/.codex/visualizations/2026/07/19/019f7aad-a2fa-7020-a314-dc09d8568aed/source-device-focused-comparison.png`
+
+## 检查结果
+
+- 字体与文案：控件仅使用图标，分别提供“电脑预览”和“iPad 预览”的提示、无障碍名称及按下状态，没有额外占用标题栏的可见文字。
+- 间距与布局：两个 25×26px 按钮组成 54px 宽紧凑切换组，与现有 48px 标题栏、外部打开和关闭按钮保持同一基线；窄窗下未发生裁切。
+- 颜色与状态：默认 iPad 图标为蓝色选中态，电脑图标为中性灰；切换后选中态准确互换，并保留白色选中底和轻量阴影。
+- 图标与资源：使用项目既有 Phosphor `DesktopIcon` 与 `DeviceTabletIcon`，没有新增手绘 SVG、字符图标或占位资源。
+- 视觉一致性：参考图使用深色工具栏，当前产品使用浅色标题栏；保留参考图的设备顺序、图标语义与蓝色选中关系，并沿用产品现有视觉令牌。这是有意的主题适配，不是遗漏。
+- 行为：新来源默认进入 iPad；真实点击可切换到电脑并返回 iPad。切换时保留当前 URL，平板使用 768px 视口、2× DPR、触控模拟和 iPad User-Agent，电脑恢复实际视口与桌面 User-Agent。
+- 稳定性：Electron 43 的 `enableDeviceEmulation` 在 `WebContentsView` 上会触发原生退出，最终改用 Chromium `Emulation.setDeviceMetricsOverride`；真实窗口连续完成 iPad→电脑→iPad 切换，未再退出。
+- 响应性与无障碍：窗口拉伸会重新计算 iPad 缩放和可见高度；按钮支持鼠标、键盘焦点、悬停提示和 `aria-pressed`。
+
+## 对照迭代历史
+
+1. 首轮实现完成图标顺序、默认态与标题栏布局。
+2. 真实窗口验收发现 Electron 设备仿真 API 导致应用原生退出，列为 [P0]；替换为 Chromium 设备指标协议后消除。
+3. 复查源图与实现的完整视图及聚焦区域，没有剩余 P0/P1/P2 差异。
+
+## 自动验证
+
+- ESLint、主工程 TypeScript、Electron TypeScript：通过。
+- 设备预览专项测试：2 个测试文件、7 项测试通过。
+- 全量回归：23 个测试文件通过、1 个跳过；65 项通过、8 项跳过。
+- Electron/Vite 生产构建：主进程 25 个模块、Renderer 398 个模块构建通过。
+
+final result: passed

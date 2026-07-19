@@ -29,6 +29,8 @@ import { CaretDownIcon } from '@phosphor-icons/react/dist/csr/CaretDown';
 import { CaretUpIcon } from '@phosphor-icons/react/dist/csr/CaretUp';
 import { CircleNotchIcon } from '@phosphor-icons/react/dist/csr/CircleNotch';
 import { CheckIcon } from '@phosphor-icons/react/dist/csr/Check';
+import { DesktopIcon } from '@phosphor-icons/react/dist/csr/Desktop';
+import { DeviceTabletIcon } from '@phosphor-icons/react/dist/csr/DeviceTablet';
 import { GearSixIcon } from '@phosphor-icons/react/dist/csr/GearSix';
 import { KeyboardIcon } from '@phosphor-icons/react/dist/csr/Keyboard';
 import { MagnifyingGlassIcon } from '@phosphor-icons/react/dist/csr/MagnifyingGlass';
@@ -1331,15 +1333,45 @@ const Source = () => {
           </small>
         </span>
         {state && state.mode !== 'preview' ? (
-          <button
-            type="button"
-            className="source-icon-button no-drag"
-            aria-label="在系统浏览器打开"
-            title="在系统浏览器打开"
-            onClick={() => void window.desktop?.openCurrentSourceExternal()}
-          >
-            <ArrowSquareOutIcon size={16} aria-hidden="true" />
-          </button>
+          <>
+            <div className="source-device-toggle no-drag" role="group" aria-label="网页预览设备">
+              <button
+                type="button"
+                aria-label="电脑预览"
+                aria-pressed={state.deviceMode === 'desktop'}
+                title="电脑预览"
+                onClick={() => void window.desktop?.setSourceDeviceMode('desktop')}
+              >
+                <DesktopIcon
+                  size={17}
+                  weight={state.deviceMode === 'desktop' ? 'fill' : 'regular'}
+                  aria-hidden="true"
+                />
+              </button>
+              <button
+                type="button"
+                aria-label="iPad 预览"
+                aria-pressed={state.deviceMode === 'ipad'}
+                title="iPad 预览"
+                onClick={() => void window.desktop?.setSourceDeviceMode('ipad')}
+              >
+                <DeviceTabletIcon
+                  size={17}
+                  weight={state.deviceMode === 'ipad' ? 'fill' : 'regular'}
+                  aria-hidden="true"
+                />
+              </button>
+            </div>
+            <button
+              type="button"
+              className="source-icon-button no-drag"
+              aria-label="在系统浏览器打开"
+              title="在系统浏览器打开"
+              onClick={() => void window.desktop?.openCurrentSourceExternal()}
+            >
+              <ArrowSquareOutIcon size={16} aria-hidden="true" />
+            </button>
+          </>
         ) : null}
         <button
           className="source-icon-button no-drag"

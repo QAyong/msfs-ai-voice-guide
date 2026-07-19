@@ -6,7 +6,11 @@ import {
   type GuideSource,
   type GuideSourcesMessage,
 } from '../../shared/guide-events.js';
-import type { SourceWindowState } from '../../shared/source-preview.js';
+import {
+  sourceDeviceModeSchema,
+  type SourceDeviceMode,
+  type SourceWindowState,
+} from '../../shared/source-preview.js';
 import type {
   DesktopReadiness,
   DesktopSessionResult,
@@ -16,6 +20,7 @@ import { EmbeddedAgentRuntime } from './agent-runtime.js';
 import { ensureLocalEnvironmentFile, reloadLocalEnvironment } from './environment.js';
 import { checkDesktopConfiguration } from './readiness.js';
 import { createDesktopSessionCredentials } from './session-token.js';
+import { getIpadDeviceMetrics, getSourceUserAgent } from './source-device-mode.js';
 import {
   dockToNearestSide,
   getExpandedBounds,
@@ -42,6 +47,7 @@ let sourceViewAttached = false;
 let sourcePreview: GuideSourcesMessage | null = null;
 let selectedSource: GuideSource | null = null;
 let sourceWindowState: SourceWindowState | null = null;
+let sourceDeviceMode: SourceDeviceMode = 'ipad';
 let sourceLoadTimer: NodeJS.Timeout | null = null;
 let utilityWindow: BrowserWindow | null = null;
 let assistantCollapsed = false;
@@ -298,8 +304,38 @@ const setSourceViewBounds = () => {
   const contentSize = sourceWindow.getContentSize();
   const width = contentSize[0] ?? 0;
   const height = contentSize[1] ?? 0;
-  sourceView.setBounds({ x: 0, y: 48, width, height: Math.max(0, height - 48) });
+  const viewHeight = Math.max(0, height - 48);
+  sourceView.setBounds({ x: 0, y: 48, width, height: viewHeight });
+  if (sourceViewAttached) {
+    void applySourceDeviceMode(sourceView, width, viewHeight).catch((error: unknown) => {
+      if (!app.isPackaged) console.error('[source-device-mode]', error);
+    });
+  }
 };
+
+async function applySourceDeviceMode(view: WebContentsView, width: number, height: number) {
+  view.webContents.setUserAgent(
+    getSourceUserAgent(sourceDeviceMode, process.versions.chrome ?? '120.0.0.0'),
+  );
+  if (sourceDeviceMode === 'ipad') {
+    if (!view.webContents.debugger.isAttached()) view.webContents.debugger.attach('1.3');
+    await view.webContents.debugger.sendCommand(
+      'Emulation.setDeviceMetricsOverride',
+      getIpadDeviceMetrics(width, height),
+    );
+    await view.webContents.debugger.sendCommand('Emulation.setTouchEmulationEnabled', {
+      enabled: true,
+      maxTouchPoints: 5,
+    });
+    return;
+  }
+  if (!view.webContents.debugger.isAttached()) return;
+  await view.webContents.debugger.sendCommand('Emulation.setTouchEmulationEnabled', {
+    enabled: false,
+  });
+  await view.webContents.debugger.sendCommand('Emulation.clearDeviceMetricsOverride');
+  view.webContents.debugger.detach();
+}
 
 const clearSourceLoadTimer = () => {
   if (!sourceLoadTimer) return;
@@ -352,6 +388,7 @@ const failSourceLoad = (
     preview: sourcePreview,
     source: selectedSource,
     currentUrl,
+    deviceMode: sourceDeviceMode,
     error,
     message,
     ...(statusCode ? { statusCode } : {}),
@@ -422,11 +459,18 @@ const handleDisplayChange = () => {
   positionSourceNextToAssistant();
 };
 
-const showRemoteSource = async (source: GuideSource) => {
-  if (!sourceWindow || !sourcePreview || !isSafeInAppUrl(source.url)) return false;
+type SourceLoadOptions = {
+  url?: string;
+  restoreScroll?: { x: number; y: number };
+};
+
+const showRemoteSource = async (source: GuideSource, options: SourceLoadOptions = {}) => {
+  const initialUrl = options.url ?? source.url;
+  if (!sourceWindow || !sourcePreview || !isSafeInAppUrl(initialUrl)) return false;
   destroySourceView();
   selectedSource = source;
-  let currentUrl = source.url;
+  let currentUrl = initialUrl;
+  let pendingScrollPosition = options.restoreScroll;
   let responseStatusCode: number | undefined;
   const view = new WebContentsView({
     webPreferences: {
@@ -438,11 +482,16 @@ const showRemoteSource = async (source: GuideSource) => {
   });
   sourceView = view;
   sourceViewAttached = false;
+  view.webContents.setUserAgent(
+    getSourceUserAgent(sourceDeviceMode, process.versions.chrome ?? '120.0.0.0'),
+  );
+  setSourceViewBounds();
   publishSourceWindowState({
     mode: 'loading',
     preview: sourcePreview,
     source,
     currentUrl,
+    deviceMode: sourceDeviceMode,
   });
   startSourceLoadTimer(view, currentUrl);
   view.webContents.setWindowOpenHandler((details) => {
@@ -483,6 +532,7 @@ const showRemoteSource = async (source: GuideSource) => {
       preview: sourcePreview!,
       source,
       currentUrl,
+      deviceMode: sourceDeviceMode,
     });
     startSourceLoadTimer(view, currentUrl);
   });
@@ -505,7 +555,15 @@ const showRemoteSource = async (source: GuideSource) => {
       preview: sourcePreview,
       source,
       currentUrl,
+      deviceMode: sourceDeviceMode,
     });
+    if (pendingScrollPosition) {
+      const { x, y } = pendingScrollPosition;
+      pendingScrollPosition = undefined;
+      void view.webContents
+        .executeJavaScript(`window.scrollTo(${Math.round(x)}, ${Math.round(y)})`)
+        .catch(() => undefined);
+    }
   });
   view.webContents.on(
     'did-fail-load',
@@ -526,7 +584,7 @@ const showRemoteSource = async (source: GuideSource) => {
     failSourceLoad(view, currentUrl, 'renderer', '网页渲染进程意外退出，请重试。');
   });
   try {
-    await view.webContents.loadURL(source.url);
+    await view.webContents.loadURL(initialUrl);
     return sourceView === view;
   } catch (error) {
     if (sourceView === view) {
@@ -621,6 +679,7 @@ const createSourceWindow = async () => {
     sourcePreview = null;
     selectedSource = null;
     sourceWindowState = null;
+    sourceDeviceMode = 'ipad';
   });
   await loadRenderer(sourceWindow, 'source');
 };
@@ -745,6 +804,7 @@ ipcMain.handle('source:open', async (event, url: string) => {
     type: 'guide.sources',
     sources: [{ rank: 1, title: hostname, siteName: hostname, url, openMode: 'in_app' }],
   });
+  sourceDeviceMode = 'ipad';
   sourcePreview = preview;
   selectedSource = preview.sources[0] ?? null;
   if (!sourceWindow) await createSourceWindow();
@@ -758,6 +818,7 @@ ipcMain.handle('source:open-preview', async (event, value: unknown) => {
   if (!assistantWindow || !isAssistantSender(event.sender)) return false;
   const parsed = guideSourcesMessageSchema.safeParse(value);
   if (!parsed.success || parsed.data.sources.length === 0) return false;
+  sourceDeviceMode = 'ipad';
   sourcePreview = parsed.data;
   selectedSource = null;
   destroySourceView();
@@ -796,7 +857,54 @@ ipcMain.handle('source:back', (event) => {
 
 ipcMain.handle('source:retry', (event) => {
   if (event.sender !== sourceWindow?.webContents || !selectedSource) return false;
-  return showRemoteSource(selectedSource);
+  const retryUrl =
+    sourceWindowState && sourceWindowState.mode !== 'preview'
+      ? sourceWindowState.currentUrl
+      : selectedSource.url;
+  return showRemoteSource(selectedSource, { url: retryUrl });
+});
+
+ipcMain.handle('source:set-device-mode', async (event, value: unknown) => {
+  if (
+    event.sender !== sourceWindow?.webContents ||
+    !selectedSource ||
+    !sourceWindowState ||
+    sourceWindowState.mode === 'preview'
+  ) {
+    return false;
+  }
+  const parsed = sourceDeviceModeSchema.safeParse(value);
+  if (!parsed.success || parsed.data === sourceDeviceMode) return parsed.success;
+
+  const currentUrl = sourceWindowState.currentUrl;
+  let restoreScroll: { x: number; y: number } | undefined;
+  if (sourceWindowState.mode === 'ready' && sourceView) {
+    try {
+      const position: unknown = await sourceView.webContents.executeJavaScript(
+        '({ x: window.scrollX, y: window.scrollY })',
+      );
+      if (
+        position &&
+        typeof position === 'object' &&
+        'x' in position &&
+        'y' in position &&
+        typeof position.x === 'number' &&
+        typeof position.y === 'number' &&
+        Number.isFinite(position.x) &&
+        Number.isFinite(position.y)
+      ) {
+        restoreScroll = { x: position.x, y: position.y };
+      }
+    } catch {
+      // Scroll restoration is a convenience; device switching must still continue.
+    }
+  }
+
+  sourceDeviceMode = parsed.data;
+  return showRemoteSource(selectedSource, {
+    url: currentUrl,
+    ...(restoreScroll ? { restoreScroll } : {}),
+  });
 });
 
 ipcMain.handle('source:open-current-external', async (event) => {

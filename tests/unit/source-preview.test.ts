@@ -25,6 +25,7 @@ describe('source preview window state', () => {
             preview,
             source: preview.sources[0]!,
             currentUrl: preview.sources[0]!.url,
+            deviceMode: 'ipad',
           };
     expect(sourceWindowStateSchema.safeParse(value).success).toBe(true);
   });
@@ -36,6 +37,7 @@ describe('source preview window state', () => {
         preview,
         source: preview.sources[0]!,
         currentUrl: preview.sources[0]!.url,
+        deviceMode: 'desktop',
         error: 'http',
         message: '网站返回了 HTTP 406。',
         statusCode: 406,
@@ -47,6 +49,7 @@ describe('source preview window state', () => {
         preview,
         source: preview.sources[0],
         currentUrl: 'http://example.com',
+        deviceMode: 'phone',
         error: 'http',
         message: '',
       }).success,
