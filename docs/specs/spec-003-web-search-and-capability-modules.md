@@ -1,9 +1,9 @@
 # Spec-003：网络搜索与可扩展能力模块
 
 **日期：** 2026-07-15  
-**最后更新：** 2026-07-16
+**最后更新：** 2026-07-19
 
-**状态：** 已实现并完成真实接口与语音工具调用验证
+**状态：** 搜索核心已实现并完成真实接口与语音工具调用验证；来源预览数据契约待实施
 
 ## 背景
 
@@ -22,6 +22,7 @@
 - 在 `src/tools/` 将搜索服务包装为 LiveKit 自定义工具。
 - 在 `src/cli/` 提供可复用同一搜索服务的 CLI（命令行工具）。
 - 保留来源 URL、站点名称和必要的发布时间，供最终回答引用。
+- 为桌面端来源预览保留排序、网站图标、搜索摘要、可用缩略图和打开方式；这些字段只能来自搜索响应，不能由 LLM（大语言模型）补写。
 - 通过环境变量提供搜索 API Key，并纳入 Zod 配置校验。
 - 为 API 失败、超时、空结果、低相关性和来源冲突提供可测试的异常路径。
 - 支持天气、新闻等时效性查询，并向回答层保留来源地点、发布时间或更新时间；时间不明确时不得声称信息为实时。
@@ -49,9 +50,59 @@ flowchart TD
     Normalize --> Guard[相关性、来源、去重与无结果保护]
     Guard --> Evidence[可引用证据集合]
     Evidence --> Main
+    Evidence --> Preview[桌面端搜索来源预览]
 ```
 
 “Skill（能力说明）”不作为独立运行时协议：行为规范放入 Agent instructions（提示词规则），可执行能力放入 LiveKit Toolset（工具集合）。搜索能力的共享实现仍由 `src/search/` 负责。
+
+## 标准化来源预览契约
+
+豆包搜索响应可能随所用接口形态返回 `WebResults` 或 `GlobalSearchResp.Documents`。原始供应商结构只能在 `src/search/`（搜索服务模块）内解析；LiveKit Tool（实时 Agent 工具）、CLI（命令行入口）和桌面端统一消费项目自己的标准化结构。本节不改变 ADR-006 规定的 Custom API 边界，也不表示切换搜索供应商。
+
+目标结构如下；具体 TypeScript 命名可在实施时调整，但字段语义不得改变：
+
+```ts
+type SearchPreviewSource = {
+  rank: number;
+  url: string;
+  title: string;
+  siteName: string;
+  summary?: string;
+  iconUrl?: string;
+  thumbnailUrl?: string;
+  publishTime?: string;
+  openMode: 'in_app' | 'external';
+};
+
+type SearchPreviewResult = {
+  status: 'ok';
+  query: string;
+  requestId?: string;
+  sources: SearchPreviewSource[];
+};
+```
+
+当响应包含 `Result.GlobalSearchResp.Documents` 时，字段映射为：
+
+| 标准化字段                | 供应商字段                      | 规则                                                |
+| ------------------------- | ------------------------------- | --------------------------------------------------- |
+| `rank`（排序序号）        | `Rank`                          | 按升序展示；缺失时使用清洗后的稳定顺序              |
+| `url`（原网页地址）       | `Url`                           | 解析 URL、去除片段和跟踪参数后去重                  |
+| `title`（结果标题）       | `Title`                         | 清理空白；为空时使用可理解的域名降级标题            |
+| `siteName`（网站名称）    | `HostInfo.Hostname`             | 清理空白；为空时降级为 URL 域名，不能使整批结果失败 |
+| `summary`（搜索摘要）     | `Snippet[].Text`                | 选取第一个有效文本片段，合并空白并限制长度          |
+| `iconUrl`（网站图标）     | `HostInfo.IconUrl`              | 仅接受安全的 HTTP/HTTPS 图片地址；不可用时省略      |
+| `thumbnailUrl`（缩略图）  | 首个 `Snippet[].Image.ImageUrl` | 不存在、加载失败或尺寸不适合时省略                  |
+| `publishTime`（发布时间） | `DocumentInfo.PublishTime`      | 空值省略；界面不得推断日期                          |
+| `requestId`（请求追踪号） | `ResponseMetadata.RequestId`    | 仅用于脱敏日志和故障定位，不在普通用户界面显示      |
+
+来源标准化遵循以下不变量：
+
+1. 每条候选来源独立解析和降级；单条 HTTP URL、空站点名称、无效图标或无效缩略图不得导致整批有效来源被丢弃。
+2. HTTPS 原网页使用 `openMode: 'in_app'`，可进入隔离的 `WebContentsView`（网页内容视图）。HTTP 或其他不满足应用内安全策略的结果最多保留为搜索预览，并使用 `openMode: 'external'` 交给系统浏览器；不能进入应用内网页视图。
+3. 聊天面板显示的来源数量等于清洗、去重后实际可展示的 `sources.length`，不能使用供应商返回的总召回数冒充当前列表数量。
+4. `summary`、图标和缩略图属于搜索结果预览，不是 AI 自写摘要；界面必须将它们与 Agent 回答明确分开。
+5. LLM 获取回答证据与桌面端获取来源预览必须来自同一次成功工具调用，并携带同一 `requestId`（请求追踪号）或等价关联标识。
 
 ## 验收标准
 
@@ -67,6 +118,9 @@ flowchart TD
 - [x] 默认 `pnpm test` 不依赖真实搜索 Key；真实搜索只通过显式测试命令执行。
 - [x] 天气等时效性查询保留来源时间；真实北京天气查询可优先返回政府或气象机构页面。
 - [x] LiveKit 语音会话中，DeepSeek 能主动调用 `searchWeb`，再通过 TTS 播放基于工具结果的回答。
+- [ ] 混合包含 HTTPS、HTTP、空站点名、无效图标和无效缩略图的结果时，系统按条清洗并保留其他有效来源，不会整批丢弃。
+- [ ] 标准化结果向桌面端保留排序、站点图标、摘要、首张缩略图、发布时间和打开方式。
+- [ ] 聊天回答证据与桌面来源预览可稳定关联到同一次 `searchWeb` 调用，不会绑定到上一条或下一条 Agent 消息。
 
 ## 场景描述
 
@@ -76,6 +130,13 @@ flowchart TD
 2. Agent 调用 `searchWeb` 工具。
 3. 搜索服务请求 Custom API，清洗并筛选结果。
 4. Agent 将通过筛选的证据作为联网核实结果回答，并保留来源地点与时间。
+5. 桌面端收到同一次搜索的标准化来源集合，并在对应回答下显示一个来源入口。
+
+**部分脏结果流程：**
+
+1. API 同时返回有效 HTTPS 来源、HTTP 来源、空站点名或无效图片字段。
+2. 搜索服务逐条清洗；有效 HTTPS 来源可应用内打开，HTTP 来源只允许外部打开，无效图片字段被省略。
+3. 其他有效来源继续交给 Agent 和桌面端，单条异常不能使整批来源消失。
 
 **低质量结果流程：**
 
@@ -103,11 +164,13 @@ flowchart TD
 - `searchWeb` 查询公开网页，不保证具备专用天气 API、新闻数据流或结构化数据库的实时性与完整性。
 - 时效性回答必须结合 `publishTime` 或正文更新时间；无法确认时间时需要说明风险。
 - 搜索证据可能较长，语音回答仍必须遵守两到四句话的口播约束；工具结果总长度与长回答体验后续继续优化。
+- 供应商原始 `TotalDocCount`（总召回数量）可能大于当前返回的 `Documents`（文档列表）数量；桌面来源入口只能显示实际可预览的清洗后数量。
 
 ## 相关测试
 
 - `tests/unit/search/`：请求参数、结果标准化、实体相关性、来源策略、去重和无结果保护。
 - `tests/integration/search-service.test.ts`：使用 mock HTTP 响应验证 API 错误、空结果和脏正文。
+- `tests/unit/agent-search-sources.test.ts`：验证混合质量来源的逐条降级、事件发布和回答关联。
 - `tests/e2e/search-api.smoke.test.ts`：显式运行的 8 组真实 Custom API 用例；默认测试无 Key 时跳过。
 - `scripts/test-volcengine-search.mjs`：当前阶段的手动真实接口评测脚本。
 
