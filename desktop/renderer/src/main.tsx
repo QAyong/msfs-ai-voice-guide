@@ -1435,7 +1435,6 @@ const Source = () => {
                   />
                 ) : null}
               </span>
-              {source.openMode === 'external' ? <em>该来源使用 HTTP，将在系统浏览器打开</em> : null}
             </button>
           ))}
         </div>

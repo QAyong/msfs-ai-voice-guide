@@ -1,7 +1,7 @@
 # Spec-003：网络搜索与可扩展能力模块
 
 **日期：** 2026-07-15  
-**最后更新：** 2026-07-19
+**最后更新：** 2026-07-20
 
 **状态：** 已实现并完成搜索核心、来源预览数据契约、事件关联与自动化验证
 
@@ -71,7 +71,7 @@ type SearchPreviewSource = {
   iconUrl?: string;
   thumbnailUrl?: string;
   publishTime?: string;
-  openMode: 'in_app' | 'external';
+  openMode: 'in_app';
 };
 
 type SearchPreviewResult = {
@@ -98,8 +98,8 @@ type SearchPreviewResult = {
 
 来源标准化遵循以下不变量：
 
-1. 每条候选来源独立解析和降级；单条 HTTP URL、空站点名称、无效图标或无效缩略图不得导致整批有效来源被丢弃。
-2. HTTPS 原网页使用 `openMode: 'in_app'`，可进入隔离的 `WebContentsView`（网页内容视图）。HTTP 或其他不满足应用内安全策略的结果最多保留为搜索预览，并使用 `openMode: 'external'` 交给系统浏览器；不能进入应用内网页视图。
+1. 每条候选来源独立解析和降级；HTTP/HTTPS URL、空站点名称、无效图标或无效缩略图不得导致整批有效来源被丢弃。
+2. HTTP 与 HTTPS 原网页统一使用 `openMode: 'in_app'`，进入隔离的 `WebContentsView`（网页内容视图）；`javascript:`、`file:`、`data:` 等其他协议在清洗阶段直接丢弃。
 3. 聊天面板显示的来源数量等于清洗、去重后实际可展示的 `sources.length`，不能使用供应商返回的总召回数冒充当前列表数量。
 4. `summary`、图标和缩略图属于搜索结果预览，不是 AI 自写摘要；界面必须将它们与 Agent 回答明确分开。
 5. LLM 获取回答证据与桌面端获取来源预览必须来自同一次成功工具调用，并携带同一 `requestId`（请求追踪号）或等价关联标识。
@@ -119,6 +119,7 @@ type SearchPreviewResult = {
 - [x] 天气等时效性查询保留来源时间；真实北京天气查询可优先返回政府或气象机构页面。
 - [x] LiveKit 语音会话中，DeepSeek 能主动调用 `searchWeb`，再通过 TTS 播放基于工具结果的回答。
 - [x] 混合包含 HTTPS、HTTP、空站点名、无效图标和无效缩略图的结果时，系统按条清洗并保留其他有效来源，不会整批丢弃。
+- [x] HTTP 与 HTTPS 来源均使用应用内隔离网页视图，其他协议不会进入来源列表。
 - [x] 标准化结果向桌面端保留排序、站点图标、摘要、首张缩略图、发布时间和打开方式。
 - [x] 聊天回答证据与桌面来源预览可稳定关联到同一次 `searchWeb` 调用，不会绑定到上一条或下一条 Agent 消息。
 
@@ -135,7 +136,7 @@ type SearchPreviewResult = {
 **部分脏结果流程：**
 
 1. API 同时返回有效 HTTPS 来源、HTTP 来源、空站点名或无效图片字段。
-2. 搜索服务逐条清洗；有效 HTTPS 来源可应用内打开，HTTP 来源只允许外部打开，无效图片字段被省略。
+2. 搜索服务逐条清洗；有效 HTTP 与 HTTPS 来源均可应用内打开，无效图片字段被省略，其他协议被丢弃。
 3. 其他有效来源继续交给 Agent 和桌面端，单条异常不能使整批来源消失。
 
 **低质量结果流程：**

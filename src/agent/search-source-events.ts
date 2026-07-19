@@ -17,7 +17,7 @@ const rawSourceSchema = z.object({
   title: z.string().optional(),
   siteName: z.string().optional(),
   url: z.string(),
-  openMode: z.enum(['in_app', 'external']).optional(),
+  openMode: z.literal('in_app').optional(),
   summary: z.string().optional(),
   iconUrl: z.string().optional(),
   thumbnailUrl: z.string().optional(),
@@ -72,17 +72,16 @@ function normalizeGuideSource(value: unknown, index: number): GuideSource | null
     const hostname = url.hostname;
     const title = cleanLabel(parsed.data.title) ?? hostname;
     const siteName = cleanLabel(parsed.data.siteName) ?? hostname;
-    const openMode = url.protocol === 'https:' ? 'in_app' : 'external';
     const candidate = {
       rank: parsed.data.rank ?? index + 1,
       title,
       siteName,
       url: url.toString(),
-      openMode,
+      openMode: 'in_app' as const,
       ...(cleanLabel(parsed.data.summary) ? { summary: cleanLabel(parsed.data.summary) } : {}),
-      ...(safeHttpsUrl(parsed.data.iconUrl) ? { iconUrl: safeHttpsUrl(parsed.data.iconUrl) } : {}),
-      ...(safeHttpsUrl(parsed.data.thumbnailUrl)
-        ? { thumbnailUrl: safeHttpsUrl(parsed.data.thumbnailUrl) }
+      ...(safeWebUrl(parsed.data.iconUrl) ? { iconUrl: safeWebUrl(parsed.data.iconUrl) } : {}),
+      ...(safeWebUrl(parsed.data.thumbnailUrl)
+        ? { thumbnailUrl: safeWebUrl(parsed.data.thumbnailUrl) }
         : {}),
       ...(cleanLabel(parsed.data.publishTime)
         ? { publishTime: cleanLabel(parsed.data.publishTime) }
@@ -103,11 +102,11 @@ function cleanLabel(value: string | undefined): string | undefined {
   return cleaned || undefined;
 }
 
-function safeHttpsUrl(value: string | undefined): string | undefined {
+function safeWebUrl(value: string | undefined): string | undefined {
   if (!value) return undefined;
   try {
     const url = new URL(value);
-    return url.protocol === 'https:' && url.hostname ? url.toString() : undefined;
+    return ['http:', 'https:'].includes(url.protocol) && url.hostname ? url.toString() : undefined;
   } catch {
     return undefined;
   }

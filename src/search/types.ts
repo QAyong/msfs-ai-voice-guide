@@ -3,7 +3,7 @@ export type SearchSource = {
   title: string;
   siteName: string;
   url: string;
-  openMode: 'in_app' | 'external';
+  openMode: 'in_app';
   summary?: string;
   content?: string;
   iconUrl?: string;

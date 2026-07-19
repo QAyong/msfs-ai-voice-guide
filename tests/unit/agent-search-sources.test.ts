@@ -52,7 +52,7 @@ describe('agent search source events', () => {
     expect(JSON.stringify(message)).not.toContain('长正文');
   });
 
-  it('cleans each source independently and sends HTTP sources to the system browser', () => {
+  it('cleans each source independently and keeps HTTP sources in the app', () => {
     expect(
       extractGuideSources(
         createEvent({
@@ -71,7 +71,7 @@ describe('agent search source events', () => {
           title: 'example.com',
           siteName: 'example.com',
           url: 'http://example.com/article',
-          openMode: 'external',
+          openMode: 'in_app',
         },
       ],
     });
