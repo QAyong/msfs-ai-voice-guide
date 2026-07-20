@@ -4,7 +4,7 @@
 
 **优先级：** 中
 
-**状态：** 已修复
+**状态：** 代码已实现，待运行时验收
 
 ## 复现步骤
 
@@ -41,7 +41,12 @@
 
 - `createSourceWindow()` 现在使用 `placeCompanionWindow()` 在构造 `BrowserWindow` 前预计算来源窗伴随坐标。
 - 来源窗构造参数新增 `x`、`y` 和 `show: false`，窗口创建时即位于聊天面板旁，且初始状态下不可见。
-- IPC 处理程序在 `createSourceWindow()` 返回后调用 `positionSourceNextToAssistant()` 再次校正位置，然后 `sourceWindow.show()` 显示窗口；由于窗口从未在主屏默认位置可见，闪跳现象消除。
+- IPC 处理程序在 `createSourceWindow()` 返回后调用 `positionSourceNextToAssistant()` 再次校正位置，然后 `sourceWindow.show()` 显示窗口；代码路径不再会让来源窗以主屏默认坐标可见。
+
+## 验证状态
+
+- `tests/unit/window-placement.test.ts`（窗口坐标计算）已通过，TypeScript 类型检查已通过。
+- 尚未在真实双显示器 Electron 环境完成冒烟验收，因此不能据此断言视觉闪跳已完全消除。
 
 ## 验收条件
 
