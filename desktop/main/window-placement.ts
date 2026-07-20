@@ -30,10 +30,26 @@ export const getExpandedBounds = (
   size: Pick<WindowBounds, 'width' | 'height'>,
   margin = 8,
 ): WindowBounds => ({
+  ...size,
   x: side === 'left' ? workArea.x + margin : workArea.x + workArea.width - size.width - margin,
   y: clamp(y, workArea.y + margin, workArea.y + workArea.height - size.height - margin),
-  ...size,
 });
+
+export const getRestorableSize = (
+  candidate: Pick<WindowBounds, 'width' | 'height'> | null | undefined,
+  fallback: Pick<WindowBounds, 'width' | 'height'>,
+  workArea: WindowBounds,
+  margin = 16,
+) => {
+  if (
+    !candidate ||
+    candidate.width > workArea.width - margin * 2 ||
+    candidate.height > workArea.height - margin * 2
+  ) {
+    return fallback;
+  }
+  return { width: candidate.width, height: candidate.height };
+};
 
 export const keepTitleBarVisible = (
   bounds: WindowBounds,
