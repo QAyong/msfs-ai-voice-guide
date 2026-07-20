@@ -667,8 +667,17 @@ const createSourceWindow = async () => {
   const savedSourceSize = storedWindowState.source;
   const parentDisplay = screen.getDisplayMatching(parentWindow.getBounds());
   const restoredSourceSize = getRestorableSize(savedSourceSize, sourceSize, parentDisplay.workArea);
+  // Pre-calculate the companion position so the window never appears at the
+  // primary-display default location before being repositioned.
+  const initialPlacement = placeCompanionWindow(
+    parentWindow.getBounds(),
+    restoredSourceSize,
+    parentDisplay.workArea,
+  );
   const window = new BrowserWindow({
     parent: parentWindow,
+    x: initialPlacement.x,
+    y: initialPlacement.y,
     width: restoredSourceSize.width,
     height: restoredSourceSize.height,
     minWidth: 280,
@@ -676,6 +685,7 @@ const createSourceWindow = async () => {
     frame: false,
     resizable: true,
     alwaysOnTop: true,
+    show: false,
     webPreferences: {
       preload: join(__dirname, '../preload/index.cjs'),
       contextIsolation: true,

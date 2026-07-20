@@ -4,7 +4,7 @@
 
 **优先级：** 中
 
-**状态：** 待修复
+**状态：** 已修复
 
 ## 复现步骤
 
@@ -29,13 +29,19 @@
 ## 修复方案
 
 1. 在 `createSourceWindow()` 中，创建 `BrowserWindow` 之前先调用 `placeCompanionWindow()` 计算出来源窗的初始伴随坐标，将 `x`、`y` 直接传入 `BrowserWindow` 构造参数。
-2. 同时设置 `show: false`，等 `ready-to-show` 事件触发后再调用 `window.show()`，确保窗口在正确位置和内容都就绪后才显示。
-3. 在 `source:open` 和 `source:open-preview` 的 IPC 处理程序中，`positionSourceNextToAssistant()` 仍然保留，用于窗口已存在时的位置校正，但首次创建不再依赖它。
+2. 同时设置 `show: false`，窗口创建后保持隐藏；`source:open` / `source:open-preview` 的 IPC 处理程序在 `createSourceWindow()` 返回后调用 `positionSourceNextToAssistant()` 再次校正位置，然后才调用 `sourceWindow.show()` 显示窗口。
+3. `positionSourceNextToAssistant()` 仍然保留，用于窗口已存在时的位置校正，但首次创建不再依赖它把窗口从主屏默认位置挪过来。
 
 ## 影响范围
 
 - `desktop/main/index.ts`：`createSourceWindow()` 函数和 `source:open` / `source:open-preview` IPC 处理程序。
 - 多显示器场景（尤其是聊天面板不在主屏时）。
+
+## 修复结果
+
+- `createSourceWindow()` 现在使用 `placeCompanionWindow()` 在构造 `BrowserWindow` 前预计算来源窗伴随坐标。
+- 来源窗构造参数新增 `x`、`y` 和 `show: false`，窗口创建时即位于聊天面板旁，且初始状态下不可见。
+- IPC 处理程序在 `createSourceWindow()` 返回后调用 `positionSourceNextToAssistant()` 再次校正位置，然后 `sourceWindow.show()` 显示窗口；由于窗口从未在主屏默认位置可见，闪跳现象消除。
 
 ## 验收条件
 
