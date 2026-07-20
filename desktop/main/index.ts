@@ -25,6 +25,7 @@ import { isLiveWindow, releaseWindowReference } from './window-lifecycle.js';
 import {
   dockToNearestSide,
   getExpandedBounds,
+  getRestorableSize,
   keepTitleBarVisible,
   placeCompanionWindow,
   type DockSide,
@@ -34,6 +35,7 @@ import { readStoredWindowState, writeStoredWindowState } from './window-state.js
 const assistantSize = { width: 320, height: 360 };
 const collapsedSize = { width: 64, height: 72 };
 const collapsedMenuSize = { width: 64, height: 174 };
+const sourceSize = { width: 440, height: 600 };
 const settingsSize = { width: 372, height: 536 };
 const quitDialogSize = { width: 328, height: 224 };
 const sourceLoadTimeoutMs = 15_000;
@@ -605,10 +607,16 @@ const createAssistantWindow = async () => {
   assistantDockSide = storedWindowState.dockSide ?? 'right';
   expandedAssistantBounds = storedWindowState.expandedAssistant ?? null;
   const initialSize = assistantCollapsed ? collapsedSize : assistantSize;
+  const initialDisplay = savedBounds
+    ? screen.getDisplayMatching(savedBounds)
+    : screen.getPrimaryDisplay();
+  const restoredSize = assistantCollapsed
+    ? collapsedSize
+    : getRestorableSize(savedBounds, initialSize, initialDisplay.workArea);
   const window = new BrowserWindow({
     ...(savedBounds ? { x: savedBounds.x, y: savedBounds.y } : {}),
-    width: assistantCollapsed ? collapsedSize.width : (savedBounds?.width ?? initialSize.width),
-    height: assistantCollapsed ? collapsedSize.height : (savedBounds?.height ?? initialSize.height),
+    width: restoredSize.width,
+    height: restoredSize.height,
     minWidth: assistantCollapsed ? collapsedSize.width : 240,
     minHeight: assistantCollapsed ? collapsedSize.height : 220,
     frame: false,
@@ -657,10 +665,12 @@ const createSourceWindow = async () => {
   if (!isLiveWindow(assistantWindow)) return;
   const parentWindow = assistantWindow;
   const savedSourceSize = storedWindowState.source;
+  const parentDisplay = screen.getDisplayMatching(parentWindow.getBounds());
+  const restoredSourceSize = getRestorableSize(savedSourceSize, sourceSize, parentDisplay.workArea);
   const window = new BrowserWindow({
     parent: parentWindow,
-    width: savedSourceSize?.width ?? 440,
-    height: savedSourceSize?.height ?? 600,
+    width: restoredSourceSize.width,
+    height: restoredSourceSize.height,
     minWidth: 280,
     minHeight: 240,
     frame: false,
@@ -714,14 +724,18 @@ ipcMain.handle('assistant:set-collapsed', (event, collapsed: boolean) => {
     return;
   }
   window.setMinimumSize(240, 220);
-  const restored = expandedAssistantBounds
-    ? keepTitleBarVisible(expandedAssistantBounds, currentDisplay.workArea)
-    : getExpandedBounds(
-        currentDisplay.workArea,
-        assistantDockSide,
-        window.getBounds().y,
-        assistantSize,
-      );
+  const collapsedBounds = window.getBounds();
+  const restoredSize = getRestorableSize(
+    expandedAssistantBounds,
+    assistantSize,
+    currentDisplay.workArea,
+  );
+  const restored = getExpandedBounds(
+    currentDisplay.workArea,
+    assistantDockSide,
+    collapsedBounds.y,
+    restoredSize,
+  );
   setAssistantBounds(restored);
   schedulePersistWindowState();
 });

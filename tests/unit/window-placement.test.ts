@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   dockToNearestSide,
   getExpandedBounds,
+  getRestorableSize,
   keepTitleBarVisible,
   placeCompanionWindow,
 } from '../../desktop/main/window-placement.js';
@@ -26,10 +27,33 @@ describe('desktop multi-display window placement', () => {
     });
   });
 
+  it('uses the docked ball position instead of stale coordinates from the last expanded panel', () => {
+    const staleExpandedBounds = { x: 752, y: 142, width: 320, height: 360 };
+
+    expect(getExpandedBounds(leftDisplay, 'left', 540, staleExpandedBounds)).toEqual({
+      x: -1912,
+      y: 540,
+      width: 320,
+      height: 360,
+    });
+  });
+
   it('keeps an expanded panel title bar reachable without blocking cross-display dragging', () => {
     expect(
       keepTitleBarVisible({ x: -2300, y: -100, width: 320, height: 360 }, leftDisplay),
     ).toEqual({ x: -2176, y: 0, width: 320, height: 360 });
+  });
+
+  it('restores a valid user-resized panel size', () => {
+    expect(
+      getRestorableSize({ width: 520, height: 640 }, { width: 320, height: 360 }, leftDisplay),
+    ).toEqual({ width: 520, height: 640 });
+  });
+
+  it('falls back to the design size when persisted bounds exceed the display work area', () => {
+    expect(
+      getRestorableSize({ width: 527, height: 1548 }, { width: 320, height: 360 }, leftDisplay),
+    ).toEqual({ width: 320, height: 360 });
   });
 
   it('places a companion window inside a negative-coordinate display', () => {
