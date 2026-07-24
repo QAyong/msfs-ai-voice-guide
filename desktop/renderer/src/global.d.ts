@@ -2,7 +2,7 @@ export {};
 
 import type { DesktopReadiness, DesktopSessionResult } from '../../../shared/desktop-contracts.js';
 import type { GuideSourcesMessage } from '../../../shared/guide-events.js';
-import type { SourceLayoutMode, SourceWindowState } from '../../../shared/source-preview.js';
+import type { SourceWindowState } from '../../../shared/source-preview.js';
 
 declare global {
   interface Window {
@@ -22,7 +22,6 @@ declare global {
       selectSource(url: string): Promise<boolean>;
       backToSources(): Promise<boolean>;
       retrySource(): Promise<boolean>;
-      setSourceLayoutMode(mode: SourceLayoutMode): Promise<boolean>;
       openCurrentSourceExternal(): Promise<boolean>;
       closeSource(): Promise<void>;
       openExternal(url: string): Promise<void>;

@@ -6,11 +6,7 @@ import {
   type GuideSource,
   type GuideSourcesMessage,
 } from '../../shared/guide-events.js';
-import {
-  sourceLayoutModeSchema,
-  type SourceLayoutMode,
-  type SourceWindowState,
-} from '../../shared/source-preview.js';
+import type { SourceWindowState } from '../../shared/source-preview.js';
 import type {
   DesktopReadiness,
   DesktopSessionResult,
@@ -20,7 +16,13 @@ import { EmbeddedAgentRuntime } from './agent-runtime.js';
 import { ensureLocalEnvironmentFile, reloadLocalEnvironment } from './environment.js';
 import { checkDesktopConfiguration } from './readiness.js';
 import { createDesktopSessionCredentials } from './session-token.js';
-import { getSourceLayoutZoom } from './source-layout-mode.js';
+import { getSourceViewBounds } from './source-view-bounds.js';
+import {
+  shouldFollowAssistantWindow,
+  startSourceWindowSession,
+  updateSourceWindowFollowMode,
+  type SourceWindowFollowMode,
+} from './source-window-follow.js';
 import { isLiveWindow, releaseWindowReference } from './window-lifecycle.js';
 import {
   dockToNearestSide,
@@ -50,7 +52,6 @@ let sourceViewAttached = false;
 let sourcePreview: GuideSourcesMessage | null = null;
 let selectedSource: GuideSource | null = null;
 let sourceWindowState: SourceWindowState | null = null;
-let sourceLayoutMode: SourceLayoutMode = 'portrait';
 let sourceLoadTimer: NodeJS.Timeout | null = null;
 let utilityWindow: BrowserWindow | null = null;
 let assistantCollapsed = false;
@@ -58,6 +59,8 @@ let assistantMenuOpen = false;
 let assistantMenuDirection: MenuDirection = 'down';
 let assistantDockSide: DockSide = 'right';
 let isPositioningAssistant = false;
+let isPositioningSource = false;
+let sourceWindowFollowMode: SourceWindowFollowMode = startSourceWindowSession();
 let expandedAssistantBounds: Electron.Rectangle | null = null;
 let storedWindowState: StoredWindowState = {};
 let persistWindowTimer: NodeJS.Timeout | null = null;
@@ -313,23 +316,17 @@ const setSourcePosition = (x: number, y: number) => {
   const window = sourceWindow;
   const bounds = window.getBounds();
   if (bounds.x === x && bounds.y === y) return;
+  isPositioningSource = true;
   window.setPosition(x, y);
+  setTimeout(() => {
+    isPositioningSource = false;
+  }, 0);
 };
 
 const setSourceViewBounds = () => {
   if (!isLiveWindow(sourceWindow) || !sourceView || sourceView.webContents.isDestroyed()) return;
-  const contentSize = sourceWindow.getContentSize();
-  const width = contentSize[0] ?? 0;
-  const height = contentSize[1] ?? 0;
-  const viewHeight = Math.max(0, height - 48);
-  sourceView.setBounds({ x: 0, y: 48, width, height: viewHeight });
-  if (sourceViewAttached) applySourceLayoutMode(sourceView, width);
+  sourceView.setBounds(getSourceViewBounds(sourceWindow.getContentSize()));
 };
-
-function applySourceLayoutMode(view: WebContentsView, width: number) {
-  if (view.webContents.isDestroyed()) return;
-  view.webContents.setZoomFactor(getSourceLayoutZoom(sourceLayoutMode, width));
-}
 
 const clearSourceLoadTimer = () => {
   if (!sourceLoadTimer) return;
@@ -398,7 +395,6 @@ const failSourceLoad = (
     preview: sourcePreview,
     source: selectedSource,
     currentUrl,
-    layoutMode: sourceLayoutMode,
     error,
     message,
     ...(statusCode ? { statusCode } : {}),
@@ -438,7 +434,12 @@ const constrainExpandedAssistant = (useCursorDisplay = true) => {
 };
 
 const positionSourceNextToAssistant = () => {
-  if (!isLiveWindow(assistantWindow) || !isLiveWindow(sourceWindow)) return;
+  if (
+    !isLiveWindow(assistantWindow) ||
+    !isLiveWindow(sourceWindow) ||
+    !shouldFollowAssistantWindow(sourceWindowFollowMode)
+  )
+    return;
   const assistantBounds = assistantWindow.getBounds();
   const sourceBounds = sourceWindow.getBounds();
   const display = screen.getDisplayMatching(assistantBounds);
@@ -500,7 +501,6 @@ const showRemoteSource = async (source: GuideSource, options: SourceLoadOptions 
     preview: sourcePreview,
     source,
     currentUrl,
-    layoutMode: sourceLayoutMode,
   });
   startSourceLoadTimer(view, currentUrl);
   view.webContents.setWindowOpenHandler((details) => {
@@ -541,11 +541,10 @@ const showRemoteSource = async (source: GuideSource, options: SourceLoadOptions 
       preview: sourcePreview!,
       source,
       currentUrl,
-      layoutMode: sourceLayoutMode,
     });
     startSourceLoadTimer(view, currentUrl);
   });
-  view.webContents.on('did-finish-load', () => {
+  view.webContents.on('did-finish-load', async () => {
     if (!sourcePreview || sourceView !== view) return;
     if (responseStatusCode && responseStatusCode >= 400) {
       failSourceLoad(
@@ -564,7 +563,6 @@ const showRemoteSource = async (source: GuideSource, options: SourceLoadOptions 
       preview: sourcePreview,
       source,
       currentUrl,
-      layoutMode: sourceLayoutMode,
     });
   });
   view.webContents.on(
@@ -694,6 +692,7 @@ const createSourceWindow = async () => {
     },
   });
   sourceWindow = window;
+  sourceWindowFollowMode = startSourceWindowSession();
   window.setAlwaysOnTop(true, 'floating');
   attachDevelopmentDiagnostics(window);
   window.on('resize', () => {
@@ -702,7 +701,11 @@ const createSourceWindow = async () => {
     schedulePersistWindowState();
   });
   window.on('moved', () => {
-    if (sourceWindow === window && isLiveWindow(window)) positionSourceNextToAssistant();
+    if (sourceWindow !== window || !isLiveWindow(window)) return;
+    sourceWindowFollowMode = updateSourceWindowFollowMode(
+      sourceWindowFollowMode,
+      isPositioningSource,
+    );
   });
   const releaseSourceWindow = () => {
     if (sourceWindow !== window) return;
@@ -711,7 +714,7 @@ const createSourceWindow = async () => {
     sourcePreview = null;
     selectedSource = null;
     sourceWindowState = null;
-    sourceLayoutMode = 'portrait';
+    sourceWindowFollowMode = startSourceWindowSession();
   };
   window.on('close', releaseSourceWindow);
   window.on('closed', releaseSourceWindow);
@@ -843,7 +846,6 @@ ipcMain.handle('source:open', async (event, url: string) => {
     type: 'guide.sources',
     sources: [{ rank: 1, title: hostname, siteName: hostname, url, openMode: 'in_app' }],
   });
-  sourceLayoutMode = 'portrait';
   sourcePreview = preview;
   selectedSource = preview.sources[0] ?? null;
   if (!isLiveWindow(sourceWindow)) await createSourceWindow();
@@ -857,7 +859,6 @@ ipcMain.handle('source:open-preview', async (event, value: unknown) => {
   if (!isLiveWindow(assistantWindow) || !isAssistantSender(event.sender)) return false;
   const parsed = guideSourcesMessageSchema.safeParse(value);
   if (!parsed.success || parsed.data.sources.length === 0) return false;
-  sourceLayoutMode = 'portrait';
   sourcePreview = parsed.data;
   selectedSource = null;
   destroySourceView();
@@ -897,24 +898,6 @@ ipcMain.handle('source:retry', (event) => {
       ? sourceWindowState.currentUrl
       : selectedSource.url;
   return showRemoteSource(selectedSource, { url: retryUrl });
-});
-
-ipcMain.handle('source:set-layout-mode', (event, value: unknown) => {
-  if (
-    !isSourceSender(event.sender) ||
-    !selectedSource ||
-    !sourceWindowState ||
-    sourceWindowState.mode === 'preview'
-  ) {
-    return false;
-  }
-  const parsed = sourceLayoutModeSchema.safeParse(value);
-  if (!parsed.success || parsed.data === sourceLayoutMode) return parsed.success;
-
-  sourceLayoutMode = parsed.data;
-  publishSourceWindowState({ ...sourceWindowState, layoutMode: sourceLayoutMode });
-  setSourceViewBounds();
-  return true;
 });
 
 ipcMain.handle('source:open-current-external', async (event) => {

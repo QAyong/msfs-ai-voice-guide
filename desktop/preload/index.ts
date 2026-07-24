@@ -1,6 +1,6 @@
 import { contextBridge, ipcRenderer } from 'electron';
 import type { GuideSourcesMessage } from '../../shared/guide-events.js';
-import type { SourceLayoutMode, SourceWindowState } from '../../shared/source-preview.js';
+import type { SourceWindowState } from '../../shared/source-preview.js';
 
 contextBridge.exposeInMainWorld('desktop', {
   setCollapsed: (collapsed: boolean) => ipcRenderer.invoke('assistant:set-collapsed', collapsed),
@@ -24,8 +24,6 @@ contextBridge.exposeInMainWorld('desktop', {
   selectSource: (url: string) => ipcRenderer.invoke('source:select', url),
   backToSources: () => ipcRenderer.invoke('source:back'),
   retrySource: () => ipcRenderer.invoke('source:retry'),
-  setSourceLayoutMode: (mode: SourceLayoutMode) =>
-    ipcRenderer.invoke('source:set-layout-mode', mode),
   openCurrentSourceExternal: () => ipcRenderer.invoke('source:open-current-external'),
   closeSource: () => ipcRenderer.invoke('source:close'),
   openExternal: (url: string) => ipcRenderer.invoke('external:open', url),
