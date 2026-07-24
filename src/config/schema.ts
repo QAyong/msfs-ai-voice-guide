@@ -18,6 +18,11 @@ const positiveInteger = (defaultValue: number) =>
     (value) => (value === undefined || value === '' ? undefined : Number(value)),
     z.number().int().positive().default(defaultValue),
   );
+const boundedInteger = (defaultValue: number, minimum: number, maximum: number) =>
+  z.preprocess(
+    (value) => (value === undefined || value === '' ? undefined : Number(value)),
+    z.number().int().min(minimum).max(maximum).default(defaultValue),
+  );
 
 const searchEnvironmentSchema = z.object({
   VOLCENGINE_SEARCH_API_KEY: requiredText,
@@ -53,6 +58,11 @@ const envSchema = z.object({
     .url()
     .default('https://open.feedcoopapi.com/search_api/web_search'),
   VOLCENGINE_SEARCH_TIMEOUT_MS: positiveInteger(10_000),
+  MSFS_CLI_PATH: optionalNonEmpty,
+  MSFS_CLI_TIMEOUT_MS: boundedInteger(15_000, 500, 60_000),
+  MSFS_CLI_MAX_CONCURRENCY: boundedInteger(2, 1, 4),
+  MSFS_TRACK_INTERVAL_MS: boundedInteger(3_000, 1_000, 60_000),
+  MSFS_TRACK_MAX_POINTS: boundedInteger(120, 10, 120),
 });
 
 export type AppConfig = {
@@ -92,6 +102,13 @@ export type AppConfig = {
     apiKey?: string;
     endpoint: string;
     timeoutMs: number;
+  };
+  msfs: {
+    cliPath?: string;
+    timeoutMs: number;
+    maxConcurrency: number;
+    trackIntervalMs: number;
+    trackMaximumPoints: number;
   };
 };
 
@@ -158,6 +175,13 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
       ...(value.VOLCENGINE_SEARCH_API_KEY ? { apiKey: value.VOLCENGINE_SEARCH_API_KEY } : {}),
       endpoint: value.VOLCENGINE_SEARCH_CUSTOM_ENDPOINT,
       timeoutMs: value.VOLCENGINE_SEARCH_TIMEOUT_MS,
+    },
+    msfs: {
+      ...(value.MSFS_CLI_PATH ? { cliPath: value.MSFS_CLI_PATH } : {}),
+      timeoutMs: value.MSFS_CLI_TIMEOUT_MS,
+      maxConcurrency: value.MSFS_CLI_MAX_CONCURRENCY,
+      trackIntervalMs: value.MSFS_TRACK_INTERVAL_MS,
+      trackMaximumPoints: value.MSFS_TRACK_MAX_POINTS,
     },
   };
 }

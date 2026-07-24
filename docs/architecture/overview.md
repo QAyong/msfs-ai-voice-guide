@@ -1,8 +1,8 @@
 # 架构概览
 
-**最后更新：** 2026-07-19
+**最后更新：** 2026-07-25
 
-**阶段：** 第一版语音与文字闭环、网络搜索工具、Electron Room 客户端与启动诊断已实现；安装包待完成
+**阶段：** 第一版语音与文字闭环、网络搜索、7 个只读 MSFS 工具、Electron Room 客户端与启动诊断已实现；真实模拟器冒烟与正式安装包待完成
 
 ## 架构目标
 
@@ -95,14 +95,16 @@ graph TD
 
 职责划分：
 
-| 桌面模块                            | 职责                                                          | 安全边界                                                   |
-| ----------------------------------- | ------------------------------------------------------------- | ---------------------------------------------------------- |
-| Electron Main Process（主进程）     | 窗口编排、短期 Token、配置诊断、Worker 生命周期和状态持久化   | 校验 IPC 与 URL；API Secret 不进入 Renderer                |
-| Assistant BrowserWindow（助手窗口） | Room 连接、聊天气泡、麦克风发布、回答播放、实时状态与来源卡片 | 只加载应用本地可信 UI；只持有短期参与者 Token              |
-| Agent Utility Process               | 启动/停止 LiveKit Worker，并隔离其进程池                      | 不阻塞 Electron 主进程；错误通过脱敏 Readiness DTO 返回    |
-| Source BrowserWindow（来源窗口）    | 域名、关闭、拉伸及严格跟随助手窗口                            | 本地窗口框架与第三方网页内容分离；移动结束后恢复伴随位置   |
-| WebContentsView（隔离网页视图）     | 加载用户选择的 HTTPS 百科或其他源页面                         | 禁用 Node 集成；开启上下文隔离与沙箱；拒绝权限和任意新窗口 |
-| Node AI Agent                       | LiveKit、LLM、STT、TTS 和 `searchWeb` 工具编排                | 不依赖桌面 Renderer；继续复用现有配置与搜索边界            |
+| 桌面模块                            | 职责                                                          | 安全边界                                                             |
+| ----------------------------------- | ------------------------------------------------------------- | -------------------------------------------------------------------- |
+| Electron Main Process（主进程）     | 窗口编排、短期 Token、配置诊断、Worker 生命周期和状态持久化   | 校验 IPC 与 URL；API Secret 不进入 Renderer                          |
+| Assistant BrowserWindow（助手窗口） | Room 连接、聊天气泡、麦克风发布、回答播放、实时状态与来源卡片 | 只加载应用本地可信 UI；只持有短期参与者 Token                        |
+| Agent Utility Process               | 启动/停止 LiveKit Worker，并隔离其进程池                      | 不阻塞 Electron 主进程；错误通过脱敏 Readiness DTO 返回              |
+| Source BrowserWindow（来源窗口）    | 域名、关闭、拉伸及默认伴随助手窗口                            | 本地窗口框架与第三方网页内容分离；手动移动后本次打开期间保持自由位置 |
+| WebContentsView（隔离网页视图）     | 加载用户选择的 HTTPS 百科或其他源页面                         | 禁用 Node 集成；开启上下文隔离与沙箱；拒绝权限和任意新窗口           |
+| Node AI Agent                       | LiveKit、LLM、STT、TTS 和 `searchWeb` 工具编排                | 不依赖桌面 Renderer；继续复用现有配置与搜索边界                      |
+
+MSFS 数据由 Agent 中的 `src/msfs/` 适配层调用随应用分发的 `msfs.exe` / `msfsd.exe`，并且只通过真实 MSFS 2024 的 SimConnect 获取。桌面 Renderer 不直接运行 CLI；模拟器不可用时，Agent 返回脱敏不可用状态而不生成位置、航路或天气数据。
 
 来源查看流程：
 
@@ -123,7 +125,7 @@ sequenceDiagram
     Source-->>User: 显示原始网页
 ```
 
-远程页面不能共享助手窗口的 Preload 或 IPC。正式实现使用当前 Electron 推荐的 `WebContentsView`，不使用已弃用的 `BrowserView`，也不把 `<webview>` 作为首选方案。详细交互、安全检查和验收条件见 [Spec-004](../specs/spec-004-web-frontend-and-source-preview.md)。
+远程页面不能共享助手窗口的 Preload 或 IPC。正式实现使用当前 Electron 推荐的 `WebContentsView`，不使用已弃用的 `BrowserView`，也不把 `<webview>` 作为首选方案。来源网页使用真实内容区的响应式视口、默认 100% 缩放；详细交互、安全检查和验收条件见 [Spec-004](../specs/spec-004-web-frontend-and-source-preview.md) 与 [Spec-009](../specs/spec-009-source-window-responsive-layout.md)。
 
 ## 模块职责与依赖方向
 
@@ -136,6 +138,7 @@ sequenceDiagram
 | `src/agent/`        | 连接 LiveKit、创建会话、组合依赖                          | 上述内部模块、LiveKit Agents | 具体密钥解析、长篇提示词、未来业务逻辑 |
 | `src/search/`       | 搜索 API 请求、结果标准化、来源与相关性保护               | Zod、HTTP、共享类型          | LiveKit 生命周期、CLI 参数解析         |
 | `src/tools/`        | 将共享业务能力包装为 LiveKit 工具及其 Zod 参数            | 业务服务、LiveKit、共享类型  | 复制搜索协议、直接解析环境变量         |
+| `src/msfs/`         | 原生 CLI 进程、JSON/NDJSON、领域模型、错误与轨迹缓存      | Node 进程、Zod、MSFS CLI     | LiveKit 会话、提示词、Renderer         |
 | `src/cli/`          | 本地命令的参数、输出格式与退出码                          | 共享业务服务                 | 复制 Agent 或搜索业务逻辑              |
 
 依赖始终由入口向内组合；`config`、`conversation` 和未来的 `tools` 不反向导入 `agent`，从而避免循环依赖。
@@ -173,22 +176,23 @@ sequenceDiagram
 
 ## 外部依赖
 
-| 依赖类别                    | 用途                                 | 接入模块                    | 选型状态           |
-| --------------------------- | ------------------------------------ | --------------------------- | ------------------ |
-| LiveKit Agents Node.js SDK  | 实时语音 Agent 生命周期与会话        | `src/agent/`                | 已实现并验证       |
-| LiveKit JavaScript SDK      | 桌面 Room、麦克风与回答音频          | `desktop/renderer/`         | 已实现             |
-| LiveKit React Components    | 官方 Session、Agent 状态与消息 UI    | `desktop/renderer/`         | 已实现并验证       |
-| LiveKit Server / Cloud      | 本地联调房间基础设施                 | 本地运行环境                | 本机 Server 已验证 |
-| DeepSeek                    | 对话理解与生成（LLM）                | `src/providers/llm/`        | 当前基线           |
-| 豆包流式 ASR                | 语音转文字（STT）                    | `src/providers/stt/`        | 第一版确定         |
-| 豆包双向流式 TTS            | 文字转语音（TTS）                    | `src/providers/tts/`        | 第一版确定         |
-| 豆包搜索 Custom API         | 通用公开网页外部信息检索             | `src/search/`               | Spec-003 已实现    |
-| Zod                         | 配置和未来工具参数校验               | `src/config/`、`src/tools/` | 已确定             |
-| Vitest                      | 自动化测试                           | `tests/`                    | 已确定             |
-| Electron                    | 桌面壳、Utility Process、窗口 IPC    | `desktop/main/`             | 已实现             |
-| React + Vite                | 助手与来源窗口的本地可信 UI          | `desktop/renderer/`         | 已实现             |
-| react-markdown + remark-gfm | Agent Markdown 回答的安全 React 渲染 | `desktop/renderer/`         | 已实现并验证       |
-| WebContentsView             | 隔离显示第三方 HTTPS 源网页          | `desktop/main/`             | 基础实现已完成     |
+| 依赖类别                    | 用途                                     | 接入模块                                 | 选型状态           |
+| --------------------------- | ---------------------------------------- | ---------------------------------------- | ------------------ |
+| LiveKit Agents Node.js SDK  | 实时语音 Agent 生命周期与会话            | `src/agent/`                             | 已实现并验证       |
+| LiveKit JavaScript SDK      | 桌面 Room、麦克风与回答音频              | `desktop/renderer/`                      | 已实现             |
+| LiveKit React Components    | 官方 Session、Agent 状态与消息 UI        | `desktop/renderer/`                      | 已实现并验证       |
+| LiveKit Server / Cloud      | 本地联调房间基础设施                     | 本地运行环境                             | 本机 Server 已验证 |
+| DeepSeek                    | 对话理解与生成（LLM）                    | `src/providers/llm/`                     | 当前基线           |
+| 豆包流式 ASR                | 语音转文字（STT）                        | `src/providers/stt/`                     | 第一版确定         |
+| 豆包双向流式 TTS            | 文字转语音（TTS）                        | `src/providers/tts/`                     | 第一版确定         |
+| 豆包搜索 Custom API         | 通用公开网页外部信息检索                 | `src/search/`                            | Spec-003 已实现    |
+| Zod                         | 配置、CLI 响应和工具参数校验             | `src/config/`、`src/msfs/`、`src/tools/` | 已实现             |
+| 原生 MSFS CLI               | SimConnect、EFB 航路、设施和游戏环境读取 | `src/msfs/`                              | 已实现，待实机冒烟 |
+| Vitest                      | 自动化测试                               | `tests/`                                 | 已确定             |
+| Electron                    | 桌面壳、Utility Process、窗口 IPC        | `desktop/main/`                          | 已实现             |
+| React + Vite                | 助手与来源窗口的本地可信 UI              | `desktop/renderer/`                      | 已实现             |
+| react-markdown + remark-gfm | Agent Markdown 回答的安全 React 渲染     | `desktop/renderer/`                      | 已实现并验证       |
+| WebContentsView             | 隔离显示第三方 HTTPS 源网页              | `desktop/main/`                          | 基础实现已完成     |
 
 ## 不变量（来自 ADR）
 
@@ -197,3 +201,4 @@ sequenceDiagram
 - Provider 必须按 LLM/STT/TTS 分类，经 `registry.ts` 创建；火山协议细节不可出现在 Agent 入口。
 - 所有配置与未来工具输入均须由 Zod 在边界处校验。
 - Spec-001 的单用户本地语音基线保持不变；`searchWeb` 可查询公开网页中的天气、新闻等外部信息，但不得将其描述为模拟器遥测或专用数据 Provider。
+- 原生 MSFS CLI 是唯一模拟器边界；只有 `src/msfs/` 可以启动 CLI、解析 JSON/NDJSON 或接触受控 SimVar，第一版工具集合不得包含写操作或 `--unsafe`。
