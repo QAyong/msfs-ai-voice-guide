@@ -8,7 +8,7 @@
   "scripts": {
     "build": "pnpm desktop:typecheck && pnpm desktop:build",
     "desktop:dev": "electron-vite dev --entry ./out/main/index.js",
-    "desktop:build": "electron-vite build",
+    "desktop:build": "electron-vite build && node scripts/stage-msfs-cli.mjs resources/msfs out/msfs",
     "desktop:preview": "electron-vite preview --entry ./out/main/index.js",
     "desktop:typecheck": "tsc --noEmit --project desktop/tsconfig.json",
     "lint": "eslint .",
@@ -23,6 +23,8 @@
     "search": "node --env-file=.env --import tsx src/cli/search.ts",
     "search:test": "node --env-file=.env scripts/test-volcengine-search.mjs",
     "search:smoke": "node --env-file=.env node_modules/vitest/vitest.mjs run tests/e2e/search-api.smoke.test.ts",
+    "msfs:stage": "node scripts/stage-msfs-cli.mjs resources/msfs out/msfs",
+    "msfs:smoke": "node --env-file=.env --import tsx scripts/smoke-msfs-adapter.ts",
     "verify": "pnpm lint && pnpm typecheck && pnpm desktop:typecheck && pnpm test && pnpm format:check"
   },
   "dependencies": {

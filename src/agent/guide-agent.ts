@@ -8,8 +8,13 @@ import {
 } from '../../shared/voice-control.js';
 import { loadConfig } from '../config/schema.js';
 import { createGuideInstructions } from '../conversation/guide-instructions.js';
+import { MsfsCliClient } from '../msfs/cli-client.js';
+import { MsfsGuideService } from '../msfs/guide-service.js';
+import { resolveMsfsCliPath } from '../msfs/path.js';
+import { readinessAttributes } from '../msfs/types.js';
 import { createVoiceProviders } from '../providers/registry.js';
 import { SearchService } from '../search/service.js';
+import { createMsfsGuideTools } from '../tools/msfs-guide.js';
 import { createSearchWebTool } from '../tools/search-web.js';
 import { extractGuideSources } from './search-source-events.js';
 
@@ -17,10 +22,36 @@ export function createGuideAgent(tools: readonly llm.ToolContextEntry[] = []): v
   return new voice.Agent({ instructions: createGuideInstructions(), tools });
 }
 
+export function composeGuideTools(
+  msfsTools: readonly llm.ToolContextEntry[],
+  searchTool?: llm.ToolContextEntry,
+): readonly llm.ToolContextEntry[] {
+  return [...msfsTools, ...(searchTool ? [searchTool] : [])];
+}
+
 export default defineAgent({
   entry: async (ctx) => {
     const config = loadConfig();
     const providers = createVoiceProviders(config);
+    const resourcesPath = (process as NodeJS.Process & { resourcesPath?: string }).resourcesPath;
+    const msfsService = new MsfsGuideService(
+      new MsfsCliClient({
+        executablePath: resolveMsfsCliPath({
+          ...(config.msfs.cliPath ? { configuredPath: config.msfs.cliPath } : {}),
+          ...(resourcesPath ? { resourcesPath } : {}),
+        }),
+        timeoutMs: config.msfs.timeoutMs,
+        maxConcurrency: config.msfs.maxConcurrency,
+        onDiagnostic: (event) => {
+          console.warn(`[msfs-cli] ${JSON.stringify(event)}`);
+        },
+      }),
+      {
+        trackIntervalMs: config.msfs.trackIntervalMs,
+        trackMaximumPoints: config.msfs.trackMaximumPoints,
+      },
+    );
+    ctx.addShutdownCallback(() => msfsService.close());
     const session = new voice.AgentSession({
       stt: providers.stt,
       llm: providers.llm,
@@ -38,6 +69,21 @@ export default defineAgent({
       inputMode = nextMode;
       publishVoiceAttributes({ [guideVoiceAttributes.inputMode]: nextMode });
     };
+    void msfsService
+      .warmup()
+      .then((readiness) => {
+        publishVoiceAttributes(readinessAttributes(readiness));
+      })
+      .catch(() =>
+        publishVoiceAttributes(
+          readinessAttributes({
+            status: 'cli_unavailable',
+            message: 'MSFS CLI 暂时不可用。',
+            code: 'MSFS_CLI_UNAVAILABLE',
+            timestamp: new Date().toISOString(),
+          }),
+        ),
+      );
 
     session.on(voice.AgentSessionEventTypes.UserStateChanged, (event) => {
       publishVoiceAttributes({ [guideVoiceAttributes.userState]: event.newState });
@@ -101,19 +147,21 @@ export default defineAgent({
         })
         .catch(() => undefined);
     });
-    const tools = config.search.apiKey
-      ? [
-          createSearchWebTool(
-            new SearchService({
-              apiKey: config.search.apiKey,
-              endpoint: config.search.endpoint,
-              timeoutMs: config.search.timeoutMs,
-            }),
-          ),
-        ]
-      : [];
+    const searchTool = config.search.apiKey
+      ? createSearchWebTool(
+          new SearchService({
+            apiKey: config.search.apiKey,
+            endpoint: config.search.endpoint,
+            timeoutMs: config.search.timeoutMs,
+          }),
+        )
+      : undefined;
+    const tools = composeGuideTools(createMsfsGuideTools(msfsService), searchTool);
 
-    await session.start({ room: ctx.room, agent: createGuideAgent(tools) });
+    await session.start({
+      room: ctx.room,
+      agent: createGuideAgent(tools),
+    });
     session.input.setAudioEnabled(false);
     publishVoiceAttributes({
       [guideVoiceAttributes.inputMode]: inputMode,

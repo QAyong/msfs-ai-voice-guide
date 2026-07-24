@@ -4,6 +4,8 @@ node_modules/
 dist/
 out/
 coverage/
+resources/msfs/
+out/msfs/
 
 # Local secrets and overrides
 .env
