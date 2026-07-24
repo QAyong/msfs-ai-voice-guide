@@ -25,7 +25,6 @@ describe('source preview window state', () => {
             preview,
             source: preview.sources[0]!,
             currentUrl: preview.sources[0]!.url,
-            layoutMode: 'portrait',
           };
     expect(sourceWindowStateSchema.safeParse(value).success).toBe(true);
   });
@@ -37,7 +36,6 @@ describe('source preview window state', () => {
         preview,
         source: preview.sources[0]!,
         currentUrl: preview.sources[0]!.url,
-        layoutMode: 'desktop',
         error: 'http',
         message: '网站返回了 HTTP 406。',
         statusCode: 406,
@@ -49,7 +47,6 @@ describe('source preview window state', () => {
         preview,
         source: preview.sources[0],
         currentUrl: 'http://example.com',
-        layoutMode: 'phone',
         error: 'http',
         message: '',
       }).success,
@@ -67,7 +64,6 @@ describe('source preview window state', () => {
         preview: { ...preview, sources: [httpSource] },
         source: httpSource,
         currentUrl: httpSource.url,
-        layoutMode: 'portrait',
       }).success,
     ).toBe(true);
   });

@@ -29,8 +29,6 @@ import { CaretDownIcon } from '@phosphor-icons/react/dist/csr/CaretDown';
 import { CaretUpIcon } from '@phosphor-icons/react/dist/csr/CaretUp';
 import { CircleNotchIcon } from '@phosphor-icons/react/dist/csr/CircleNotch';
 import { CheckIcon } from '@phosphor-icons/react/dist/csr/Check';
-import { DesktopIcon } from '@phosphor-icons/react/dist/csr/Desktop';
-import { DeviceTabletIcon } from '@phosphor-icons/react/dist/csr/DeviceTablet';
 import { GearSixIcon } from '@phosphor-icons/react/dist/csr/GearSix';
 import { KeyboardIcon } from '@phosphor-icons/react/dist/csr/Keyboard';
 import { MagnifyingGlassIcon } from '@phosphor-icons/react/dist/csr/MagnifyingGlass';
@@ -60,6 +58,10 @@ import {
   type GuideVoiceRpcMethod,
   type VoiceInputMode,
 } from '../../../shared/voice-control.js';
+import {
+  msfsReadinessAttributes,
+  type MsfsReadinessStatus,
+} from '../../../shared/msfs-readiness.js';
 import { resolveVoiceStatus } from './voice-ui-state.js';
 import { MessageMarkdown } from './message-markdown.js';
 import { createDisplayMessages, shouldAttachSourcePreview } from './session-messages.js';
@@ -549,6 +551,9 @@ const AssistantView = ({
   );
 
   const agentFailure = agent.state === 'failed' ? agent.failureReasons.join('；') : '';
+  const msfsStatus = agent.attributes[msfsReadinessAttributes.status] as
+    MsfsReadinessStatus | undefined;
+  const msfsMessage = agent.attributes[msfsReadinessAttributes.message];
   const errorMessage = microphoneError || controlError || startupError || agentFailure;
   const userStateValue = agent.attributes[guideVoiceAttributes.userState];
   const userState = isGuideUserState(userStateValue) ? userStateValue : undefined;
@@ -972,6 +977,11 @@ const AssistantView = ({
           收起
         </button>
       </header>
+      {msfsStatus && msfsStatus !== 'ready' ? (
+        <div className="msfs-readiness-note" role="status" data-msfs-status={msfsStatus}>
+          {msfsMessage || '模拟器飞行数据暂不可用，普通对话仍可继续。'}
+        </div>
+      ) : null}
       <div className="messages-shell">
         <section
           ref={messagesRef}
@@ -1334,34 +1344,6 @@ const Source = () => {
         </span>
         {state && state.mode !== 'preview' ? (
           <>
-            <div className="source-layout-toggle no-drag" role="group" aria-label="网页预览布局">
-              <button
-                type="button"
-                aria-label="电脑布局"
-                aria-pressed={state.layoutMode === 'desktop'}
-                title="电脑布局"
-                onClick={() => void window.desktop?.setSourceLayoutMode('desktop')}
-              >
-                <DesktopIcon
-                  size={17}
-                  weight={state.layoutMode === 'desktop' ? 'fill' : 'regular'}
-                  aria-hidden="true"
-                />
-              </button>
-              <button
-                type="button"
-                aria-label="竖版布局"
-                aria-pressed={state.layoutMode === 'portrait'}
-                title="竖版布局"
-                onClick={() => void window.desktop?.setSourceLayoutMode('portrait')}
-              >
-                <DeviceTabletIcon
-                  size={17}
-                  weight={state.layoutMode === 'portrait' ? 'fill' : 'regular'}
-                  aria-hidden="true"
-                />
-              </button>
-            </div>
             <button
               type="button"
               className="source-icon-button no-drag"
