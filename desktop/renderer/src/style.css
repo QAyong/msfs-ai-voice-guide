@@ -1175,6 +1175,51 @@ html[data-motion='off'] *::after {
   background: #eef3fa;
   color: #244a85;
 }
+.source-icon-button:disabled {
+  background: transparent;
+  color: #b7c0ce;
+  cursor: default;
+}
+.source-icon-button:focus-visible,
+.source-zoom-percent:focus-visible {
+  outline: 2px solid #6d93d6;
+  outline-offset: 1px;
+}
+.source-zoom-controls {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 1px;
+  border: 1px solid #d9e2ef;
+  border-radius: 8px;
+  padding: 1px;
+  background: #f7f9fc;
+}
+.source-zoom-controls .source-icon-button {
+  width: 24px;
+  height: 24px;
+  flex-basis: 24px;
+  border-radius: 6px;
+}
+.source-zoom-percent {
+  min-width: 42px;
+  height: 24px;
+  border: 0;
+  border-radius: 6px;
+  padding: 0 4px;
+  background: transparent;
+  color: #3d4d66;
+  cursor: pointer;
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  line-height: 24px;
+  text-align: center;
+}
+.source-zoom-percent:hover {
+  background: #eef3fa;
+  color: #244a85;
+}
 .source-results {
   min-height: 0;
   flex: 1;

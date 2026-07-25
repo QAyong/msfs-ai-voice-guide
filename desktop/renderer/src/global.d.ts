@@ -24,6 +24,7 @@ declare global {
       retrySource(): Promise<boolean>;
       openCurrentSourceExternal(): Promise<boolean>;
       closeSource(): Promise<void>;
+      setSourcePageZoom(action: 'in' | 'out' | 'reset'): Promise<number | null>;
       openExternal(url: string): Promise<void>;
       getReadiness(): Promise<DesktopReadiness>;
       retryReadiness(): Promise<DesktopReadiness>;

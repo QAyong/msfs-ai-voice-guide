@@ -32,6 +32,7 @@ CLI 仓库负责：
 - 将一个已验证的 CLI 发布物暂存为 Electron 资源，并在安装态从应用资源目录解析 `msfs.exe`。
 - 在正式安装器中携带 bridge Community Package，并只安装或更新自己的 `Community2024\msfs-native-cli-route-bridge` 目录。
 - 在打包前校验 CLI 发布物的版本、协议兼容性和文件完整性；不允许依赖开发机上的绝对路径。
+- 作为同一桌面安装包的一部分，另按 [Spec-011](../specs/spec-011-packaged-local-livekit-runtime.md) 管理应用私有 LiveKit Server；它不属于 MSFS CLI 发布物，也不复用 CLI 的版本或安装目录。
 
 ## 开发态与发布态
 
@@ -89,4 +90,5 @@ EFB 航路功能还依赖 Community Package。安装器或首次启动引导应�
 
 - [ADR-008：原生 MSFS CLI 作为导游 Agent 边界](../adr/adr-008-native-msfs-cli-agent-boundary.md)
 - [Spec-008：原生 MSFS CLI 导游工具接入](../specs/spec-008-native-msfs-cli-guide-tools.md)
+- [Spec-011：桌面安装包的本地 LiveKit 运行时](../specs/spec-011-packaged-local-livekit-runtime.md)
 - [架构概览](overview.md)

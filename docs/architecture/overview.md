@@ -2,7 +2,7 @@
 
 **最后更新：** 2026-07-25
 
-**阶段：** 第一版语音与文字闭环、网络搜索、7 个只读 MSFS 工具、Electron Room 客户端与启动诊断已实现；真实模拟器冒烟与正式安装包待完成
+**阶段：** 第一版语音与文字闭环、网络搜索、7 个只读 MSFS 工具、Electron Room 客户端与启动诊断已实现；真实模拟器冒烟与正式安装包待完成。本地 LiveKit 安装态运行时已完成设计，待实现。
 
 ## 架构目标
 
@@ -176,23 +176,23 @@ sequenceDiagram
 
 ## 外部依赖
 
-| 依赖类别                    | 用途                                     | 接入模块                                 | 选型状态           |
-| --------------------------- | ---------------------------------------- | ---------------------------------------- | ------------------ |
-| LiveKit Agents Node.js SDK  | 实时语音 Agent 生命周期与会话            | `src/agent/`                             | 已实现并验证       |
-| LiveKit JavaScript SDK      | 桌面 Room、麦克风与回答音频              | `desktop/renderer/`                      | 已实现             |
-| LiveKit React Components    | 官方 Session、Agent 状态与消息 UI        | `desktop/renderer/`                      | 已实现并验证       |
-| LiveKit Server / Cloud      | 本地联调房间基础设施                     | 本地运行环境                             | 本机 Server 已验证 |
-| DeepSeek                    | 对话理解与生成（LLM）                    | `src/providers/llm/`                     | 当前基线           |
-| 豆包流式 ASR                | 语音转文字（STT）                        | `src/providers/stt/`                     | 第一版确定         |
-| 豆包双向流式 TTS            | 文字转语音（TTS）                        | `src/providers/tts/`                     | 第一版确定         |
-| 豆包搜索 Custom API         | 通用公开网页外部信息检索                 | `src/search/`                            | Spec-003 已实现    |
-| Zod                         | 配置、CLI 响应和工具参数校验             | `src/config/`、`src/msfs/`、`src/tools/` | 已实现             |
-| 原生 MSFS CLI               | SimConnect、EFB 航路、设施和游戏环境读取 | `src/msfs/`                              | 已实现，待实机冒烟 |
-| Vitest                      | 自动化测试                               | `tests/`                                 | 已确定             |
-| Electron                    | 桌面壳、Utility Process、窗口 IPC        | `desktop/main/`                          | 已实现             |
-| React + Vite                | 助手与来源窗口的本地可信 UI              | `desktop/renderer/`                      | 已实现             |
-| react-markdown + remark-gfm | Agent Markdown 回答的安全 React 渲染     | `desktop/renderer/`                      | 已实现并验证       |
-| WebContentsView             | 隔离显示第三方 HTTPS 源网页              | `desktop/main/`                          | 基础实现已完成     |
+| 依赖类别                    | 用途                                     | 接入模块                                 | 选型状态                        |
+| --------------------------- | ---------------------------------------- | ---------------------------------------- | ------------------------------- |
+| LiveKit Agents Node.js SDK  | 实时语音 Agent 生命周期与会话            | `src/agent/`                             | 已实现并验证                    |
+| LiveKit JavaScript SDK      | 桌面 Room、麦克风与回答音频              | `desktop/renderer/`                      | 已实现                          |
+| LiveKit React Components    | 官方 Session、Agent 状态与消息 UI        | `desktop/renderer/`                      | 已实现并验证                    |
+| LiveKit Server              | 本地联调与未来安装态的单机 Room 基础设施 | 本地运行环境 / 应用私有运行时            | 开发态已验证；安装态见 Spec-011 |
+| DeepSeek                    | 对话理解与生成（LLM）                    | `src/providers/llm/`                     | 当前基线                        |
+| 豆包流式 ASR                | 语音转文字（STT）                        | `src/providers/stt/`                     | 第一版确定                      |
+| 豆包双向流式 TTS            | 文字转语音（TTS）                        | `src/providers/tts/`                     | 第一版确定                      |
+| 豆包搜索 Custom API         | 通用公开网页外部信息检索                 | `src/search/`                            | Spec-003 已实现                 |
+| Zod                         | 配置、CLI 响应和工具参数校验             | `src/config/`、`src/msfs/`、`src/tools/` | 已实现                          |
+| 原生 MSFS CLI               | SimConnect、EFB 航路、设施和游戏环境读取 | `src/msfs/`                              | 已实现，待实机冒烟              |
+| Vitest                      | 自动化测试                               | `tests/`                                 | 已确定                          |
+| Electron                    | 桌面壳、Utility Process、窗口 IPC        | `desktop/main/`                          | 已实现                          |
+| React + Vite                | 助手与来源窗口的本地可信 UI              | `desktop/renderer/`                      | 已实现                          |
+| react-markdown + remark-gfm | Agent Markdown 回答的安全 React 渲染     | `desktop/renderer/`                      | 已实现并验证                    |
+| WebContentsView             | 隔离显示第三方 HTTPS 源网页              | `desktop/main/`                          | 基础实现已完成                  |
 
 ## 不变量（来自 ADR）
 

@@ -9,17 +9,15 @@
 - DeepSeek LLM、豆包流式 ASR 和豆包双向流式 TTS 均已开通，且音色已授权。
 - 如需验证外部信息工具，`.env` 中还需配置 `VOLCENGINE_SEARCH_API_KEY`。
 
-## 启动本机 LiveKit Server
+## 启动本机 LiveKit Server（不使用 Docker）
 
-本项目不容器化 Agent；下列 Docker 命令（容器运行命令）只用于临时启动本机 LiveKit Server。它仅绑定 `127.0.0.1`（本机回环地址），关闭终端或执行停止命令后不会保留服务。
+本项目的开发、测试和发行路径均不使用 Docker。开发者从 [LiveKit 官方 Windows 发布页](https://github.com/livekit/livekit/releases/latest)获取明确版本的 `livekit-server.exe`，核验上游版本、哈希与许可证后放入受 Git 忽略的 `resources/livekit/`。
 
 ```powershell
-docker run -d --rm --name msfs-livekit-dev `
-  -p 127.0.0.1:7880:7880/tcp `
-  -p 127.0.0.1:7881:7881/tcp `
-  -p 127.0.0.1:50000-50100:50000-50100/udp `
-  livekit/livekit-server:v1.13.3 --dev --bind 0.0.0.0 --udp-port 50000-50100
+pnpm livekit:dev
 ```
+
+保持该 PowerShell 窗口运行；`--dev` 是 LiveKit 官方的开发模式，默认绑定 `127.0.0.1:7880`，并使用 `devkey` / `secret`。它不得用于安装态或正式发行。需要停止时，在该窗口按 `Ctrl+C`。
 
 在本地 `.env`（环境变量文件）中使用 LiveKit 开发模式默认值：
 
@@ -101,4 +99,4 @@ LIVEKIT_API_SECRET=secret
 ## 停止本地测试
 
 - 退出桌面应用会自动停止 Agent Worker 并释放 Room、麦克风与回答音频。
-- 执行 `docker stop msfs-livekit-dev` 停止本机 LiveKit Server。
+- 在运行 `livekit-server.exe --dev` 的 PowerShell 窗口按 `Ctrl+C` 停止本机 LiveKit Server。

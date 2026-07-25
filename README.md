@@ -4,7 +4,7 @@
 
 第一版已在本机完成真实语音对话联调。当前使用 DeepSeek LLM（大语言模型）、豆包 STT（语音转文字）和豆包 TTS（文字转语音），并可选接入豆包搜索 Custom API。Agent 已通过随应用分发的原生 MSFS CLI 接入只读飞行快照、地理上下文、EFB 航路、下一航点、附近航空设施、游戏内天气/时间和本次会话轨迹；真实模拟器场景仍需在运行中的 MSFS 2024 内完成冒烟验收。
 
-桌面前端已接通真实 LiveKit Room：应用自动校验配置并启动隔离的 Agent Worker，主进程签发短期 Token；Renderer 使用 LiveKit 官方 React Session 组件管理房间、麦克风、消息和回答音频，同时支持鼠标/空格键按住说话与连续自然对话。正式 `.exe` 安装包与发布流程仍未实现。
+桌面前端已接通真实 LiveKit Room：应用自动校验配置并启动隔离的 Agent Worker，主进程签发短期 Token；Renderer 使用 LiveKit 官方 React Session 组件管理房间、麦克风、消息和回答音频，同时支持鼠标/空格键按住说话与连续自然对话。开发与安装态均使用官方 Windows `livekit-server.exe` 的本地运行方式，不使用 Docker；正式 `.exe` 安装包与自动运行时管理仍待实现，见 [Spec-011](docs/specs/spec-011-packaged-local-livekit-runtime.md)。
 
 ## 文档入口
 
@@ -15,6 +15,8 @@
 - [桌面文字输入](docs/specs/spec-007-desktop-text-input.md)
 - [原生 MSFS CLI 导游工具接入](docs/specs/spec-008-native-msfs-cli-guide-tools.md)
 - [MSFS CLI 发布物集成](docs/architecture/msfs-cli-release-integration.md)
+- [桌面安装包的本地 LiveKit 运行时](docs/specs/spec-011-packaged-local-livekit-runtime.md)
+- [本地 LiveKit 运行时架构](docs/architecture/local-livekit-runtime.md)
 - [基于 Mem0 的持久化对话记忆规划](docs/specs/spec-005-persistent-conversation-memory.md)
 - [前端 HTML 交互原型](prototypes/voice-chat-panel.html)
 - [架构概览](docs/architecture/overview.md)
@@ -79,9 +81,11 @@ pnpm search:smoke
 
 ## 本地运行
 
-1. 启动本机 LiveKit Server，并在 `.env` 中填写 `ws://127.0.0.1:7880`、`devkey`、`secret`、DeepSeek Key 与豆包语音凭据。
-2. 使用 `pnpm agent:check` 检查配置（不会输出密钥，也不会发起远程请求）。
-3. 执行 `pnpm build`，再执行 `pnpm desktop:preview`。桌面应用会自动启动 Agent Worker、创建独立房间并分派 `msfs-voice-guide`。
-4. 在桌面窗口按住说话并松开，或切换“连续对话”后直接讲话；系统会在轮次结束后自动回答，无需另外启动 Worker、生成 Token 或打开 LiveKit Meet。
+1. 从 [LiveKit 官方 Windows 发布页](https://github.com/livekit/livekit/releases/latest)下载并验证 `livekit-server.exe`，放入受 Git 忽略的 `resources/livekit/`。开发态不使用 Docker。
+2. 在独立 PowerShell 窗口运行 `pnpm livekit:dev`；保持该窗口运行。它调用 `resources/livekit/livekit-server.exe --dev`，默认只绑定 `127.0.0.1:7880`，并使用 `devkey` / `secret`。
+3. 在 `.env` 中填写 `ws://127.0.0.1:7880`、`devkey`、`secret`、DeepSeek Key 与豆包语音凭据。
+4. 使用 `pnpm agent:check` 检查配置（不会输出密钥，也不会发起远程请求）。
+5. 执行 `pnpm build`，再执行 `pnpm desktop:preview`。桌面应用会自动启动 Agent Worker、创建独立房间并分派 `msfs-voice-guide`。
+6. 在桌面窗口按住说话并松开，或切换“连续对话”后直接讲话；系统会在轮次结束后自动回答，无需另外启动 Worker、生成 Token 或打开 LiveKit Meet。
 
-Agent Worker 仍依赖可访问的 LiveKit Server；服务未启动、凭据错误或麦克风被拒绝时，桌面应用会显示可重试的脱敏提示。包含 Docker 启动和关闭命令的完整步骤见[本地冒烟测试](docs/testing/local-agent-smoke.md)。
+Agent Worker 仍依赖可访问的本机 LiveKit Server；服务未启动、凭据错误或麦克风被拒绝时，桌面应用会显示可重试的脱敏提示。完整步骤见[本地冒烟测试](docs/testing/local-agent-smoke.md)。

@@ -1,5 +1,10 @@
 import { z } from 'zod';
 import { guideSourceSchema, guideSourcesMessageSchema } from './guide-events.js';
+import {
+  SOURCE_PAGE_ZOOM_MAX_PERCENT,
+  SOURCE_PAGE_ZOOM_MIN_PERCENT,
+  SOURCE_PAGE_ZOOM_STEP_PERCENT,
+} from './source-page-zoom.js';
 
 const sourceSelectionSchema = z.object({
   preview: guideSourcesMessageSchema,
@@ -8,6 +13,12 @@ const sourceSelectionSchema = z.object({
     .string()
     .url()
     .refine((value) => ['http:', 'https:'].includes(new URL(value).protocol)),
+  pageZoomPercent: z
+    .number()
+    .int()
+    .min(SOURCE_PAGE_ZOOM_MIN_PERCENT)
+    .max(SOURCE_PAGE_ZOOM_MAX_PERCENT)
+    .refine((value) => value % SOURCE_PAGE_ZOOM_STEP_PERCENT === 0),
 });
 
 export const sourceWindowStateSchema = z.discriminatedUnion('mode', [

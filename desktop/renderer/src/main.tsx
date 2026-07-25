@@ -33,9 +33,11 @@ import { GearSixIcon } from '@phosphor-icons/react/dist/csr/GearSix';
 import { KeyboardIcon } from '@phosphor-icons/react/dist/csr/Keyboard';
 import { MagnifyingGlassIcon } from '@phosphor-icons/react/dist/csr/MagnifyingGlass';
 import { MicrophoneIcon } from '@phosphor-icons/react/dist/csr/Microphone';
+import { MinusIcon } from '@phosphor-icons/react/dist/csr/Minus';
 import { PaperPlaneTiltIcon } from '@phosphor-icons/react/dist/csr/PaperPlaneTilt';
 import { PhoneCallIcon } from '@phosphor-icons/react/dist/csr/PhoneCall';
 import { PhoneDisconnectIcon } from '@phosphor-icons/react/dist/csr/PhoneDisconnect';
+import { PlusIcon } from '@phosphor-icons/react/dist/csr/Plus';
 import { PowerIcon } from '@phosphor-icons/react/dist/csr/Power';
 import { PushPinIcon } from '@phosphor-icons/react/dist/csr/PushPin';
 import { SpeakerHighIcon } from '@phosphor-icons/react/dist/csr/SpeakerHigh';
@@ -50,6 +52,7 @@ import {
   type GuideSourcesMessage,
 } from '../../../shared/guide-events.js';
 import type { SourceWindowState } from '../../../shared/source-preview.js';
+import { canZoomSourcePageIn, canZoomSourcePageOut } from '../../../shared/source-page-zoom.js';
 import {
   guideVoiceAttributes,
   guideVoiceRpc,
@@ -1314,6 +1317,13 @@ const Source = () => {
     previewScrollTopRef.current = listRef.current?.scrollTop ?? 0;
   };
 
+  const pageZoomPercent = state && state.mode !== 'preview' ? state.pageZoomPercent : undefined;
+  const canZoomOut = pageZoomPercent !== undefined && canZoomSourcePageOut(pageZoomPercent);
+  const canZoomIn = pageZoomPercent !== undefined && canZoomSourcePageIn(pageZoomPercent);
+  const adjustPageZoom = (action: 'in' | 'out' | 'reset') => {
+    void window.desktop?.setSourcePageZoom(action);
+  };
+
   return (
     <main className="source-shell">
       <header className="source-bar drag-bar">
@@ -1344,6 +1354,37 @@ const Source = () => {
         </span>
         {state && state.mode !== 'preview' ? (
           <>
+            <div className="source-zoom-controls no-drag" role="group" aria-label="网页缩放">
+              <button
+                type="button"
+                className="source-icon-button"
+                aria-label="缩小网页"
+                title="缩小网页"
+                disabled={!canZoomOut}
+                onClick={() => adjustPageZoom('out')}
+              >
+                <MinusIcon size={15} weight="bold" aria-hidden="true" />
+              </button>
+              <button
+                type="button"
+                className="source-zoom-percent"
+                aria-label={`当前缩放 ${pageZoomPercent}% ，点击恢复 100%`}
+                title="恢复 100%"
+                onClick={() => adjustPageZoom('reset')}
+              >
+                {pageZoomPercent}%
+              </button>
+              <button
+                type="button"
+                className="source-icon-button"
+                aria-label="放大网页"
+                title="放大网页"
+                disabled={!canZoomIn}
+                onClick={() => adjustPageZoom('in')}
+              >
+                <PlusIcon size={15} weight="bold" aria-hidden="true" />
+              </button>
+            </div>
             <button
               type="button"
               className="source-icon-button no-drag"
