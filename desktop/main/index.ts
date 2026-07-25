@@ -14,9 +14,22 @@ import type {
 } from '../../shared/desktop-contracts.js';
 import { EmbeddedAgentRuntime } from './agent-runtime.js';
 import { ensureLocalEnvironmentFile, reloadLocalEnvironment } from './environment.js';
-import { checkDesktopConfiguration } from './readiness.js';
+import {
+  LocalLiveKitRuntime,
+  applyLocalLiveKitEnvironment,
+  getLocalLiveKitServerPath,
+} from './local-livekit-runtime.js';
+import { checkDesktopConfiguration, localLiveKitFailureReadiness } from './readiness.js';
 import { createDesktopSessionCredentials } from './session-token.js';
 import { getSourceViewBounds } from './source-view-bounds.js';
+import {
+  SOURCE_PAGE_ZOOM_DEFAULT_PERCENT,
+  clampSourcePageZoomPercent,
+  resetSourcePageZoomPercent,
+  sourcePageZoomFactorFromPercent,
+  stepSourcePageZoomPercent,
+  type SourcePageZoomDirection,
+} from '../../shared/source-page-zoom.js';
 import {
   shouldFollowAssistantWindow,
   startSourceWindowSession,
@@ -53,6 +66,7 @@ let sourcePreview: GuideSourcesMessage | null = null;
 let selectedSource: GuideSource | null = null;
 let sourceWindowState: SourceWindowState | null = null;
 let sourceLoadTimer: NodeJS.Timeout | null = null;
+let sourcePageZoomPercent = SOURCE_PAGE_ZOOM_DEFAULT_PERCENT;
 let utilityWindow: BrowserWindow | null = null;
 let assistantCollapsed = false;
 let assistantMenuOpen = false;
@@ -66,6 +80,7 @@ let storedWindowState: StoredWindowState = {};
 let persistWindowTimer: NodeJS.Timeout | null = null;
 
 const agentRuntime = new EmbeddedAgentRuntime();
+const localLiveKitRuntime = new LocalLiveKitRuntime();
 
 const isDevelopment = Boolean(process.env.ELECTRON_RENDERER_URL);
 const localConfigurationRoot = app.isPackaged ? app.getPath('userData') : process.cwd();
@@ -76,6 +91,16 @@ const localEnvironmentExamplePath = app.isPackaged
 
 const getWindowStatePath = () => join(app.getPath('userData'), 'window-state.json');
 const getAgentProcessPath = () => join(__dirname, 'agent-process.js');
+const getPackagedResourcesPath = () =>
+  (process as NodeJS.Process & { resourcesPath?: string }).resourcesPath ??
+  join(process.cwd(), 'out');
+const getLocalLiveKitRuntimeDirectory = () => join(app.getPath('userData'), 'livekit-runtime');
+const getLocalLiveKitExecutablePath = () =>
+  getLocalLiveKitServerPath({
+    isPackaged: app.isPackaged,
+    resourcesPath: getPackagedResourcesPath(),
+    projectRoot: process.cwd(),
+  });
 
 const attachDevelopmentDiagnostics = (window: BrowserWindow) => {
   if (app.isPackaged) return;
@@ -134,6 +159,17 @@ const startConfiguredAgent = async (
   { config: AppConfig; readiness: DesktopReadiness } | { readiness: DesktopReadiness }
 > => {
   reloadLocalEnvironment(localEnvironmentPath);
+  if (app.isPackaged) {
+    try {
+      const localConnection = await localLiveKitRuntime.ensureStarted({
+        executablePath: getLocalLiveKitExecutablePath(),
+        runtimeDirectory: getLocalLiveKitRuntimeDirectory(),
+      });
+      Object.assign(process.env, applyLocalLiveKitEnvironment(process.env, localConnection));
+    } catch (error) {
+      return { readiness: localLiveKitFailureReadiness(error) };
+    }
+  }
   const configuration = checkDesktopConfiguration();
   if (!configuration.ok) return { readiness: configuration.readiness };
 
@@ -328,6 +364,26 @@ const setSourceViewBounds = () => {
   sourceView.setBounds(getSourceViewBounds(sourceWindow.getContentSize()));
 };
 
+const resetSourcePageZoom = () => {
+  sourcePageZoomPercent = resetSourcePageZoomPercent();
+};
+
+const applySourcePageZoom = () => {
+  if (!sourceView || sourceView.webContents.isDestroyed()) return;
+  sourceView.webContents.setZoomFactor(sourcePageZoomFactorFromPercent(sourcePageZoomPercent));
+};
+
+const setSourcePageZoomPercent = (percent: number) => {
+  sourcePageZoomPercent = clampSourcePageZoomPercent(percent);
+  applySourcePageZoom();
+  if (!sourceWindowState || sourceWindowState.mode === 'preview') return sourcePageZoomPercent;
+  publishSourceWindowState({
+    ...sourceWindowState,
+    pageZoomPercent: sourcePageZoomPercent,
+  });
+  return sourcePageZoomPercent;
+};
+
 const clearSourceLoadTimer = () => {
   if (!sourceLoadTimer) return;
   clearTimeout(sourceLoadTimer);
@@ -395,6 +451,7 @@ const failSourceLoad = (
     preview: sourcePreview,
     source: selectedSource,
     currentUrl,
+    pageZoomPercent: sourcePageZoomPercent,
     error,
     message,
     ...(statusCode ? { statusCode } : {}),
@@ -483,6 +540,7 @@ const showRemoteSource = async (source: GuideSource, options: SourceLoadOptions 
   if (!isLiveWindow(sourceWindow) || !sourcePreview || !isSafeWebUrl(initialUrl)) return false;
   destroySourceView();
   selectedSource = source;
+  resetSourcePageZoom();
   let currentUrl = initialUrl;
   let responseStatusCode: number | undefined;
   const view = new WebContentsView({
@@ -496,11 +554,13 @@ const showRemoteSource = async (source: GuideSource, options: SourceLoadOptions 
   sourceView = view;
   sourceViewAttached = false;
   setSourceViewBounds();
+  applySourcePageZoom();
   publishSourceWindowState({
     mode: 'loading',
     preview: sourcePreview,
     source,
     currentUrl,
+    pageZoomPercent: sourcePageZoomPercent,
   });
   startSourceLoadTimer(view, currentUrl);
   view.webContents.setWindowOpenHandler((details) => {
@@ -541,6 +601,7 @@ const showRemoteSource = async (source: GuideSource, options: SourceLoadOptions 
       preview: sourcePreview!,
       source,
       currentUrl,
+      pageZoomPercent: sourcePageZoomPercent,
     });
     startSourceLoadTimer(view, currentUrl);
   });
@@ -558,11 +619,13 @@ const showRemoteSource = async (source: GuideSource, options: SourceLoadOptions 
     }
     clearSourceLoadTimer();
     attachSourceView(view);
+    applySourcePageZoom();
     publishSourceWindowState({
       mode: 'ready',
       preview: sourcePreview,
       source,
       currentUrl,
+      pageZoomPercent: sourcePageZoomPercent,
     });
   });
   view.webContents.on(
@@ -714,6 +777,7 @@ const createSourceWindow = async () => {
     sourcePreview = null;
     selectedSource = null;
     sourceWindowState = null;
+    resetSourcePageZoom();
     sourceWindowFollowMode = startSourceWindowSession();
   };
   window.on('close', releaseSourceWindow);
@@ -862,6 +926,7 @@ ipcMain.handle('source:open-preview', async (event, value: unknown) => {
   sourcePreview = parsed.data;
   selectedSource = null;
   destroySourceView();
+  resetSourcePageZoom();
   publishSourceWindowState({ mode: 'preview', preview: parsed.data });
   if (!isLiveWindow(sourceWindow)) await createSourceWindow();
   if (!isLiveWindow(sourceWindow)) return false;
@@ -887,6 +952,7 @@ ipcMain.handle('source:back', (event) => {
   if (!isSourceSender(event.sender) || !sourcePreview) return false;
   destroySourceView();
   selectedSource = null;
+  resetSourcePageZoom();
   publishSourceWindowState({ mode: 'preview', preview: sourcePreview });
   return true;
 });
@@ -898,6 +964,18 @@ ipcMain.handle('source:retry', (event) => {
       ? sourceWindowState.currentUrl
       : selectedSource.url;
   return showRemoteSource(selectedSource, { url: retryUrl });
+});
+
+ipcMain.handle('source:set-page-zoom', (event, action: 'in' | 'out' | 'reset') => {
+  if (!isSourceSender(event.sender) || !sourceWindowState || sourceWindowState.mode === 'preview') {
+    return null;
+  }
+  if (action === 'reset') {
+    return setSourcePageZoomPercent(resetSourcePageZoomPercent());
+  }
+  if (action !== 'in' && action !== 'out') return null;
+  const direction: SourcePageZoomDirection = action;
+  return setSourcePageZoomPercent(stepSourcePageZoomPercent(sourcePageZoomPercent, direction));
 });
 
 ipcMain.handle('source:open-current-external', async (event) => {
@@ -948,10 +1026,13 @@ app.on('before-quit', (event) => {
     persistWindowTimer = null;
   }
   persistWindowState();
-  void agentRuntime.stop().finally(() => {
-    shutdownComplete = true;
-    app.quit();
-  });
+  void agentRuntime
+    .stop()
+    .finally(() => localLiveKitRuntime.stop())
+    .finally(() => {
+      shutdownComplete = true;
+      app.quit();
+    });
 });
 app.on('activate', () => {
   if (!isLiveWindow(assistantWindow)) void createAssistantWindow();

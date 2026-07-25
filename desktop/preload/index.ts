@@ -26,6 +26,8 @@ contextBridge.exposeInMainWorld('desktop', {
   retrySource: () => ipcRenderer.invoke('source:retry'),
   openCurrentSourceExternal: () => ipcRenderer.invoke('source:open-current-external'),
   closeSource: () => ipcRenderer.invoke('source:close'),
+  setSourcePageZoom: (action: 'in' | 'out' | 'reset') =>
+    ipcRenderer.invoke('source:set-page-zoom', action) as Promise<number | null>,
   openExternal: (url: string) => ipcRenderer.invoke('external:open', url),
   getReadiness: () => ipcRenderer.invoke('diagnostics:get-readiness'),
   retryReadiness: () => ipcRenderer.invoke('diagnostics:retry'),

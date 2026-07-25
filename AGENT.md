@@ -60,6 +60,7 @@ prototypes/       # 桌面前端早期交互参考，不作为生产客户端入
 - Provider 的具体实现只能出现在 `src/providers/`；`registry.ts`（Provider 工厂注册表）是唯一创建入口，其他模块不得散落引用火山 SDK 或 WebSocket。
 - 遵循参考项目 `[reference project]` 的“按 STT/LLM/TTS 分类 + 集中注册表 + 启动前自检”规范；只继承职责边界，不复制 Python/Pipecat 实现。
 - 所有密钥均从环境变量读取；`.env`、`.env.local` 等含密钥文件永不提交。提供不含值的 `.env.example`。
+- LiveKit 开发与安装态均使用官方 Windows `livekit-server.exe` 的本地运行方式；Docker 不属于本项目的开发、测试或发行路径。开发者从受忽略的 `resources/livekit/livekit-server.exe` 以 `--dev` 启动回环服务，安装态由 Electron 以私有配置启动随包二进制，详见 ADR-009 与 Spec-011。
 - 优先使用 LiveKit SDK、Zod、Vitest 和 Provider 官方 SDK 已有能力，不重新实现协议、音频管线、校验器或测试运行器。
 - 修改前先阅读关联 ADR；任何与 ADR 冲突的需求必须先新增或修订 ADR。
 

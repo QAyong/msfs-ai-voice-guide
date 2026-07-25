@@ -6,6 +6,8 @@ out/
 coverage/
 resources/msfs/
 out/msfs/
+resources/livekit/
+out/livekit/
 
 # Local secrets and overrides
 .env
