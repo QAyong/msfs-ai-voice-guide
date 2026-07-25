@@ -8,7 +8,6 @@
 - 窗口定位算法：`desktop/main/window-placement.ts`
 - React 界面：`desktop/renderer/src/main.tsx`
 - 界面样式：`desktop/renderer/src/style.css`
-- 早期 HTML 参考：`prototypes/voice-chat-panel.html`
 
 ## 当前设计状态
 

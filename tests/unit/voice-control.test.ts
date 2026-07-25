@@ -3,6 +3,7 @@ import {
   guideVoiceAttributes,
   guideVoiceRpc,
   guideTurnDetection,
+  isGuideToolActivity,
   isGuideUserState,
   isVoiceInputMode,
 } from '../../shared/voice-control.js';
@@ -31,11 +32,15 @@ describe('voice input control contract', () => {
     expect(guideVoiceAttributes).toEqual({
       inputMode: 'msfs.guide.voice_input_mode',
       userState: 'msfs.guide.user_state',
+      toolActivity: 'msfs.guide.tool_activity',
     });
     expect(isGuideUserState('speaking')).toBe(true);
     expect(isGuideUserState('listening')).toBe(true);
     expect(isGuideUserState('away')).toBe(true);
     expect(isGuideUserState('thinking')).toBe(false);
+    expect(isGuideToolActivity('calling')).toBe(true);
+    expect(isGuideToolActivity('idle')).toBe(true);
+    expect(isGuideToolActivity('thinking')).toBe(false);
   });
 
   it('restores LiveKit automatic turn detection for continuous mode', () => {

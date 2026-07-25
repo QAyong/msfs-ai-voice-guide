@@ -1,3 +1,5 @@
+/// <reference types="vite/client" />
+
 export {};
 
 import type { DesktopReadiness, DesktopSessionResult } from '../../../shared/desktop-contracts.js';

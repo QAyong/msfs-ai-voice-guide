@@ -14,9 +14,12 @@ export type VoiceInputMode = 'push_to_talk' | 'continuous';
 
 export type GuideUserState = 'speaking' | 'listening' | 'away';
 
+export type GuideToolActivity = 'idle' | 'calling';
+
 export const guideVoiceAttributes = {
   inputMode: 'msfs.guide.voice_input_mode',
   userState: 'msfs.guide.user_state',
+  toolActivity: 'msfs.guide.tool_activity',
 } as const;
 
 export const guideTurnDetection = {
@@ -30,4 +33,8 @@ export function isVoiceInputMode(value: unknown): value is VoiceInputMode {
 
 export function isGuideUserState(value: unknown): value is GuideUserState {
   return value === 'speaking' || value === 'listening' || value === 'away';
+}
+
+export function isGuideToolActivity(value: unknown): value is GuideToolActivity {
+  return value === 'idle' || value === 'calling';
 }

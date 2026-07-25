@@ -18,7 +18,6 @@
 - [桌面安装包的本地 LiveKit 运行时](docs/specs/spec-011-packaged-local-livekit-runtime.md)
 - [本地 LiveKit 运行时架构](docs/architecture/local-livekit-runtime.md)
 - [基于 Mem0 的持久化对话记忆规划](docs/specs/spec-005-persistent-conversation-memory.md)
-- [前端 HTML 交互原型](prototypes/voice-chat-panel.html)
 - [架构概览](docs/architecture/overview.md)
 - [框架版本登记](docs/frameworks/registry.md)
 - [火山引擎集成设计](docs/architecture/volcengine-integration.md)
@@ -46,7 +45,7 @@ pnpm run verify
 
 ## 桌面前端
 
-生产方向的桌面入口位于 [`desktop/`](desktop/)，HTML 原型 [`prototypes/voice-chat-panel.html`](prototypes/voice-chat-panel.html) 继续作为早期交互参考。当前 Electron 实现包括：
+生产方向的桌面入口位于 [`desktop/`](desktop/)。当前 Electron 实现包括：
 
 - 64×72px 收起窗口：顶部 36×14px 原生拖动把手与 48px 头像点击区明确分离。
 - 拖动结束后根据光标所在显示器吸附到最近的左右工作区边缘，并支持负坐标扩展屏。
@@ -68,7 +67,7 @@ pnpm build
 pnpm desktop:preview
 ```
 
-HTML 原型中的百科和搜索结果仍是本地静态视觉数据；Electron 实现使用真实 Agent 转写和来源，并加载经过校验的 HTTPS 来源网页。桌面进程、安全隔离和后续打包要求见 [Spec-004](docs/specs/spec-004-web-frontend-and-source-preview.md)。
+Electron 实现使用真实 Agent 转写和来源，并加载经过校验的 HTTPS 来源网页。桌面进程、安全隔离和后续打包要求见 [Spec-004](docs/specs/spec-004-web-frontend-and-source-preview.md)。
 
 搜索 Key 配置完成后，可用以下命令独立验证搜索服务；`--json` 输出适合脚本处理。
 

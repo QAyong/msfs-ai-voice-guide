@@ -15,7 +15,7 @@
 
 - 使用 TypeScript 开发一个可运行的 LiveKit Agents Node.js 实时语音 Agent。
 - 每位用户进入独立 LiveKit 房间，与该房间的导游 Agent 进行纯语音对话。
-- 导游 Agent 能围绕模拟飞行提供简洁、友好的讲解与问答；首个提示词可配置并由 `conversation` 模块维护。
+- 导游 Agent 能围绕模拟飞行提供简洁、友好的讲解与问答；默认使用“周晓晓”这一名称及其清爽、自然、直接的表达风格，并由 `conversation` 模块维护。
 - 通过 pnpm 管理依赖，并把安装时的当前稳定版锁定在 `pnpm-lock.yaml`。
 - 使用 Zod 校验运行时环境配置；未来的工具入参同样必须使用 Zod Schema。
 - 当前版本使用 DeepSeek LLM、豆包流式 STT 与豆包双向流式 TTS，并通过 `src/providers/registry.ts`（Provider 工厂注册表）集中装配。
@@ -36,7 +36,7 @@
 - [x] `pnpm install` 后可用项目脚本启动本地 Agent，且脚本名称、参数与当前 LiveKit 官方文档及已安装 SDK 类型一致。
 - [x] 使用有效本地配置时，Agent 能加入用户的独立 LiveKit 房间并完成至少一轮“用户说话 → Agent 语音回复”。
 - [x] 缺少 LiveKit 或选定 Provider 的必填环境变量时，启动在连接前以不含密钥的明确错误失败。
-- [x] 导游角色提示词不位于 Agent 进程入口文件中。
+- [x] 周晓晓的人设提示词与导游事实边界不位于 Agent 进程入口文件中。
 - [x] Agent 入口文件不直接解析 `process.env`，也不含 Provider 密钥或 Provider 特定初始化细节。
 - [x] DeepSeek LLM、豆包 STT/TTS 均经 `registry.ts` 创建；LLM 优先复用已安装的 LiveKit OpenAI 兼容插件，STT/TTS 仅在官方插件缺失时使用隔离的最小适配器。
 - [x] 配置支持 STT 的 Speech API Key 优先模式，以及 App ID + Access Token 后备模式；TTS 必须验证 App ID、Access Token、resource ID 和已授权 speaker。
@@ -69,7 +69,7 @@
 
 1. [x] 初始化 pnpm、TypeScript、Vitest、ESLint/格式化工具与 `.gitignore`；安装 LiveKit Agents 当前稳定版并核验 API。
 2. [x] 实现 `config` 的 Zod Schema、`.env.example` 与单元测试。
-3. [x] 实现 `conversation` 的导游提示词和单元测试。
+3. [x] 实现 `conversation` 的周晓晓表达风格、导游事实边界和单元测试。
 4. [x] 在 `providers` 中建立 LLM/STT/TTS 分类注册表；以 LiveKit OpenAI 兼容插件接入 DeepSeek LLM，并核对是否已有官方豆包语音插件。
 5. [x] 在各自 Provider 子目录实现豆包 STT/TTS 的最小协议适配器与 mock 测试。
 6. [x] 在 `agent` 中按官方当前 SDK 类型实现入口、worker/dispatcher 与语音会话。
@@ -80,7 +80,7 @@
 
 - `tests/unit/config.test.ts`：环境变量校验、STT 凭据优先级与错误脱敏。
 - `tests/unit/providers/registry.test.ts`：DeepSeek LLM 与豆包 STT/TTS 注册和工厂选择。
-- `tests/unit/guide-prompt.test.ts`：导游角色边界与默认语言策略。
+- `tests/unit/guide-prompt.test.ts`：周晓晓语言风格、导游事实边界与默认语言策略。
 - `tests/integration/agent-composition.test.ts`：依赖装配边界，不连接真实服务。
 - `tests/e2e/local-room.smoke.test.ts`：可选、显式启用的本地 LiveKit 冒烟测试。
 

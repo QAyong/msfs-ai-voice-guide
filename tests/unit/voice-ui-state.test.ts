@@ -24,6 +24,14 @@ describe('official voice UI status', () => {
       resolveVoiceStatus({ ...connected, agentState: 'thinking', userState: 'listening' }),
     ).toBe('思考中');
     expect(
+      resolveVoiceStatus({
+        ...connected,
+        agentState: 'thinking',
+        toolActivity: 'calling',
+        userState: 'listening',
+      }),
+    ).toBe('正在调用工具');
+    expect(
       resolveVoiceStatus({ ...connected, agentState: 'speaking', userState: 'listening' }),
     ).toBe('回答中');
     expect(
