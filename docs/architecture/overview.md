@@ -8,7 +8,7 @@
 
 当前版本以本地可运行、单用户实时语音与文字对话为交付基线，并已增加通用网络搜索。SDK 生命周期、会话角色、运行时配置、共享业务服务和语音模型 Provider 保持分离，使 CLI（命令行工具）与 Agent 可以复用同一搜索实现。
 
-现有 Agent 外已增加 Windows Electron 桌面壳。桌面端是客户端与窗口编排层，不反向改变 Agent、Provider 或共享搜索服务的职责。当前仓库中的 `desktop/` 是桌面实现入口；`prototypes/` 只保留早期界面与窗口交互参考，不是生产运行入口。
+现有 Agent 外已增加 Windows Electron 桌面壳。桌面端是客户端与窗口编排层，不反向改变 Agent、Provider 或共享搜索服务的职责。当前仓库中的 `desktop/` 是桌面实现入口。
 
 这里的分层是职责边界，不是额外的运行时框架：第一版保持少量文件和直接依赖装配。
 
@@ -21,7 +21,7 @@ graph TD
     Config --> Bootstrap[agent: 进程入口与依赖装配]
     Bootstrap --> Session[agent: LiveKit 会话编排]
     Bootstrap --> Providers[providers: 按能力注册与创建]
-    Session --> Guide[conversation: 导游角色与提示词]
+    Session --> Guide[conversation: 周晓晓语言风格与导游约束]
     Session --> Tools[tools: LiveKit 工具包装]
     Tools --> Search[search: 共享搜索服务]
     CLI[cli: 命令行工具] --> Search
@@ -134,7 +134,7 @@ sequenceDiagram
 | `src/config/`       | 定义与解析 Zod 环境配置                                   | Zod、Node 环境               | Agent、Provider、业务模块              |
 | `src/providers/`    | 通过 `registry.ts` 注册并创建 DeepSeek LLM 与豆包 STT/TTS | Provider 官方 SDK、配置      | LiveKit 房间生命周期、提示词           |
 | `src/core/`         | 启动辅助、脱敏日志与 Provider 自检                        | 配置、注册表                 | 提示词、音频协议细节                   |
-| `src/conversation/` | 定义导游身份、语言、回答边界                              | 少量共享类型                 | 环境变量、SDK 启动细节                 |
+| `src/conversation/` | 定义周晓晓的语言风格，以及导游回答与事实边界              | 少量共享类型                 | 环境变量、SDK 启动细节                 |
 | `src/agent/`        | 连接 LiveKit、创建会话、组合依赖                          | 上述内部模块、LiveKit Agents | 具体密钥解析、长篇提示词、未来业务逻辑 |
 | `src/search/`       | 搜索 API 请求、结果标准化、来源与相关性保护               | Zod、HTTP、共享类型          | LiveKit 生命周期、CLI 参数解析         |
 | `src/tools/`        | 将共享业务能力包装为 LiveKit 工具及其 Zod 参数            | 业务服务、LiveKit、共享类型  | 复制搜索协议、直接解析环境变量         |
@@ -142,6 +142,10 @@ sequenceDiagram
 | `src/cli/`          | 本地命令的参数、输出格式与退出码                          | 共享业务服务                 | 复制 Agent 或搜索业务逻辑              |
 
 依赖始终由入口向内组合；`config`、`conversation` 和未来的 `tools` 不反向导入 `agent`，从而避免循环依赖。
+
+### 会话人设与事实边界
+
+`src/conversation/guide-instructions.ts` 将默认人设分为两个相邻的提示词块：`xiaoxiaoStyleInstructions` 定义“周晓晓”的名称和清爽、自然、直接的对话方式；`guideSafetyInstructions` 定义模拟器数据、联网资料和不确定信息的回答边界。前者可以调整表达，不得削弱后者的工具来源、时效性和不编造约束。两块由 `createGuideInstructions()` 组合后传入 LiveKit `voice.Agent`。
 
 ## LiveKit 集成准则
 

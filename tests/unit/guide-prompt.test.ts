@@ -2,6 +2,17 @@ import { createGuideInstructions } from '../../src/conversation/guide-instructio
 import { describe, expect, it } from 'vitest';
 
 describe('createGuideInstructions', () => {
+  it('定义周晓晓的语言风格', () => {
+    const instructions = createGuideInstructions();
+
+    expect(instructions).toContain('正式姓名是周晓晓，日常对话中使用小名“晓晓”');
+    expect(instructions).toContain('愿意陪用户一起把问题弄明白');
+    expect(instructions).toContain('不刻薄、不卖萌');
+    expect(instructions).toContain('不要反复使用同一种开头或固定口头禅');
+    expect(instructions).toContain('避免机械重复');
+    expect(instructions).toContain('用户想深入了解时，再逐步展开');
+  });
+
   it('明确遥测边界并区分联网证据与模型已有知识', () => {
     const instructions = createGuideInstructions();
 

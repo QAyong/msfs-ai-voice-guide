@@ -55,6 +55,7 @@ import type { SourceWindowState } from '../../../shared/source-preview.js';
 import { canZoomSourcePageIn, canZoomSourcePageOut } from '../../../shared/source-page-zoom.js';
 import {
   guideVoiceAttributes,
+  isGuideToolActivity,
   guideVoiceRpc,
   isGuideUserState,
   isVoiceInputMode,
@@ -66,6 +67,8 @@ import {
   type MsfsReadinessStatus,
 } from '../../../shared/msfs-readiness.js';
 import { resolveVoiceStatus } from './voice-ui-state.js';
+import { resolveGuideAvatarExpression } from './avatar-state.js';
+import { GuideExpression, GuideFloatingPortrait } from './guide-avatar.js';
 import { MessageMarkdown } from './message-markdown.js';
 import { createDisplayMessages, shouldAttachSourcePreview } from './session-messages.js';
 import './style.css';
@@ -398,6 +401,7 @@ const AssistantView = ({
   const [textDraft, setTextDraft] = useState('');
   const [textInputError, setTextInputError] = useState('');
   const [voiceModeMenuOpen, setVoiceModeMenuOpen] = useState(false);
+  const [usedToolsInTurn, setUsedToolsInTurn] = useState(false);
   const [hasUnreadMessages, setHasUnreadMessages] = useState(false);
   const [sourcesByMessage, setSourcesByMessage] = useState<Record<string, GuideSourcesMessage>>({});
   const [pendingSources, setPendingSources] = useState<{
@@ -560,12 +564,24 @@ const AssistantView = ({
   const errorMessage = microphoneError || controlError || startupError || agentFailure;
   const userStateValue = agent.attributes[guideVoiceAttributes.userState];
   const userState = isGuideUserState(userStateValue) ? userStateValue : undefined;
+  const toolActivityValue = agent.attributes[guideVoiceAttributes.toolActivity];
+  const toolActivity = isGuideToolActivity(toolActivityValue) ? toolActivityValue : undefined;
+
+  useEffect(() => {
+    if (userState === 'speaking') setUsedToolsInTurn(false);
+  }, [userState]);
+
+  useEffect(() => {
+    if (toolActivity === 'calling') setUsedToolsInTurn(true);
+  }, [toolActivity]);
+
   const statusLabel = resolveVoiceStatus({
     agentState: agent.state,
     connectionState: session.connectionState,
     continuousActive,
     hasError: Boolean(errorMessage),
     starting,
+    ...(toolActivity ? { toolActivity } : {}),
     ...(userState ? { userState } : {}),
   });
   const setupBlocked =
@@ -577,6 +593,14 @@ const AssistantView = ({
   const interactionBlocked = setupBlocked || !agent.canListen || !voiceChannelConnected;
   const textInputBlocked = setupBlocked || !agent.isConnected;
   const visibleStatusLabel = !voiceChannelConnected && !setupBlocked ? '语音已挂断' : statusLabel;
+  const avatarExpression = resolveGuideAvatarExpression({
+    agentState: agent.state,
+    connectionState: session.connectionState,
+    hasError: Boolean(errorMessage) || !voiceChannelConnected,
+    usedToolsInTurn,
+    ...(toolActivity ? { toolActivity } : {}),
+    ...(userState ? { userState } : {}),
+  });
   const voiceButtonState = microphoneError
     ? 'error'
     : voiceTransitioning || microphone.pending || starting || agent.isPending
@@ -590,6 +614,7 @@ const AssistantView = ({
     if (!message || textInputBlocked || isSendingText) return;
 
     setTextInputError('');
+    setUsedToolsInTurn(false);
     try {
       await sendText(message);
       setTextDraft((current) => (current === textDraft ? '' : current));
@@ -911,9 +936,7 @@ const AssistantView = ({
             aria-expanded={menuOpen}
             title="点击展开云迹导游"
           >
-            <span className="ball-avatar" aria-hidden="true">
-              云
-            </span>
+            <GuideFloatingPortrait />
           </button>
           <div className="ball-drag-handle drag-region" title="按住这里拖动悬浮球">
             <span className="ball-drag-grip" aria-hidden="true" />
@@ -968,7 +991,7 @@ const AssistantView = ({
   return (
     <main className="assistant-card">
       <header className="drag-bar">
-        <span className="avatar">云</span>
+        <GuideExpression state={avatarExpression} />
         <span className="name">云迹导游</span>
         <span
           className={`status status--${session.connectionState} ${!voiceChannelConnected && !setupBlocked ? 'status--voice-disconnected' : ''}`}

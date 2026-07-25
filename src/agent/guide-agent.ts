@@ -29,6 +29,36 @@ export function composeGuideTools(
   return [...msfsTools, ...(searchTool ? [searchTool] : [])];
 }
 
+type ToolActivityObserver = {
+  completed(toolName: string): void;
+  started(toolName: string): void;
+};
+
+function isFunctionTool(tool: llm.ToolContextEntry): tool is llm.FunctionTool {
+  return 'type' in tool && tool.type === 'function';
+}
+
+function observeToolActivity(
+  tools: readonly llm.ToolContextEntry[],
+  observer: ToolActivityObserver,
+): readonly llm.ToolContextEntry[] {
+  return tools.map((tool) => {
+    if (!isFunctionTool(tool)) return tool;
+    const execute = tool.execute;
+    return {
+      ...tool,
+      execute: async (args, options) => {
+        observer.started(tool.name);
+        try {
+          return await execute(args, options);
+        } finally {
+          observer.completed(tool.name);
+        }
+      },
+    };
+  });
+}
+
 export default defineAgent({
   entry: async (ctx) => {
     const config = loadConfig();
@@ -64,6 +94,12 @@ export default defineAgent({
     const publishVoiceAttributes = (attributes: Record<string, string>) => {
       if (!participant) return;
       void participant.setAttributes(attributes).catch(() => undefined);
+    };
+    const activeTools = new Set<string>();
+    const publishToolActivity = () => {
+      publishVoiceAttributes({
+        [guideVoiceAttributes.toolActivity]: activeTools.size > 0 ? 'calling' : 'idle',
+      });
     };
     const setInputMode = (nextMode: VoiceInputMode) => {
       inputMode = nextMode;
@@ -156,7 +192,19 @@ export default defineAgent({
           }),
         )
       : undefined;
-    const tools = composeGuideTools(createMsfsGuideTools(msfsService), searchTool);
+    const tools = observeToolActivity(
+      composeGuideTools(createMsfsGuideTools(msfsService), searchTool),
+      {
+        started: (toolName) => {
+          activeTools.add(toolName);
+          publishToolActivity();
+        },
+        completed: (toolName) => {
+          activeTools.delete(toolName);
+          publishToolActivity();
+        },
+      },
+    );
 
     await session.start({
       room: ctx.room,
@@ -166,6 +214,7 @@ export default defineAgent({
     publishVoiceAttributes({
       [guideVoiceAttributes.inputMode]: inputMode,
       [guideVoiceAttributes.userState]: session.userState,
+      [guideVoiceAttributes.toolActivity]: 'idle',
     });
   },
 });
