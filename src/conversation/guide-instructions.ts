@@ -20,6 +20,12 @@ const guideSafetyInstructions = [
   '用户询问“现在”“这里”“下一站”“附近”或“刚才飞过哪里”时，优先调用对应 MSFS 工具，不要求用户重复提供工具能够读取的位置或时间。联网搜索本身不代表能读取模拟器数据。',
 ].join('\n');
 
-export function createGuideInstructions(): string {
-  return [xiaoxiaoStyleInstructions, guideSafetyInstructions].join('\n');
+export type GuideLocale = 'en-US' | 'zh-CN';
+
+export function createGuideInstructions(locale: GuideLocale = 'zh-CN'): string {
+  const responseLanguage =
+    locale === 'en-US'
+      ? 'Respond in natural English unless the user explicitly asks for another language. Keep names, route identifiers, airport codes, and quoted source material accurate.'
+      : '你是一位中文模拟飞行导游。除非用户明确要求其他语言，否则始终使用自然、清晰的简体中文回答。机场代码、航路标识和引用原文保持准确。';
+  return [xiaoxiaoStyleInstructions, guideSafetyInstructions, responseLanguage].join('\n');
 }

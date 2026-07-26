@@ -7,7 +7,7 @@
   "packageManager": "pnpm@11.7.0",
   "scripts": {
     "build": "pnpm desktop:typecheck && pnpm desktop:build",
-    "desktop:dev": "electron-vite dev --entry ./out/main/index.js",
+    "desktop:dev": "electron-vite dev",
     "desktop:build": "electron-vite build && node scripts/stage-msfs-cli.mjs resources/msfs out/msfs && node scripts/stage-livekit-server.mjs resources/livekit out/livekit",
     "desktop:preview": "electron-vite preview --entry ./out/main/index.js",
     "desktop:typecheck": "tsc --noEmit --project desktop/tsconfig.json",

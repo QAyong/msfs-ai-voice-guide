@@ -28,8 +28,12 @@ export class EmbeddedAgentRuntime {
     };
   }
 
-  async ensureStarted(config: AppConfig, agentProcessPath: string): Promise<void> {
-    const fingerprint = JSON.stringify([config, agentProcessPath]);
+  async ensureStarted(
+    config: AppConfig,
+    agentProcessPath: string,
+    locale: 'en-US' | 'zh-CN',
+  ): Promise<void> {
+    const fingerprint = JSON.stringify([config, agentProcessPath, locale]);
     if (this.child && this.fingerprint === fingerprint && this.status !== 'error') return;
     if (this.child) await this.stop();
 

@@ -29,6 +29,8 @@ import { CaretDownIcon } from '@phosphor-icons/react/dist/csr/CaretDown';
 import { CaretUpIcon } from '@phosphor-icons/react/dist/csr/CaretUp';
 import { CircleNotchIcon } from '@phosphor-icons/react/dist/csr/CircleNotch';
 import { CheckIcon } from '@phosphor-icons/react/dist/csr/Check';
+import { EyeClosedIcon } from '@phosphor-icons/react/dist/csr/EyeClosed';
+import { EyeIcon } from '@phosphor-icons/react/dist/csr/Eye';
 import { GearSixIcon } from '@phosphor-icons/react/dist/csr/GearSix';
 import { KeyboardIcon } from '@phosphor-icons/react/dist/csr/Keyboard';
 import { MagnifyingGlassIcon } from '@phosphor-icons/react/dist/csr/MagnifyingGlass';
@@ -77,21 +79,27 @@ const preferenceStorageKey = 'cloudpath-guide-preferences';
 
 type MenuDirection = 'up' | 'down';
 type UtilityDialog = 'settings' | 'quit';
+type SettingsTab = 'general' | 'services';
+type SupportedLocale = 'zh-CN' | 'en-US';
 
 type Preferences = {
+  locale: SupportedLocale;
   alwaysOnTop: boolean;
   agentVolume: number;
   openSourcesInApp: boolean;
   interfaceMotion: boolean;
   voiceInputMode: VoiceInputMode;
+  globalPushToTalkKey: string;
 };
 
 const defaultPreferences: Preferences = {
+  locale: 'zh-CN',
   alwaysOnTop: true,
   agentVolume: 0.85,
   openSourcesInApp: true,
   interfaceMotion: true,
   voiceInputMode: 'push_to_talk',
+  globalPushToTalkKey: 'AltLeft',
 };
 
 const readPreferences = (): Preferences => {
@@ -102,9 +110,14 @@ const readPreferences = (): Preferences => {
     return {
       ...parsed,
       agentVolume: Math.min(1, Math.max(0, Number(parsed.agentVolume) || 0)),
+      locale: parsed.locale === 'en-US' ? 'en-US' : 'zh-CN',
       voiceInputMode: isVoiceInputMode(parsed.voiceInputMode)
         ? parsed.voiceInputMode
         : defaultPreferences.voiceInputMode,
+      globalPushToTalkKey:
+        typeof parsed.globalPushToTalkKey === 'string'
+          ? parsed.globalPushToTalkKey
+          : defaultPreferences.globalPushToTalkKey,
     };
   } catch {
     return defaultPreferences;
@@ -124,8 +137,9 @@ const usePreferences = () => {
 
   useEffect(() => {
     document.documentElement.dataset.motion = preferences.interfaceMotion ? 'on' : 'off';
+    document.documentElement.lang = preferences.locale;
     void window.desktop?.setAlwaysOnTop(preferences.alwaysOnTop);
-  }, [preferences.alwaysOnTop, preferences.interfaceMotion]);
+  }, [preferences.alwaysOnTop, preferences.interfaceMotion, preferences.locale]);
 
   const updatePreference = <Key extends keyof Preferences>(key: Key, value: Preferences[Key]) => {
     setPreferences((current) => {
@@ -135,7 +149,73 @@ const usePreferences = () => {
     });
   };
 
-  return { preferences, updatePreference };
+  const savePreferences = (next: Preferences) => {
+    localStorage.setItem(preferenceStorageKey, JSON.stringify(next));
+    setPreferences(next);
+  };
+
+  return { preferences, savePreferences, updatePreference };
+};
+
+type ServiceSettings = {
+  llmBaseUrl: string;
+  llmModel: string;
+  ttsSpeaker: string;
+};
+
+type ServiceCredentials = {
+  deepseekApiKey: string;
+  sttAppId: string;
+  sttAccessToken: string;
+  ttsAppId: string;
+  ttsAccessToken: string;
+  searchApiKey: string;
+};
+type ServiceCredentialStatus = {
+  encryptionAvailable: boolean;
+  configured: Record<keyof ServiceCredentials, boolean>;
+  error?: string;
+};
+
+const serviceSettingsStorageKey = 'cloudpath-guide-service-settings';
+const defaultServiceSettings: ServiceSettings = {
+  llmBaseUrl: 'https://api.deepseek.com',
+  llmModel: 'deepseek-v4-flash',
+  ttsSpeaker: 'zh_female_vv_uranus_bigtts',
+};
+
+const defaultServiceCredentials: ServiceCredentials = {
+  deepseekApiKey: '',
+  sttAppId: '',
+  sttAccessToken: '',
+  ttsAppId: '',
+  ttsAccessToken: '',
+  searchApiKey: '',
+};
+const defaultServiceCredentialStatus: ServiceCredentialStatus = {
+  encryptionAvailable: false,
+  configured: {
+    deepseekApiKey: false,
+    sttAppId: false,
+    sttAccessToken: false,
+    ttsAppId: false,
+    ttsAccessToken: false,
+    searchApiKey: false,
+  },
+};
+
+const readServiceSettings = (): ServiceSettings => {
+  try {
+    const saved = localStorage.getItem(serviceSettingsStorageKey);
+    if (!saved) return defaultServiceSettings;
+    const parsed = JSON.parse(saved) as Partial<ServiceSettings>;
+    return {
+      ...defaultServiceSettings,
+      ...parsed,
+    };
+  } catch {
+    return defaultServiceSettings;
+  }
 };
 
 type PreferenceRowProps = {
@@ -173,78 +253,545 @@ const PreferenceRow = ({ checked, description, icon, label, onChange }: Preferen
 type SettingsDialogProps = {
   onClose(): void;
   preferences: Preferences;
-  updatePreference<Key extends keyof Preferences>(key: Key, value: Preferences[Key]): void;
+  savePreferences(next: Preferences): void;
 };
 
-const SettingsDialog = ({ onClose, preferences, updatePreference }: SettingsDialogProps) => (
-  <main className="utility-card settings-dialog" role="dialog" aria-modal="true">
-    <header className="utility-header drag-region">
-      <span className="utility-heading-icon" aria-hidden="true">
-        <GearSixIcon size={18} weight="duotone" />
-      </span>
-      <span>
-        <strong>偏好设置</strong>
-        <small>调整悬浮助手的显示方式</small>
-      </span>
-      <button
-        type="button"
-        className="utility-close no-drag"
-        aria-label="关闭设置"
-        title="关闭"
-        onClick={onClose}
-      >
-        <XIcon size={16} weight="bold" aria-hidden="true" />
-      </button>
-    </header>
-    <section className="preferences" aria-label="应用偏好">
-      <PreferenceRow
-        checked={preferences.alwaysOnTop}
-        description="飞行时让助手保持在其他窗口上方"
-        icon={<PushPinIcon size={18} weight="duotone" />}
-        label="始终置顶"
-        onChange={(checked) => updatePreference('alwaysOnTop', checked)}
-      />
-      <div className="preference-row preference-row--volume">
-        <span className="preference-icon" aria-hidden="true">
-          <SpeakerHighIcon size={18} weight="duotone" />
+const SettingsDialog = ({ onClose, preferences, savePreferences }: SettingsDialogProps) => {
+  const [activeTab, setActiveTab] = useState<SettingsTab>('general');
+  const [draft, setDraft] = useState<Preferences>(preferences);
+  const [services, setServices] = useState<ServiceSettings>(readServiceSettings);
+  const [credentials, setCredentials] = useState<ServiceCredentials>(defaultServiceCredentials);
+  const [credentialStatus, setCredentialStatus] = useState<ServiceCredentialStatus>(
+    defaultServiceCredentialStatus,
+  );
+  const [voiceCredentialsLinked, setVoiceCredentialsLinked] = useState(true);
+  const [notice, setNotice] = useState('');
+  const settingsContentRef = useRef<HTMLElement | null>(null);
+  const english = preferences.locale === 'en-US';
+  const copy = english
+    ? {
+        title: 'Preferences',
+        subtitle: 'Configure your floating guide',
+        general: 'General',
+        services: 'Services',
+        save: 'Save',
+        saveReconnect: 'Save and reconnect',
+        saved: 'Preferences saved.',
+      }
+    : {
+        title: '偏好设置',
+        subtitle: '调整悬浮助手的显示方式',
+        general: '通用',
+        services: '服务配置',
+        save: '保存',
+        saveReconnect: '保存并重新连接',
+        saved: '设置已保存。',
+      };
+  const updateDraft = <Key extends keyof Preferences>(key: Key, value: Preferences[Key]) =>
+    setDraft((current) => ({ ...current, [key]: value }));
+  useEffect(() => {
+    let active = true;
+    void Promise.all([
+      window.desktop?.getServiceCredentialStatus(),
+      window.desktop?.getVisibleLocalServiceCredentials(),
+    ]).then(([status, localCredentials]) => {
+      if (!active) return;
+      if (status) setCredentialStatus(status as ServiceCredentialStatus);
+      if (localCredentials) setCredentials(localCredentials);
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
+  const saveGeneral = async () => {
+    savePreferences(draft);
+    const result = await window.desktop?.saveLocale(draft.locale);
+    if (result && !result.ok) {
+      savePreferences(preferences);
+      setNotice(result.readiness.message);
+      return;
+    }
+    setNotice('saved');
+  };
+  const saveServices = async () => {
+    localStorage.setItem(serviceSettingsStorageKey, JSON.stringify(services));
+    const enteredCredentials = Object.fromEntries(
+      Object.entries(credentials).filter(([, value]) => value.trim() !== ''),
+    ) as Record<string, string>;
+    if (window.desktop) {
+      const status = await window.desktop.saveServiceCredentials(enteredCredentials);
+      setCredentialStatus(status as ServiceCredentialStatus);
+      setNotice(
+        status.error
+          ? status.error
+          : english
+            ? 'Service settings saved. Credentials are encrypted by Windows and are not shown again.'
+            : '服务配置已保存。凭据由 Windows 加密保存，重新打开设置后不会显示原文。',
+      );
+      return;
+    }
+    setNotice(
+      english
+        ? 'Non-secret service fields saved. Credentials require the desktop app to be encrypted.'
+        : '非敏感服务参数已保存。凭据需要在桌面应用中加密保存。',
+    );
+  };
+  const updateCredential = <Key extends keyof ServiceCredentials>(
+    key: Key,
+    value: ServiceCredentials[Key],
+  ) => {
+    setCredentials((current) => {
+      if (voiceCredentialsLinked && key === 'sttAppId') {
+        return { ...current, sttAppId: value, ttsAppId: value };
+      }
+      if (voiceCredentialsLinked && key === 'sttAccessToken') {
+        return { ...current, sttAccessToken: value, ttsAccessToken: value };
+      }
+      return { ...current, [key]: value };
+    });
+  };
+  const toggleVoiceCredentialsLink = () => {
+    setVoiceCredentialsLinked((linked) => {
+      if (!linked) {
+        setCredentials((current) => ({
+          ...current,
+          ttsAppId: current.sttAppId,
+          ttsAccessToken: current.sttAccessToken,
+        }));
+      }
+      return !linked;
+    });
+  };
+  const selectSettingsTab = (tab: SettingsTab) => {
+    setActiveTab(tab);
+    requestAnimationFrame(() => settingsContentRef.current?.scrollTo({ top: 0 }));
+  };
+  const deepseekConfigured =
+    credentialStatus.configured.deepseekApiKey || credentials.deepseekApiKey;
+  const voiceConfigured =
+    (credentialStatus.configured.sttAppId || credentials.sttAppId) &&
+    (credentialStatus.configured.sttAccessToken || credentials.sttAccessToken);
+  const searchConfigured = credentialStatus.configured.searchApiKey || credentials.searchApiKey;
+
+  return (
+    <main className="utility-card settings-dialog" role="dialog" aria-modal="true">
+      <header className="utility-header drag-region">
+        <span className="utility-heading-icon" aria-hidden="true">
+          <GearSixIcon size={18} weight="duotone" />
         </span>
-        <span className="preference-copy">
-          <strong>回答音量</strong>
-          <small>{Math.round(preferences.agentVolume * 100)}%</small>
+        <span>
+          <strong>{copy.title}</strong>
+          <small>{copy.subtitle}</small>
         </span>
-        <input
-          className="volume-slider"
-          type="range"
-          min="0"
-          max="100"
-          value={Math.round(preferences.agentVolume * 100)}
-          aria-label="回答音量"
-          onChange={(event) => updatePreference('agentVolume', Number(event.target.value) / 100)}
-        />
+        <button
+          type="button"
+          className="utility-close no-drag"
+          aria-label="关闭设置"
+          title="关闭"
+          onClick={onClose}
+        >
+          <XIcon size={16} weight="bold" aria-hidden="true" />
+        </button>
+      </header>
+      <div className="settings-body">
+        <nav
+          className="settings-navigation no-drag"
+          aria-label={english ? 'Settings pages' : '设置页面'}
+        >
+          <button
+            type="button"
+            className={
+              activeTab === 'general' ? 'settings-nav-item is-active' : 'settings-nav-item'
+            }
+            onClick={() => selectSettingsTab('general')}
+          >
+            <GearSixIcon size={17} weight="duotone" aria-hidden="true" />
+            <span>{copy.general}</span>
+          </button>
+          <button
+            type="button"
+            className={
+              activeTab === 'services' ? 'settings-nav-item is-active' : 'settings-nav-item'
+            }
+            onClick={() => selectSettingsTab('services')}
+          >
+            <WaveformIcon size={17} weight="duotone" aria-hidden="true" />
+            <span>{copy.services}</span>
+          </button>
+        </nav>
+        <section
+          ref={settingsContentRef}
+          className="settings-content"
+          aria-label={activeTab === 'general' ? copy.general : copy.services}
+        >
+          {activeTab === 'general' ? (
+            <>
+              <div className="settings-section-heading">
+                <strong>{english ? 'Language' : '语言'}</strong>
+                <small>
+                  {english ? 'Apply the interface language after saving.' : '保存后应用界面语言。'}
+                </small>
+              </div>
+              <label className="settings-select-row">
+                <span>{english ? 'Display language' : '显示语言'}</span>
+                <select
+                  value={draft.locale}
+                  onChange={(event) => updateDraft('locale', event.target.value as SupportedLocale)}
+                >
+                  <option value="zh-CN">简体中文</option>
+                  <option value="en-US">English</option>
+                </select>
+              </label>
+              <div className="settings-section-heading">
+                <strong>{english ? 'Flight experience' : '飞行体验'}</strong>
+              </div>
+              <PreferenceRow
+                checked={draft.alwaysOnTop}
+                description={
+                  english
+                    ? 'Keep the guide above other windows while flying'
+                    : '飞行时让助手保持在其他窗口上方'
+                }
+                icon={<PushPinIcon size={18} weight="duotone" />}
+                label={english ? 'Always on top' : '始终置顶'}
+                onChange={(checked) => updateDraft('alwaysOnTop', checked)}
+              />
+              <div className="preference-row preference-row--volume">
+                <span className="preference-icon" aria-hidden="true">
+                  <SpeakerHighIcon size={18} weight="duotone" />
+                </span>
+                <span className="preference-copy">
+                  <strong>{english ? 'Response volume' : '回答音量'}</strong>
+                  <small>{Math.round(draft.agentVolume * 100)}%</small>
+                </span>
+                <input
+                  className="volume-slider"
+                  type="range"
+                  min="0"
+                  max="100"
+                  value={Math.round(draft.agentVolume * 100)}
+                  aria-label={english ? 'Response volume' : '回答音量'}
+                  onChange={(event) => updateDraft('agentVolume', Number(event.target.value) / 100)}
+                />
+              </div>
+              <PreferenceRow
+                checked={draft.interfaceMotion}
+                description={
+                  english
+                    ? 'Keep subtle menu and status animations'
+                    : '保留菜单弹出和状态切换的轻微动效'
+                }
+                icon={<SparkleIcon size={18} weight="duotone" />}
+                label={english ? 'Interface motion' : '界面动效'}
+                onChange={(checked) => updateDraft('interfaceMotion', checked)}
+              />
+              <div className="settings-section-heading">
+                <strong>{english ? 'Source browsing' : '来源浏览'}</strong>
+              </div>
+              <PreferenceRow
+                checked={draft.openSourcesInApp}
+                description={
+                  english
+                    ? 'Open cited web pages in the companion window'
+                    : '使用伴随窗口查看回答引用的网页'
+                }
+                icon={<BrowserIcon size={18} weight="duotone" />}
+                label={english ? 'Open sources in app' : '应用内打开来源'}
+                onChange={(checked) => updateDraft('openSourcesInApp', checked)}
+              />
+              <div className="settings-section-heading">
+                <strong>{english ? 'Voice input' : '语音输入'}</strong>
+              </div>
+              <label className="settings-select-row">
+                <span>{english ? 'Global push-to-talk key' : '全局按住说话键'}</span>
+                <select
+                  value={draft.globalPushToTalkKey}
+                  onChange={(event) => updateDraft('globalPushToTalkKey', event.target.value)}
+                >
+                  <option value="AltLeft">Left Alt</option>
+                  <option value="F8">F8</option>
+                  <option value="F9">F9</option>
+                  <option value="ControlRight">Right Ctrl</option>
+                  <option value="CapsLock">Caps Lock</option>
+                  <option value="Space">Space</option>
+                  <option value="MouseX1">Mouse X1</option>
+                  <option value="MouseX2">Mouse X2</option>
+                </select>
+              </label>
+              <div className="settings-section-heading">
+                <strong>{english ? 'Diagnostics & support' : '诊断与支持'}</strong>
+              </div>
+              <div className="diagnostics-row">
+                <span>
+                  <strong>{english ? 'Guide service' : '导游服务'}</strong>
+                  <small>
+                    {english
+                      ? 'Runtime diagnostics will be available here.'
+                      : '运行诊断将在此处提供。'}
+                  </small>
+                </span>
+                <button type="button" className="secondary-settings-button" disabled>
+                  {english ? 'Export diagnostic package' : '导出诊断包'}
+                </button>
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="settings-section-heading">
+                <strong>{english ? 'Service configuration' : '服务配置'}</strong>
+                <small>
+                  {english
+                    ? 'Set up the three services your guide needs. You can change advanced values when needed.'
+                    : '只需完成导游真正需要的三项服务；高级参数可按需展开。'}
+                </small>
+              </div>
+              <div className="service-progress" role="status">
+                <span>{english ? 'Setup status' : '配置状态'}</span>
+                <div>
+                  <ServiceStatus configured={Boolean(deepseekConfigured)} label="DeepSeek" />
+                  <ServiceStatus
+                    configured={Boolean(voiceConfigured)}
+                    label={english ? 'Voice' : '豆包语音'}
+                  />
+                  <ServiceStatus
+                    configured={Boolean(searchConfigured)}
+                    label={english ? 'Search (optional)' : '网页搜索（可选）'}
+                  />
+                </div>
+              </div>
+              <ServiceGroup
+                description={
+                  english ? 'Required for the guide to answer you.' : '导游回答问题所需的核心服务。'
+                }
+                title="DeepSeek"
+              >
+                <ServiceField
+                  label="API Key"
+                  configured={credentialStatus.configured.deepseekApiKey}
+                  type="password"
+                  value={credentials.deepseekApiKey}
+                  onChange={(value) => updateCredential('deepseekApiKey', value)}
+                />
+                <details className="service-advanced no-drag">
+                  <summary>{english ? 'Advanced settings' : '高级设置'}</summary>
+                  <ServiceField
+                    label={english ? 'Base URL' : 'Base URL'}
+                    value={services.llmBaseUrl}
+                    onChange={(value) =>
+                      setServices((current) => ({ ...current, llmBaseUrl: value }))
+                    }
+                  />
+                  <ServiceField
+                    label={english ? 'Model' : '模型'}
+                    value={services.llmModel}
+                    onChange={(value) =>
+                      setServices((current) => ({ ...current, llmModel: value }))
+                    }
+                  />
+                </details>
+              </ServiceGroup>
+              <ServiceGroup
+                description={
+                  english
+                    ? 'Speech recognition and voice playback use your Volcengine account.'
+                    : '语音识别与播报均使用你的豆包账号。'
+                }
+                title={english ? 'Volcengine voice' : '豆包语音'}
+              >
+                <strong className="service-subheading">STT</strong>
+                <ServiceField
+                  label={english ? 'Volcengine App ID' : '豆包 App ID'}
+                  configured={credentialStatus.configured.sttAppId}
+                  type="password"
+                  value={credentials.sttAppId}
+                  onChange={(value) => updateCredential('sttAppId', value)}
+                />
+                <ServiceField
+                  label={english ? 'Volcengine Access Token' : '豆包 Access Token'}
+                  configured={credentialStatus.configured.sttAccessToken}
+                  type="password"
+                  value={credentials.sttAccessToken}
+                  onChange={(value) => updateCredential('sttAccessToken', value)}
+                />
+                <button
+                  type="button"
+                  className="credentials-link-toggle no-drag"
+                  role="switch"
+                  aria-checked={voiceCredentialsLinked}
+                  onClick={toggleVoiceCredentialsLink}
+                >
+                  <span>
+                    <strong>
+                      {english ? 'Use the same credentials for TTS' : 'TTS 使用同一套凭据'}
+                    </strong>
+                    <small>
+                      {voiceCredentialsLinked
+                        ? english
+                          ? 'On by default. TTS will use the App ID and Access Token above.'
+                          : '默认开启。TTS 将使用上方的 App ID 与 Access Token。'
+                        : english
+                          ? 'Off. You can enter separate credentials for TTS below.'
+                          : '已关闭。现在可在下方填写独立的 TTS 凭据。'}
+                    </small>
+                  </span>
+                  <span className="preference-switch" aria-hidden="true">
+                    <span className="preference-switch-thumb">
+                      {voiceCredentialsLinked ? <CheckIcon size={10} weight="bold" /> : null}
+                    </span>
+                  </span>
+                </button>
+                {voiceCredentialsLinked ? (
+                  <div className="linked-credentials-note credential-state" key="linked">
+                    {english
+                      ? 'TTS is using the STT App ID and Access Token.'
+                      : 'TTS 正在使用 STT 的 App ID 与 Access Token。'}
+                  </div>
+                ) : (
+                  <div className="service-nested-fields credential-state" key="separate">
+                    <strong className="service-subheading">TTS</strong>
+                    <ServiceField
+                      label={english ? 'Volcengine App ID' : '豆包 App ID'}
+                      configured={credentialStatus.configured.ttsAppId}
+                      type="password"
+                      value={credentials.ttsAppId}
+                      onChange={(value) => updateCredential('ttsAppId', value)}
+                    />
+                    <ServiceField
+                      label={english ? 'Volcengine Access Token' : '豆包 Access Token'}
+                      configured={credentialStatus.configured.ttsAccessToken}
+                      type="password"
+                      value={credentials.ttsAccessToken}
+                      onChange={(value) => updateCredential('ttsAccessToken', value)}
+                    />
+                  </div>
+                )}
+                <ServiceField
+                  label={english ? 'TTS speaker' : '豆包 TTS 音色'}
+                  value={services.ttsSpeaker}
+                  onChange={(value) =>
+                    setServices((current) => ({ ...current, ttsSpeaker: value }))
+                  }
+                />
+              </ServiceGroup>
+              <ServiceGroup
+                description={
+                  english
+                    ? 'Optional. Enables up-to-date web answers and source links.'
+                    : '可选。配置后才能联网检索并返回来源链接。'
+                }
+                title={english ? 'Web search' : '网页搜索'}
+              >
+                <ServiceField
+                  label={english ? 'API Key (optional)' : 'API Key（可选）'}
+                  configured={credentialStatus.configured.searchApiKey}
+                  type="password"
+                  value={credentials.searchApiKey}
+                  onChange={(value) => updateCredential('searchApiKey', value)}
+                />
+              </ServiceGroup>
+            </>
+          )}
+        </section>
       </div>
-      <PreferenceRow
-        checked={preferences.openSourcesInApp}
-        description="使用伴随窗口查看回答引用的网页"
-        icon={<BrowserIcon size={18} weight="duotone" />}
-        label="应用内打开来源"
-        onChange={(checked) => updatePreference('openSourcesInApp', checked)}
-      />
-      <PreferenceRow
-        checked={preferences.interfaceMotion}
-        description="保留菜单弹出和状态切换的轻微动效"
-        icon={<SparkleIcon size={18} weight="duotone" />}
-        label="界面动效"
-        onChange={(checked) => updatePreference('interfaceMotion', checked)}
-      />
-    </section>
-    <footer className="settings-footer">
-      <span>修改会自动保存</span>
-      <button type="button" className="done-button" onClick={onClose}>
-        完成
-      </button>
-    </footer>
-  </main>
+      <footer className="settings-footer">
+        <span role="status">
+          {(notice === 'saved' ? copy.saved : notice) ||
+            (activeTab === 'general'
+              ? english
+                ? 'Changes are saved when you press Save.'
+                : '修改将在点击保存后生效。'
+              : english
+                ? 'Changing a service will reconnect the guide.'
+                : '保存服务配置后将重新连接导游。')}
+        </span>
+        <button
+          type="button"
+          className="done-button no-drag"
+          onClick={activeTab === 'general' ? saveGeneral : saveServices}
+        >
+          {activeTab === 'general' ? copy.save : copy.saveReconnect}
+        </button>
+      </footer>
+    </main>
+  );
+};
+
+const ServiceGroup = ({
+  children,
+  description,
+  title,
+}: {
+  children: ReactNode;
+  description: string;
+  title: string;
+}) => (
+  <section className="service-group">
+    <header className="service-group-header">
+      <strong>{title}</strong>
+      <small>{description}</small>
+    </header>
+    {children}
+  </section>
 );
+const ServiceStatus = ({ configured, label }: { configured: boolean; label: string }) => (
+  <span className={configured ? 'service-status is-ready' : 'service-status'}>
+    <i aria-hidden="true" />
+    {label}
+  </span>
+);
+const ServiceField = ({
+  configured = false,
+  disabled = false,
+  label,
+  onChange,
+  type = 'text',
+  value,
+}: {
+  label: string;
+  onChange(value: string): void;
+  configured?: boolean;
+  disabled?: boolean;
+  type?: 'number' | 'password' | 'text';
+  value: string;
+}) => {
+  const [revealed, setRevealed] = useState(false);
+  const isSecret = type === 'password';
+  return (
+    <label className="service-field">
+      <span>{label}</span>
+      <span className="service-field-control">
+        <input
+          disabled={disabled}
+          placeholder={configured && !value ? '已配置' : undefined}
+          type={isSecret && !revealed ? 'password' : 'text'}
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+        />
+        {isSecret ? (
+          <button
+            type="button"
+            className={
+              revealed
+                ? 'credential-visibility-toggle no-drag is-revealed'
+                : 'credential-visibility-toggle no-drag'
+            }
+            aria-label={revealed ? `隐藏 ${label}` : `显示 ${label}`}
+            aria-pressed={revealed}
+            title={revealed ? '隐藏内容' : '显示内容'}
+            disabled={disabled || value.length === 0}
+            onClick={() => setRevealed((current) => !current)}
+          >
+            {revealed ? (
+              <EyeClosedIcon size={15} aria-hidden="true" />
+            ) : (
+              <EyeIcon size={15} aria-hidden="true" />
+            )}
+          </button>
+        ) : null}
+      </span>
+    </label>
+  );
+};
 
 type QuitDialogProps = {
   onClose(): void;
@@ -294,6 +841,7 @@ type AssistantViewProps = {
   readiness: DesktopReadiness | null;
   retry(): Promise<void>;
   session: UseSessionReturn;
+  savePreferences(next: Preferences): void;
   starting: boolean;
   startupError: string;
   updatePreference<Key extends keyof Preferences>(key: Key, value: Preferences[Key]): void;
@@ -303,12 +851,14 @@ type AssistantViewProps = {
 const maximumTextMessageLength = 4000;
 
 const Assistant = () => {
-  const { preferences, updatePreference } = usePreferences();
+  const { preferences, savePreferences, updatePreference } = usePreferences();
   const [readiness, setReadiness] = useState<DesktopReadiness | null>(null);
   const [starting, setStarting] = useState(true);
   const [startupError, setStartupError] = useState('');
   const [voiceChannelConnected, setVoiceChannelConnected] = useState(true);
   const connectAbortRef = useRef<AbortController | null>(null);
+
+  useEffect(() => window.desktop?.onLocaleChanged(() => window.location.reload()), []);
 
   const tokenSource = useMemo(
     () =>
@@ -370,6 +920,7 @@ const Assistant = () => {
         readiness={readiness}
         retry={startSession}
         session={session}
+        savePreferences={savePreferences}
         starting={starting}
         startupError={startupError}
         updatePreference={updatePreference}
@@ -385,6 +936,7 @@ const AssistantView = ({
   readiness,
   retry,
   session,
+  savePreferences,
   starting,
   startupError,
   updatePreference,
@@ -428,6 +980,58 @@ const AssistantView = ({
   const agent = useAgent();
   const { isSending: isSendingText, messages, send: sendText } = useSessionMessages();
   const { perform } = useRpc();
+  const english = preferences.locale === 'en-US';
+  const copy = english
+    ? {
+        collapse: 'Collapse',
+        connectVoice: 'Connect voice',
+        connectionIssue: 'Voice service is temporarily unavailable',
+        continuousConversation: 'Continuous conversation',
+        endContinuousConversation: 'End continuous conversation',
+        enterText: 'Type a message, Enter to send',
+        inputAfterConnection: 'Connect Xiaoxiao to type a message',
+        messageInput: 'Text input',
+        micUnavailable: 'Microphone unavailable',
+        name: 'Xiaoxiao',
+        newMessages: 'New messages',
+        openConfiguration: 'Open configuration file',
+        pressToTalk: 'Hold to talk',
+        recentConversation: 'Recent conversation',
+        reconnect: 'Retry',
+        releaseToEnd: 'Release to finish',
+        sourceCount: (count: number) => `${count} web sources found`,
+        text: 'Text',
+        voiceDisconnected: 'Voice disconnected',
+        voiceInput: 'Voice input',
+        waitingForGuide: 'Preparing Xiaoxiao',
+        waitingForYou: 'Ready to talk',
+        youCanStart: 'You can start a conversation',
+      }
+    : {
+        collapse: '收起',
+        connectVoice: '连接语音',
+        connectionIssue: '语音服务暂时不可用',
+        continuousConversation: '连续对话',
+        endContinuousConversation: '结束连续对话',
+        enterText: '输入文字，Enter 发送',
+        inputAfterConnection: '连接晓晓后即可输入文字',
+        messageInput: '文字输入',
+        micUnavailable: '麦克风不可用',
+        name: '晓晓',
+        newMessages: '新消息',
+        openConfiguration: '打开配置文件',
+        pressToTalk: '按住说话',
+        recentConversation: '最近对话',
+        reconnect: '重新检测',
+        releaseToEnd: '松开结束',
+        sourceCount: (count: number) => `已检索 ${count} 个网页来源`,
+        text: '文字',
+        voiceDisconnected: '语音已挂断',
+        voiceInput: '语音输入',
+        waitingForGuide: '正在准备晓晓',
+        waitingForYou: '等待你说话',
+        youCanStart: '可以开始对话了',
+      };
 
   const publishOptions = useMemo(() => ({ name: 'desktop-microphone' }), []);
   const microphone = useTrackToggle({
@@ -580,6 +1184,7 @@ const AssistantView = ({
     connectionState: session.connectionState,
     continuousActive,
     hasError: Boolean(errorMessage),
+    locale: preferences.locale,
     starting,
     ...(toolActivity ? { toolActivity } : {}),
     ...(userState ? { userState } : {}),
@@ -592,7 +1197,8 @@ const AssistantView = ({
   const voiceChannelActive = voiceChannelConnected && !setupBlocked;
   const interactionBlocked = setupBlocked || !agent.canListen || !voiceChannelConnected;
   const textInputBlocked = setupBlocked || !agent.isConnected;
-  const visibleStatusLabel = !voiceChannelConnected && !setupBlocked ? '语音已挂断' : statusLabel;
+  const visibleStatusLabel =
+    !voiceChannelConnected && !setupBlocked ? copy.voiceDisconnected : statusLabel;
   const avatarExpression = resolveGuideAvatarExpression({
     agentState: agent.state,
     connectionState: session.connectionState,
@@ -892,9 +1498,11 @@ const AssistantView = ({
   const openUtility = async (kind: UtilityDialog) => {
     await closeMenu();
     if (window.desktop) {
-      if (kind === 'settings') await window.desktop.openSettings();
-      else await window.desktop.openQuitDialog();
-      return;
+      const opened =
+        kind === 'settings'
+          ? await window.desktop.openSettings()
+          : await window.desktop.openQuitDialog();
+      if (opened) return;
     }
     setBrowserDialog(kind);
   };
@@ -931,14 +1539,17 @@ const AssistantView = ({
           <button
             className="ball-open no-drag"
             onClick={() => void changeCollapsed(false)}
-            aria-label="展开云迹导游"
+            aria-label={english ? 'Expand Xiaoxiao' : '展开晓晓'}
             aria-haspopup="menu"
             aria-expanded={menuOpen}
-            title="点击展开云迹导游"
+            title={english ? 'Expand Xiaoxiao' : '点击展开晓晓'}
           >
             <GuideFloatingPortrait />
           </button>
-          <div className="ball-drag-handle drag-region" title="按住这里拖动悬浮球">
+          <div
+            className="ball-drag-handle drag-region"
+            title={english ? 'Drag Xiaoxiao' : '按住这里拖动晓晓'}
+          >
             <span className="ball-drag-grip" aria-hidden="true" />
           </div>
         </div>
@@ -952,8 +1563,8 @@ const AssistantView = ({
             type="button"
             className="ball-menu-button"
             role="menuitem"
-            aria-label="打开设置"
-            title="设置"
+            aria-label={english ? 'Open preferences' : '打开设置'}
+            title={english ? 'Preferences' : '设置'}
             tabIndex={menuOpen ? 0 : -1}
             onClick={() => void openUtility('settings')}
           >
@@ -963,8 +1574,8 @@ const AssistantView = ({
             type="button"
             className="ball-menu-button ball-menu-button--danger"
             role="menuitem"
-            aria-label="退出应用"
-            title="退出应用"
+            aria-label={english ? 'Quit app' : '退出应用'}
+            title={english ? 'Quit app' : '退出应用'}
             tabIndex={menuOpen ? 0 : -1}
             onClick={() => void openUtility('quit')}
           >
@@ -976,7 +1587,7 @@ const AssistantView = ({
             {browserDialog === 'settings' ? (
               <SettingsDialog
                 preferences={preferences}
-                updatePreference={updatePreference}
+                savePreferences={savePreferences}
                 onClose={() => setBrowserDialog(null)}
               />
             ) : (
@@ -992,7 +1603,7 @@ const AssistantView = ({
     <main className="assistant-card">
       <header className="drag-bar">
         <GuideExpression state={avatarExpression} />
-        <span className="name">云迹导游</span>
+        <span className="name">{copy.name}</span>
         <span
           className={`status status--${session.connectionState} ${!voiceChannelConnected && !setupBlocked ? 'status--voice-disconnected' : ''}`}
           title={errorMessage || undefined}
@@ -1000,19 +1611,22 @@ const AssistantView = ({
           {visibleStatusLabel}
         </span>
         <button className="text-button no-drag" onClick={() => void changeCollapsed(true)}>
-          收起
+          {copy.collapse}
         </button>
       </header>
       {msfsStatus && msfsStatus !== 'ready' ? (
         <div className="msfs-readiness-note" role="status" data-msfs-status={msfsStatus}>
-          {msfsMessage || '模拟器飞行数据暂不可用，普通对话仍可继续。'}
+          {msfsMessage ||
+            (english
+              ? 'Flight data is temporarily unavailable. You can still chat normally.'
+              : '模拟器飞行数据暂不可用，普通对话仍可继续。')}
         </div>
       ) : null}
       <div className="messages-shell">
         <section
           ref={messagesRef}
           className="messages"
-          aria-label="最近对话"
+          aria-label={copy.recentConversation}
           aria-live="polite"
           onScroll={updateMessageScrollPosition}
           onWheel={() => {
@@ -1022,18 +1636,18 @@ const AssistantView = ({
           {setupBlocked ? (
             <div className="readiness-card" role="status">
               <WarningCircleIcon size={24} weight="duotone" aria-hidden="true" />
-              <strong>{readiness?.message ?? errorMessage ?? '语音服务暂时不可用'}</strong>
+              <strong>{readiness?.message ?? errorMessage ?? copy.connectionIssue}</strong>
               {(readiness?.issues ?? agent.failureReasons ?? []).slice(0, 4).map((issue) => (
                 <small key={issue}>{issue}</small>
               ))}
               <div className="readiness-actions">
                 {readiness?.status === 'setup_required' ? (
                   <button type="button" onClick={() => void window.desktop?.openConfiguration()}>
-                    打开配置文件
+                    {copy.openConfiguration}
                   </button>
                 ) : null}
                 <button type="button" onClick={() => void retry()}>
-                  重新检测
+                  {copy.reconnect}
                 </button>
               </div>
             </div>
@@ -1044,17 +1658,23 @@ const AssistantView = ({
               </span>
               <strong>
                 {!voiceChannelConnected
-                  ? '语音已挂断'
+                  ? copy.voiceDisconnected
                   : session.isConnected
-                    ? '可以开始对话了'
-                    : '正在准备语音导游'}
+                    ? copy.youCanStart
+                    : copy.waitingForGuide}
               </strong>
               <small>
                 {!voiceChannelConnected
-                  ? '仍可使用文字输入，连接语音后恢复上次模式'
+                  ? english
+                    ? 'Text input is still available. Reconnect voice to restore the previous mode.'
+                    : '仍可使用文字输入，连接语音后恢复上次模式'
                   : preferences.voiceInputMode === 'continuous'
-                    ? '点击开始后即可持续自然对话'
-                    : '按住按钮或空格键说话，松开后等待回答'}
+                    ? english
+                      ? 'Start to speak naturally without holding the button.'
+                      : '点击开始后即可持续自然对话'
+                    : english
+                      ? 'Hold the button or Space to talk, then release for a reply.'
+                      : '按住按钮或空格键说话，松开后等待回答'}
               </small>
             </div>
           ) : (
@@ -1074,7 +1694,7 @@ const AssistantView = ({
                       onClick={() => void openSourcePreview(message.sourcePreview!)}
                     >
                       <BrowserIcon size={13} weight="duotone" aria-hidden="true" />
-                      <span>已检索 {message.sourcePreview.sources.length} 个网页来源</span>
+                      <span>{copy.sourceCount(message.sourcePreview.sources.length)}</span>
                       <CaretDownIcon size={11} weight="bold" aria-hidden="true" />
                     </button>
                   ) : null}
@@ -1089,7 +1709,7 @@ const AssistantView = ({
             className="new-message-button no-drag"
             onClick={() => scrollToLatestMessage(preferences.interfaceMotion ? 'smooth' : 'auto')}
           >
-            <span>新消息</span>
+            <span>{copy.newMessages}</span>
             <CaretDownIcon size={12} weight="bold" aria-hidden="true" />
           </button>
         ) : null}
@@ -1098,7 +1718,7 @@ const AssistantView = ({
         <form
           id="text-composer"
           className="text-composer no-drag"
-          aria-label="文字输入"
+          aria-label={copy.messageInput}
           onSubmit={(event) => {
             event.preventDefault();
             void submitTextMessage();
@@ -1107,11 +1727,11 @@ const AssistantView = ({
           <div className="text-composer-row">
             <textarea
               ref={textInputRef}
-              aria-label="输入文字消息"
+              aria-label={english ? 'Type a text message' : '输入文字消息'}
               aria-describedby={textInputError ? 'text-input-error' : undefined}
               disabled={textInputBlocked}
               maxLength={maximumTextMessageLength}
-              placeholder={textInputBlocked ? '连接导游后即可输入文字' : '输入文字，Enter 发送'}
+              placeholder={textInputBlocked ? copy.inputAfterConnection : copy.enterText}
               rows={1}
               value={textDraft}
               onChange={(event) => {
@@ -1133,9 +1753,17 @@ const AssistantView = ({
             <button
               type="submit"
               className="text-send-button"
-              aria-label={isSendingText ? '正在发送文字消息' : '发送文字消息'}
+              aria-label={
+                isSendingText
+                  ? english
+                    ? 'Sending text message'
+                    : '正在发送文字消息'
+                  : english
+                    ? 'Send text message'
+                    : '发送文字消息'
+              }
               disabled={textInputBlocked || isSendingText || !textDraft.trim()}
-              title="发送"
+              title={english ? 'Send' : '发送'}
             >
               <PaperPlaneTiltIcon size={16} weight="bold" aria-hidden="true" />
             </button>
@@ -1157,14 +1785,22 @@ const AssistantView = ({
             setVoiceModeMenuOpen(false);
             setTextComposerOpen((open) => !open);
           }}
-          title={textComposerOpen ? '收起文字输入' : '展开文字输入'}
+          title={
+            textComposerOpen
+              ? english
+                ? 'Hide text input'
+                : '收起文字输入'
+              : english
+                ? 'Show text input'
+                : '展开文字输入'
+          }
         >
           <KeyboardIcon
             size={16}
             weight={textComposerOpen ? 'fill' : 'regular'}
             aria-hidden="true"
           />
-          <span>文字</span>
+          <span>{copy.text}</span>
           {textComposerOpen ? (
             <CaretDownIcon size={12} weight="bold" aria-hidden="true" />
           ) : (
@@ -1179,7 +1815,11 @@ const AssistantView = ({
           }}
         >
           {voiceModeMenuOpen ? (
-            <div className="voice-mode-menu" role="menu" aria-label="选择语音模式">
+            <div
+              className="voice-mode-menu"
+              role="menu"
+              aria-label={english ? 'Choose voice mode' : '选择语音模式'}
+            >
               <button
                 type="button"
                 role="menuitemradio"
@@ -1187,7 +1827,7 @@ const AssistantView = ({
                 onClick={() => void selectVoiceInputMode('push_to_talk')}
               >
                 <MicrophoneIcon size={16} aria-hidden="true" />
-                <span>按住说话</span>
+                <span>{english ? 'Push to talk' : copy.pressToTalk}</span>
                 {preferences.voiceInputMode === 'push_to_talk' ? (
                   <CheckIcon size={13} weight="bold" aria-hidden="true" />
                 ) : null}
@@ -1199,7 +1839,7 @@ const AssistantView = ({
                 onClick={() => void selectVoiceInputMode('continuous')}
               >
                 <WaveformIcon size={16} aria-hidden="true" />
-                <span>连续对话</span>
+                <span>{copy.continuousConversation}</span>
                 {preferences.voiceInputMode === 'continuous' ? (
                   <CheckIcon size={13} weight="bold" aria-hidden="true" />
                 ) : null}
@@ -1213,20 +1853,30 @@ const AssistantView = ({
               aria-label={
                 preferences.voiceInputMode === 'continuous'
                   ? continuousActive
-                    ? '结束连续对话'
-                    : '开始连续对话'
+                    ? copy.endContinuousConversation
+                    : english
+                      ? 'Start continuous conversation'
+                      : '开始连续对话'
                   : microphone.enabled
-                    ? '正在聆听，松开结束'
-                    : '按住说话，或按住空格键说话'
+                    ? english
+                      ? 'Listening, release to finish'
+                      : '正在聆听，松开结束'
+                    : english
+                      ? 'Hold to talk, or hold Space'
+                      : '按住说话，或按住空格键说话'
               }
               aria-pressed={microphone.enabled}
               disabled={interactionBlocked || voiceTransitioning}
               title={
                 errorMessage ||
                 (!voiceChannelConnected
-                  ? '请先连接语音'
+                  ? english
+                    ? 'Connect voice first'
+                    : '请先连接语音'
                   : preferences.voiceInputMode === 'push_to_talk'
-                    ? '也可以按住空格键说话'
+                    ? english
+                      ? 'You can also hold Space to talk'
+                      : '也可以按住空格键说话'
                     : undefined)
               }
               onContextMenu={(event) => event.preventDefault()}
@@ -1268,28 +1918,32 @@ const AssistantView = ({
               <span className="voice-label">
                 {voiceButtonState === 'requesting'
                   ? agent.isPending
-                    ? '等待导游'
-                    : '正在切换'
+                    ? english
+                      ? 'Waiting for Xiaoxiao'
+                      : '等待晓晓'
+                    : english
+                      ? 'Switching'
+                      : '正在切换'
                   : voiceButtonState === 'error'
-                    ? '麦克风不可用'
+                    ? copy.micUnavailable
                     : preferences.voiceInputMode === 'continuous'
                       ? continuousActive
-                        ? '结束连续对话'
-                        : '连续对话'
+                        ? copy.endContinuousConversation
+                        : copy.continuousConversation
                       : microphone.enabled
-                        ? '松开结束'
-                        : '按住说话'}
+                        ? copy.releaseToEnd
+                        : copy.pressToTalk}
               </span>
             </button>
             <button
               type="button"
               className="voice-mode-menu-toggle"
-              aria-label="切换语音模式"
+              aria-label={english ? 'Change voice mode' : '切换语音模式'}
               aria-haspopup="menu"
               aria-expanded={voiceModeMenuOpen}
               disabled={voiceTransitioning}
               onClick={() => setVoiceModeMenuOpen((open) => !open)}
-              title="切换语音模式"
+              title={english ? 'Change voice mode' : '切换语音模式'}
             >
               <CaretDownIcon size={13} weight="bold" aria-hidden="true" />
             </button>
@@ -1299,11 +1953,15 @@ const AssistantView = ({
         <button
           type="button"
           className={`voice-channel-button ${voiceChannelActive ? 'is-connected' : 'is-disconnected'}`}
-          aria-label={voiceChannelActive ? '挂断语音连接' : '连接语音'}
+          aria-label={
+            voiceChannelActive ? (english ? 'Disconnect voice' : '挂断语音连接') : copy.connectVoice
+          }
           aria-pressed={voiceChannelActive}
           disabled={voiceTransitioning || starting}
           onClick={() => void (voiceChannelActive ? hangUpVoiceChannel() : connectVoiceChannel())}
-          title={voiceChannelActive ? '挂断语音连接' : '连接语音'}
+          title={
+            voiceChannelActive ? (english ? 'Disconnect voice' : '挂断语音连接') : copy.connectVoice
+          }
         >
           {voiceChannelActive ? (
             <PhoneDisconnectIcon size={18} weight="bold" aria-hidden="true" />
@@ -1518,12 +2176,12 @@ const Source = () => {
 };
 
 const SettingsRoute = () => {
-  const { preferences, updatePreference } = usePreferences();
+  const { preferences, savePreferences } = usePreferences();
   return (
     <div className="utility-root">
       <SettingsDialog
         preferences={preferences}
-        updatePreference={updatePreference}
+        savePreferences={savePreferences}
         onClose={() => void window.desktop?.closeUtilityWindow()}
       />
     </div>
