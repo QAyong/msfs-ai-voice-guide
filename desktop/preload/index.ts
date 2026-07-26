@@ -7,6 +7,17 @@ contextBridge.exposeInMainWorld('desktop', {
   getAssistantState: () => ipcRenderer.invoke('assistant:get-state'),
   setBallMenuOpen: (open: boolean) => ipcRenderer.invoke('assistant:set-menu-open', open),
   openSettings: () => ipcRenderer.invoke('settings:open'),
+  saveLocale: (locale: 'en-US' | 'zh-CN') => ipcRenderer.invoke('settings:save-locale', locale),
+  onLocaleChanged: (callback: () => void) => {
+    const listener = () => callback();
+    ipcRenderer.on('settings:locale-saved', listener);
+    return () => ipcRenderer.removeListener('settings:locale-saved', listener);
+  },
+  getServiceCredentialStatus: () => ipcRenderer.invoke('settings:get-credential-status'),
+  getVisibleLocalServiceCredentials: () =>
+    ipcRenderer.invoke('settings:get-visible-local-credentials'),
+  saveServiceCredentials: (credentials: Record<string, string>) =>
+    ipcRenderer.invoke('settings:save-credentials', credentials),
   openQuitDialog: () => ipcRenderer.invoke('app:open-quit-dialog'),
   closeUtilityWindow: () => ipcRenderer.invoke('utility:close'),
   quitApp: () => ipcRenderer.invoke('app:quit-confirmed'),

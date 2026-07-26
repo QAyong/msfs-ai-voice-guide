@@ -7,7 +7,7 @@ import {
   type VoiceInputMode,
 } from '../../shared/voice-control.js';
 import { loadConfig } from '../config/schema.js';
-import { createGuideInstructions } from '../conversation/guide-instructions.js';
+import { createGuideInstructions, type GuideLocale } from '../conversation/guide-instructions.js';
 import { MsfsCliClient } from '../msfs/cli-client.js';
 import { MsfsGuideService } from '../msfs/guide-service.js';
 import { resolveMsfsCliPath } from '../msfs/path.js';
@@ -18,8 +18,11 @@ import { createMsfsGuideTools } from '../tools/msfs-guide.js';
 import { createSearchWebTool } from '../tools/search-web.js';
 import { extractGuideSources } from './search-source-events.js';
 
-export function createGuideAgent(tools: readonly llm.ToolContextEntry[] = []): voice.Agent {
-  return new voice.Agent({ instructions: createGuideInstructions(), tools });
+export function createGuideAgent(
+  tools: readonly llm.ToolContextEntry[] = [],
+  locale: GuideLocale = 'zh-CN',
+): voice.Agent {
+  return new voice.Agent({ instructions: createGuideInstructions(locale), tools });
 }
 
 export function composeGuideTools(
@@ -62,7 +65,17 @@ function observeToolActivity(
 export default defineAgent({
   entry: async (ctx) => {
     const config = loadConfig();
-    const providers = createVoiceProviders(config);
+    const locale: GuideLocale = process.env.GUIDE_LOCALE === 'en-US' ? 'en-US' : 'zh-CN';
+    const providers = createVoiceProviders({
+      ...config,
+      volcengine: {
+        ...config.volcengine,
+        stt: {
+          ...config.volcengine.stt,
+          language: locale === 'en-US' ? 'en' : 'zh',
+        },
+      },
+    });
     const resourcesPath = (process as NodeJS.Process & { resourcesPath?: string }).resourcesPath;
     const msfsService = new MsfsGuideService(
       new MsfsCliClient({
@@ -208,7 +221,7 @@ export default defineAgent({
 
     await session.start({
       room: ctx.room,
-      agent: createGuideAgent(tools),
+      agent: createGuideAgent(tools, locale),
     });
     session.input.setAudioEnabled(false);
     publishVoiceAttributes({

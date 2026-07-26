@@ -12,8 +12,31 @@ declare global {
       setCollapsed(collapsed: boolean): Promise<void>;
       getAssistantState(): Promise<{ collapsed: boolean }>;
       setBallMenuOpen(open: boolean): Promise<'up' | 'down'>;
-      openSettings(): Promise<void>;
-      openQuitDialog(): Promise<void>;
+      openSettings(): Promise<boolean>;
+      saveLocale(locale: 'en-US' | 'zh-CN'): Promise<{
+        ok: boolean;
+        readiness: DesktopReadiness;
+      }>;
+      onLocaleChanged(callback: () => void): () => void;
+      getServiceCredentialStatus(): Promise<{
+        encryptionAvailable: boolean;
+        configured: Record<string, boolean>;
+        error?: string;
+      }>;
+      getVisibleLocalServiceCredentials(): Promise<{
+        deepseekApiKey: string;
+        sttAppId: string;
+        sttAccessToken: string;
+        ttsAppId: string;
+        ttsAccessToken: string;
+        searchApiKey: string;
+      }>;
+      saveServiceCredentials(credentials: Record<string, string>): Promise<{
+        encryptionAvailable: boolean;
+        configured: Record<string, boolean>;
+        error?: string;
+      }>;
+      openQuitDialog(): Promise<boolean>;
       closeUtilityWindow(): Promise<void>;
       quitApp(): Promise<void>;
       setAlwaysOnTop(enabled: boolean): Promise<void>;

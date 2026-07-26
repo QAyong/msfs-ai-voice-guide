@@ -1,5 +1,7 @@
-import { app, BrowserWindow, ipcMain, screen, shell, WebContentsView } from 'electron';
+import { app, BrowserWindow, ipcMain, safeStorage, screen, shell, WebContentsView } from 'electron';
+import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { z } from 'zod';
 import type { AppConfig } from '../../src/config/schema.js';
 import {
   guideSourcesMessageSchema,
@@ -51,12 +53,50 @@ const assistantSize = { width: 320, height: 360 };
 const collapsedSize = { width: 64, height: 72 };
 const collapsedMenuSize = { width: 64, height: 174 };
 const sourceSize = { width: 440, height: 600 };
-const settingsSize = { width: 372, height: 536 };
+const settingsSize = { width: 620, height: 640 };
 const quitDialogSize = { width: 328, height: 224 };
 const sourceLoadTimeoutMs = 15_000;
 
 type MenuDirection = 'up' | 'down';
 type UtilityKind = 'settings' | 'quit';
+type GuideLocale = 'en-US' | 'zh-CN';
+const guideLocaleSchema = z.enum(['en-US', 'zh-CN']);
+const serviceCredentialKeys = [
+  'deepseekApiKey',
+  'sttAppId',
+  'sttAccessToken',
+  'ttsAppId',
+  'ttsAccessToken',
+  'searchApiKey',
+] as const;
+type ServiceCredentialKey = (typeof serviceCredentialKeys)[number];
+type StoredServiceCredentials = Partial<Record<ServiceCredentialKey, string>>;
+const serviceCredentialsSchema = z
+  .object({
+    deepseekApiKey: z.string().trim().min(1).optional(),
+    sttAppId: z.string().trim().min(1).optional(),
+    sttAccessToken: z.string().trim().min(1).optional(),
+    ttsAppId: z.string().trim().min(1).optional(),
+    ttsAccessToken: z.string().trim().min(1).optional(),
+    searchApiKey: z.string().trim().min(1).optional(),
+  })
+  .strict();
+const serviceCredentialUpdateSchema = z
+  .object({
+    deepseekApiKey: z.string().trim().min(1).nullable().optional(),
+    sttAppId: z.string().trim().min(1).nullable().optional(),
+    sttAccessToken: z.string().trim().min(1).nullable().optional(),
+    ttsAppId: z.string().trim().min(1).nullable().optional(),
+    ttsAccessToken: z.string().trim().min(1).nullable().optional(),
+    searchApiKey: z.string().trim().min(1).nullable().optional(),
+  })
+  .strict();
+type ServiceCredentialStatus = {
+  encryptionAvailable: boolean;
+  configured: Record<ServiceCredentialKey, boolean>;
+  error?: string;
+};
+type VisibleServiceCredentials = Record<ServiceCredentialKey, string>;
 
 let assistantWindow: BrowserWindow | null = null;
 let sourceWindow: BrowserWindow | null = null;
@@ -81,6 +121,7 @@ let persistWindowTimer: NodeJS.Timeout | null = null;
 
 const agentRuntime = new EmbeddedAgentRuntime();
 const localLiveKitRuntime = new LocalLiveKitRuntime();
+let guideLocale: GuideLocale = 'zh-CN';
 
 const isDevelopment = Boolean(process.env.ELECTRON_RENDERER_URL);
 const localConfigurationRoot = app.isPackaged ? app.getPath('userData') : process.cwd();
@@ -90,6 +131,8 @@ const localEnvironmentExamplePath = app.isPackaged
   : join(localConfigurationRoot, '.env.example');
 
 const getWindowStatePath = () => join(app.getPath('userData'), 'window-state.json');
+const getGuideLocalePath = () => join(app.getPath('userData'), 'guide-locale.json');
+const getServiceCredentialsPath = () => join(app.getPath('userData'), 'service-credentials.bin');
 const getAgentProcessPath = () => join(__dirname, 'agent-process.js');
 const getPackagedResourcesPath = () =>
   (process as NodeJS.Process & { resourcesPath?: string }).resourcesPath ??
@@ -101,6 +144,103 @@ const getLocalLiveKitExecutablePath = () =>
     resourcesPath: getPackagedResourcesPath(),
     projectRoot: process.cwd(),
   });
+
+const emptyServiceCredentialStatus = (error?: string): ServiceCredentialStatus => ({
+  encryptionAvailable: false,
+  configured: Object.fromEntries(serviceCredentialKeys.map((key) => [key, false])) as Record<
+    ServiceCredentialKey,
+    boolean
+  >,
+  ...(error ? { error } : {}),
+});
+
+const readStoredServiceCredentials = async (): Promise<StoredServiceCredentials> => {
+  if (!safeStorage.isEncryptionAvailable()) return {};
+  try {
+    const encrypted = await readFile(getServiceCredentialsPath());
+    const parsed = serviceCredentialsSchema.safeParse(
+      JSON.parse(safeStorage.decryptString(encrypted)),
+    );
+    if (!parsed.success) return {};
+    const credentials: StoredServiceCredentials = {};
+    for (const key of serviceCredentialKeys) {
+      const value = parsed.data[key];
+      if (value) credentials[key] = value;
+    }
+    return credentials;
+  } catch {
+    return {};
+  }
+};
+
+const getServiceCredentialStatus = async (): Promise<ServiceCredentialStatus> => {
+  const local = getVisibleLocalServiceCredentials();
+  if (!safeStorage.isEncryptionAvailable()) {
+    return {
+      encryptionAvailable: false,
+      configured: Object.fromEntries(
+        serviceCredentialKeys.map((key) => [key, Boolean(local[key])]),
+      ) as Record<ServiceCredentialKey, boolean>,
+      error: '系统加密服务不可用，正在使用本机 .env 配置。',
+    };
+  }
+  const stored = await readStoredServiceCredentials();
+  return {
+    encryptionAvailable: true,
+    configured: Object.fromEntries(
+      serviceCredentialKeys.map((key) => [key, Boolean(stored[key] || local[key])]),
+    ) as Record<ServiceCredentialKey, boolean>,
+  };
+};
+
+const getVisibleLocalServiceCredentials = (): VisibleServiceCredentials => {
+  reloadLocalEnvironment(localEnvironmentPath);
+  const appId = process.env.VOLCENGINE_SPEECH_APP_ID?.trim() ?? '';
+  const accessToken = process.env.VOLCENGINE_SPEECH_ACCESS_TOKEN?.trim() ?? '';
+  return {
+    deepseekApiKey: process.env.DEEPSEEK_API_KEY?.trim() ?? '',
+    sttAppId: appId,
+    sttAccessToken: accessToken,
+    ttsAppId: appId,
+    ttsAccessToken: accessToken,
+    searchApiKey: process.env.VOLCENGINE_SEARCH_API_KEY?.trim() ?? '',
+  };
+};
+
+const readStoredGuideLocale = async (): Promise<GuideLocale> => {
+  try {
+    const parsed = guideLocaleSchema.safeParse(
+      JSON.parse(await readFile(getGuideLocalePath(), 'utf8')),
+    );
+    return parsed.success ? parsed.data : 'zh-CN';
+  } catch {
+    return 'zh-CN';
+  }
+};
+
+const saveGuideLocale = async (locale: GuideLocale): Promise<void> => {
+  await writeFile(getGuideLocalePath(), JSON.stringify(locale), { mode: 0o600 });
+};
+
+const saveServiceCredentialUpdates = async (
+  updates: z.infer<typeof serviceCredentialUpdateSchema>,
+): Promise<ServiceCredentialStatus> => {
+  if (!safeStorage.isEncryptionAvailable()) {
+    return emptyServiceCredentialStatus('系统加密服务不可用，未保存任何凭据。');
+  }
+  const current = await readStoredServiceCredentials();
+  const next = { ...current };
+  for (const key of serviceCredentialKeys) {
+    const update = updates[key];
+    if (update === undefined) continue;
+    if (update === null) delete next[key];
+    else next[key] = update;
+  }
+  await writeFile(getServiceCredentialsPath(), safeStorage.encryptString(JSON.stringify(next)), {
+    mode: 0o600,
+  });
+  return getServiceCredentialStatus();
+};
 
 const attachDevelopmentDiagnostics = (window: BrowserWindow) => {
   if (app.isPackaged) return;
@@ -159,6 +299,7 @@ const startConfiguredAgent = async (
   { config: AppConfig; readiness: DesktopReadiness } | { readiness: DesktopReadiness }
 > => {
   reloadLocalEnvironment(localEnvironmentPath);
+  process.env.GUIDE_LOCALE = guideLocale;
   if (app.isPackaged) {
     try {
       const localConnection = await localLiveKitRuntime.ensureStarted({
@@ -174,7 +315,7 @@ const startConfiguredAgent = async (
   if (!configuration.ok) return { readiness: configuration.readiness };
 
   try {
-    await agentRuntime.ensureStarted(configuration.config, getAgentProcessPath());
+    await agentRuntime.ensureStarted(configuration.config, getAgentProcessPath(), guideLocale);
     if (waitUntilReady) await agentRuntime.waitUntilReady();
     return { config: configuration.config, readiness: agentRuntime.getReadiness() };
   } catch (error) {
@@ -294,8 +435,8 @@ const positionUtilityWindow = (window: BrowserWindow) => {
   window.setPosition(x, y);
 };
 
-const openUtilityWindow = async (kind: UtilityKind) => {
-  if (!isLiveWindow(assistantWindow)) return;
+const openUtilityWindow = async (kind: UtilityKind): Promise<boolean> => {
+  if (!isLiveWindow(assistantWindow)) return false;
   const parentWindow = assistantWindow;
   if (assistantMenuOpen) setAssistantMenuOpen(false);
 
@@ -303,21 +444,22 @@ const openUtilityWindow = async (kind: UtilityKind) => {
     if (utilityWindow.webContents.getURL().endsWith(`#${kind}`)) {
       utilityWindow.show();
       utilityWindow.focus();
-      return;
+      return true;
     }
     utilityWindow.close();
   }
 
   const size = kind === 'settings' ? settingsSize : quitDialogSize;
+  const minimumSize = kind === 'settings' ? { width: 460, height: 440 } : size;
   const window = new BrowserWindow({
     parent: parentWindow,
     width: size.width,
     height: size.height,
-    minWidth: size.width,
-    minHeight: size.height,
+    minWidth: minimumSize.width,
+    minHeight: minimumSize.height,
     frame: false,
     transparent: true,
-    resizable: false,
+    resizable: kind === 'settings',
     alwaysOnTop: true,
     skipTaskbar: true,
     show: false,
@@ -344,7 +486,15 @@ const openUtilityWindow = async (kind: UtilityKind) => {
     window.show();
     window.focus();
   });
-  await loadRenderer(window, kind);
+  try {
+    await loadRenderer(window, kind);
+    return true;
+  } catch (error) {
+    console.error(`Failed to open ${kind} utility window`, error);
+    if (!window.isDestroyed()) window.destroy();
+    utilityWindow = releaseWindowReference(utilityWindow, window);
+    return false;
+  }
 };
 
 const setSourcePosition = (x: number, y: number) => {
@@ -877,13 +1027,91 @@ ipcMain.handle('livekit:create-session', async (event): Promise<DesktopSessionRe
 });
 
 ipcMain.handle('settings:open', async (event) => {
-  if (!isAssistantSender(event.sender)) return;
-  await openUtilityWindow('settings');
+  if (!isAssistantSender(event.sender)) return false;
+  return openUtilityWindow('settings');
 });
 
+ipcMain.handle('settings:save-locale', async (event, value: unknown) => {
+  if (!isUtilitySender(event.sender)) {
+    return {
+      ok: false,
+      readiness: { status: 'error', message: '无权更新语言设置。', issues: [] },
+    } satisfies { ok: boolean; readiness: DesktopReadiness };
+  }
+  const parsed = guideLocaleSchema.safeParse(value);
+  if (!parsed.success) {
+    return {
+      ok: false,
+      readiness: { status: 'error', message: '语言设置无效。', issues: [] },
+    } satisfies { ok: boolean; readiness: DesktopReadiness };
+  }
+  if (parsed.data === guideLocale) {
+    return { ok: true, readiness: agentRuntime.getReadiness() };
+  }
+
+  const previousLocale = guideLocale;
+  guideLocale = parsed.data;
+  const result = await startConfiguredAgent(true);
+  if ('config' in result && result.readiness.status === 'ready') {
+    try {
+      await saveGuideLocale(guideLocale);
+      if (isLiveWindow(assistantWindow)) {
+        assistantWindow.webContents.send('settings:locale-saved', guideLocale);
+      }
+      return { ok: true, readiness: result.readiness };
+    } catch {
+      // Fall through to restore the last working locale and worker.
+    }
+  }
+
+  guideLocale = previousLocale;
+  const rollback = await startConfiguredAgent(true);
+  return {
+    ok: false,
+    readiness: 'readiness' in rollback ? rollback.readiness : result.readiness,
+  };
+});
+
+ipcMain.handle(
+  'settings:get-credential-status',
+  async (event): Promise<ServiceCredentialStatus> => {
+    if (!isUtilitySender(event.sender))
+      return emptyServiceCredentialStatus('无权访问服务凭据状态。');
+    return getServiceCredentialStatus();
+  },
+);
+
+ipcMain.handle('settings:get-visible-local-credentials', (event): VisibleServiceCredentials => {
+  if (!isUtilitySender(event.sender)) {
+    return {
+      deepseekApiKey: '',
+      sttAppId: '',
+      sttAccessToken: '',
+      ttsAppId: '',
+      ttsAccessToken: '',
+      searchApiKey: '',
+    };
+  }
+  return getVisibleLocalServiceCredentials();
+});
+
+ipcMain.handle(
+  'settings:save-credentials',
+  async (event, value: unknown): Promise<ServiceCredentialStatus> => {
+    if (!isUtilitySender(event.sender)) return emptyServiceCredentialStatus('无权保存服务凭据。');
+    const parsed = serviceCredentialUpdateSchema.safeParse(value);
+    if (!parsed.success) return emptyServiceCredentialStatus('凭据格式无效，未保存任何内容。');
+    try {
+      return await saveServiceCredentialUpdates(parsed.data);
+    } catch {
+      return emptyServiceCredentialStatus('无法安全保存凭据。');
+    }
+  },
+);
+
 ipcMain.handle('app:open-quit-dialog', async (event) => {
-  if (!isAssistantSender(event.sender)) return;
-  await openUtilityWindow('quit');
+  if (!isAssistantSender(event.sender)) return false;
+  return openUtilityWindow('quit');
 });
 
 ipcMain.handle('utility:close', (event) => {
@@ -1000,6 +1228,7 @@ ipcMain.handle('external:open', (event, url: string) => {
 
 app.whenReady().then(async () => {
   storedWindowState = readStoredWindowState(getWindowStatePath());
+  guideLocale = await readStoredGuideLocale();
   await createAssistantWindow();
   void startConfiguredAgent(false).then(async (result) => {
     if ('config' in result) await agentRuntime.waitUntilReady();
