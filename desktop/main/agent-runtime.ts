@@ -3,8 +3,6 @@ import type { AppConfig } from '../../src/config/schema.js';
 import type { DesktopReadiness } from '../../shared/desktop-contracts.js';
 import { workerFailureReadiness } from './readiness.js';
 
-const healthUrl = 'http://127.0.0.1:8098/';
-
 type RuntimeStatus = 'stopped' | 'starting' | 'ready' | 'error';
 type AgentProcessMessage =
   { type: 'error'; message: string } | { type: 'stopped' } | { type: 'started' };
@@ -15,6 +13,12 @@ export class EmbeddedAgentRuntime {
   private error: unknown = null;
   private fingerprint = '';
   private stopping = false;
+
+  constructor(private readonly healthPort = 8098) {}
+
+  private get healthUrl() {
+    return `http://127.0.0.1:${this.healthPort}/`;
+  }
 
   getReadiness(): DesktopReadiness {
     if (this.status === 'ready') {
@@ -32,8 +36,9 @@ export class EmbeddedAgentRuntime {
     config: AppConfig,
     agentProcessPath: string,
     locale: 'en-US' | 'zh-CN',
+    environment: NodeJS.ProcessEnv = process.env,
   ): Promise<void> {
-    const fingerprint = JSON.stringify([config, agentProcessPath, locale]);
+    const fingerprint = JSON.stringify([config, agentProcessPath, locale, this.healthPort]);
     if (this.child && this.fingerprint === fingerprint && this.status !== 'error') return;
     if (this.child) await this.stop();
 
@@ -44,6 +49,11 @@ export class EmbeddedAgentRuntime {
 
     const child = utilityProcess.fork(agentProcessPath, [], {
       cwd: process.cwd(),
+      env: {
+        ...environment,
+        AGENT_HEALTH_PORT: String(this.healthPort),
+        GUIDE_LOCALE: locale,
+      },
       serviceName: 'MSFS AI Guide Agent',
       stdio: ['ignore', 'pipe', 'pipe'],
     });
@@ -83,7 +93,7 @@ export class EmbeddedAgentRuntime {
     while (Date.now() < deadline) {
       if (this.status === 'error') return false;
       try {
-        const response = await fetch(healthUrl, { signal: AbortSignal.timeout(1_000) });
+        const response = await fetch(this.healthUrl, { signal: AbortSignal.timeout(1_000) });
         if (response.ok) {
           this.status = 'ready';
           return true;

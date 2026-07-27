@@ -49,6 +49,15 @@ import { WaveformIcon } from '@phosphor-icons/react/dist/csr/Waveform';
 import { XIcon } from '@phosphor-icons/react/dist/csr/X';
 import type { DesktopReadiness } from '../../../shared/desktop-contracts.js';
 import {
+  defaultDesktopServiceSettings,
+  serviceCheckRequestSchema,
+  serviceSettingsSaveRequestSchema,
+  type DesktopServiceSettings,
+  type ServiceCheckResult,
+  type ServiceCheckTarget,
+  type ServiceSettingsSaveRequest,
+} from '../../../shared/desktop-settings.js';
+import {
   guideSourcesTopic,
   parseGuideSourcesMessage,
   type GuideSourcesMessage,
@@ -157,11 +166,7 @@ const usePreferences = () => {
   return { preferences, savePreferences, updatePreference };
 };
 
-type ServiceSettings = {
-  llmBaseUrl: string;
-  llmModel: string;
-  ttsSpeaker: string;
-};
+type ServiceSettings = DesktopServiceSettings;
 
 type ServiceCredentials = {
   deepseekApiKey: string;
@@ -176,13 +181,9 @@ type ServiceCredentialStatus = {
   configured: Record<keyof ServiceCredentials, boolean>;
   error?: string;
 };
+type ServiceTestState = { checking: boolean; result?: ServiceCheckResult };
 
-const serviceSettingsStorageKey = 'cloudpath-guide-service-settings';
-const defaultServiceSettings: ServiceSettings = {
-  llmBaseUrl: 'https://api.deepseek.com',
-  llmModel: 'deepseek-v4-flash',
-  ttsSpeaker: 'zh_female_vv_uranus_bigtts',
-};
+const defaultServiceSettings: ServiceSettings = defaultDesktopServiceSettings;
 
 const defaultServiceCredentials: ServiceCredentials = {
   deepseekApiKey: '',
@@ -202,20 +203,6 @@ const defaultServiceCredentialStatus: ServiceCredentialStatus = {
     ttsAccessToken: false,
     searchApiKey: false,
   },
-};
-
-const readServiceSettings = (): ServiceSettings => {
-  try {
-    const saved = localStorage.getItem(serviceSettingsStorageKey);
-    if (!saved) return defaultServiceSettings;
-    const parsed = JSON.parse(saved) as Partial<ServiceSettings>;
-    return {
-      ...defaultServiceSettings,
-      ...parsed,
-    };
-  } catch {
-    return defaultServiceSettings;
-  }
 };
 
 type PreferenceRowProps = {
@@ -259,11 +246,17 @@ type SettingsDialogProps = {
 const SettingsDialog = ({ onClose, preferences, savePreferences }: SettingsDialogProps) => {
   const [activeTab, setActiveTab] = useState<SettingsTab>('general');
   const [draft, setDraft] = useState<Preferences>(preferences);
-  const [services, setServices] = useState<ServiceSettings>(readServiceSettings);
+  const [services, setServices] = useState<ServiceSettings>(defaultServiceSettings);
   const [credentials, setCredentials] = useState<ServiceCredentials>(defaultServiceCredentials);
+  const [credentialUpdates, setCredentialUpdates] = useState<
+    ServiceSettingsSaveRequest['credentials']
+  >({});
   const [credentialStatus, setCredentialStatus] = useState<ServiceCredentialStatus>(
     defaultServiceCredentialStatus,
   );
+  const [serviceTests, setServiceTests] = useState<
+    Partial<Record<ServiceCheckTarget, ServiceTestState>>
+  >({});
   const [voiceCredentialsLinked, setVoiceCredentialsLinked] = useState(true);
   const [notice, setNotice] = useState('');
   const settingsContentRef = useRef<HTMLElement | null>(null);
@@ -294,15 +287,29 @@ const SettingsDialog = ({ onClose, preferences, savePreferences }: SettingsDialo
     void Promise.all([
       window.desktop?.getServiceCredentialStatus(),
       window.desktop?.getVisibleLocalServiceCredentials(),
-    ]).then(([status, localCredentials]) => {
+      window.desktop?.getServiceSettings(),
+    ]).then(([status, localCredentials, serviceSettings]) => {
       if (!active) return;
       if (status) setCredentialStatus(status as ServiceCredentialStatus);
       if (localCredentials) setCredentials(localCredentials);
+      if (serviceSettings) setServices(serviceSettings);
     });
     return () => {
       active = false;
     };
   }, []);
+  useEffect(
+    () =>
+      window.desktop?.onServiceTransitionResult((result) => {
+        setNotice(result.message);
+        if (!result.ok) return;
+        setCredentialUpdates({});
+        void window.desktop?.getServiceCredentialStatus().then((status) => {
+          if (status) setCredentialStatus(status as ServiceCredentialStatus);
+        });
+      }),
+    [],
+  );
   const saveGeneral = async () => {
     savePreferences(draft);
     const result = await window.desktop?.saveLocale(draft.locale);
@@ -314,18 +321,23 @@ const SettingsDialog = ({ onClose, preferences, savePreferences }: SettingsDialo
     setNotice('saved');
   };
   const saveServices = async () => {
-    localStorage.setItem(serviceSettingsStorageKey, JSON.stringify(services));
-    const enteredCredentials = Object.fromEntries(
-      Object.entries(credentials).filter(([, value]) => value.trim() !== ''),
-    ) as Record<string, string>;
     if (window.desktop) {
-      const status = await window.desktop.saveServiceCredentials(enteredCredentials);
-      setCredentialStatus(status as ServiceCredentialStatus);
+      const parsed = serviceSettingsSaveRequestSchema.safeParse({
+        services,
+        credentials: credentialUpdates,
+      });
+      if (!parsed.success) {
+        setNotice(
+          english ? 'Check the service endpoint and numeric values.' : '请检查服务地址和数值。',
+        );
+        return;
+      }
+      const result = await window.desktop.saveServiceSettings(parsed.data);
       setNotice(
-        status.error
-          ? status.error
+        !result.ok
+          ? result.readiness.message
           : english
-            ? 'Service settings saved. Credentials are encrypted by Windows and are not shown again.'
+            ? 'Candidate service is ready. Reconnecting the guide…'
             : '服务配置已保存。凭据由 Windows 加密保存，重新打开设置后不会显示原文。',
       );
       return;
@@ -336,17 +348,60 @@ const SettingsDialog = ({ onClose, preferences, savePreferences }: SettingsDialo
         : '非敏感服务参数已保存。凭据需要在桌面应用中加密保存。',
     );
   };
+  const testService = async (target: ServiceCheckTarget) => {
+    const parsed = serviceCheckRequestSchema.safeParse({
+      target,
+      services,
+      credentials: credentialUpdates,
+    });
+    if (!parsed.success) {
+      setServiceTests((current) => ({
+        ...current,
+        [target]: {
+          checking: false,
+          result: {
+            target,
+            status: 'unavailable',
+            message: english
+              ? 'Check this service address and numeric values.'
+              : '请检查服务地址和数值。',
+          },
+        },
+      }));
+      return;
+    }
+    setServiceTests((current) => ({ ...current, [target]: { checking: true } }));
+    const result = await window.desktop?.testService(parsed.data);
+    setServiceTests((current) => ({
+      ...current,
+      [target]: {
+        checking: false,
+        result: result ?? {
+          target,
+          status: 'unavailable',
+          message: english ? 'The desktop service check is unavailable.' : '桌面端服务检测不可用。',
+        },
+      },
+    }));
+  };
   const updateCredential = <Key extends keyof ServiceCredentials>(
     key: Key,
     value: ServiceCredentials[Key],
   ) => {
     setCredentials((current) => {
       if (voiceCredentialsLinked && key === 'sttAppId') {
+        setCredentialUpdates((updates) => ({ ...updates, sttAppId: value, ttsAppId: value }));
         return { ...current, sttAppId: value, ttsAppId: value };
       }
       if (voiceCredentialsLinked && key === 'sttAccessToken') {
+        setCredentialUpdates((updates) => ({
+          ...updates,
+          sttAccessToken: value,
+          ttsAccessToken: value,
+        }));
         return { ...current, sttAccessToken: value, ttsAccessToken: value };
       }
+      setCredentialUpdates((updates) => ({ ...updates, [key]: value }));
       return { ...current, [key]: value };
     });
   };
@@ -560,6 +615,13 @@ const SettingsDialog = ({ onClose, preferences, savePreferences }: SettingsDialo
                 </div>
               </div>
               <ServiceGroup
+                action={
+                  <ServiceTestControl
+                    english={english}
+                    onTest={() => void testService('llm')}
+                    state={serviceTests.llm}
+                  />
+                }
                 description={
                   english ? 'Required for the guide to answer you.' : '导游回答问题所需的核心服务。'
                 }
@@ -576,16 +638,22 @@ const SettingsDialog = ({ onClose, preferences, savePreferences }: SettingsDialo
                   <summary>{english ? 'Advanced settings' : '高级设置'}</summary>
                   <ServiceField
                     label={english ? 'Base URL' : 'Base URL'}
-                    value={services.llmBaseUrl}
+                    value={services.llm.baseUrl}
                     onChange={(value) =>
-                      setServices((current) => ({ ...current, llmBaseUrl: value }))
+                      setServices((current) => ({
+                        ...current,
+                        llm: { ...current.llm, baseUrl: value },
+                      }))
                     }
                   />
                   <ServiceField
                     label={english ? 'Model' : '模型'}
-                    value={services.llmModel}
+                    value={services.llm.model}
                     onChange={(value) =>
-                      setServices((current) => ({ ...current, llmModel: value }))
+                      setServices((current) => ({
+                        ...current,
+                        llm: { ...current.llm, model: value },
+                      }))
                     }
                   />
                 </details>
@@ -598,7 +666,14 @@ const SettingsDialog = ({ onClose, preferences, savePreferences }: SettingsDialo
                 }
                 title={english ? 'Volcengine voice' : '豆包语音'}
               >
-                <strong className="service-subheading">STT</strong>
+                <div className="service-subsection-heading">
+                  <strong className="service-subheading">STT</strong>
+                  <ServiceTestControl
+                    english={english}
+                    onTest={() => void testService('stt')}
+                    state={serviceTests.stt}
+                  />
+                </div>
                 <ServiceField
                   label={english ? 'Volcengine App ID' : '豆包 App ID'}
                   configured={credentialStatus.configured.sttAppId}
@@ -613,6 +688,39 @@ const SettingsDialog = ({ onClose, preferences, savePreferences }: SettingsDialo
                   value={credentials.sttAccessToken}
                   onChange={(value) => updateCredential('sttAccessToken', value)}
                 />
+                <details className="service-advanced no-drag">
+                  <summary>{english ? 'STT advanced settings' : 'STT 高级设置'}</summary>
+                  <ServiceField
+                    label="WebSocket endpoint"
+                    value={services.stt.endpoint}
+                    onChange={(value) =>
+                      setServices((current) => ({
+                        ...current,
+                        stt: { ...current.stt, endpoint: value },
+                      }))
+                    }
+                  />
+                  <ServiceField
+                    label={english ? 'Resource ID' : '资源 ID'}
+                    value={services.stt.resourceId}
+                    onChange={(value) =>
+                      setServices((current) => ({
+                        ...current,
+                        stt: { ...current.stt, resourceId: value },
+                      }))
+                    }
+                  />
+                  <ServiceField
+                    label={english ? 'Model' : '模型'}
+                    value={services.stt.model}
+                    onChange={(value) =>
+                      setServices((current) => ({
+                        ...current,
+                        stt: { ...current.stt, model: value },
+                      }))
+                    }
+                  />
+                </details>
                 <button
                   type="button"
                   className="credentials-link-toggle no-drag"
@@ -640,6 +748,14 @@ const SettingsDialog = ({ onClose, preferences, savePreferences }: SettingsDialo
                     </span>
                   </span>
                 </button>
+                <div className="service-subsection-heading">
+                  <strong className="service-subheading">TTS</strong>
+                  <ServiceTestControl
+                    english={english}
+                    onTest={() => void testService('tts')}
+                    state={serviceTests.tts}
+                  />
+                </div>
                 {voiceCredentialsLinked ? (
                   <div className="linked-credentials-note credential-state" key="linked">
                     {english
@@ -648,7 +764,6 @@ const SettingsDialog = ({ onClose, preferences, savePreferences }: SettingsDialo
                   </div>
                 ) : (
                   <div className="service-nested-fields credential-state" key="separate">
-                    <strong className="service-subheading">TTS</strong>
                     <ServiceField
                       label={english ? 'Volcengine App ID' : '豆包 App ID'}
                       configured={credentialStatus.configured.ttsAppId}
@@ -667,13 +782,57 @@ const SettingsDialog = ({ onClose, preferences, savePreferences }: SettingsDialo
                 )}
                 <ServiceField
                   label={english ? 'TTS speaker' : '豆包 TTS 音色'}
-                  value={services.ttsSpeaker}
+                  value={services.tts.speaker}
                   onChange={(value) =>
-                    setServices((current) => ({ ...current, ttsSpeaker: value }))
+                    setServices((current) => ({
+                      ...current,
+                      tts: { ...current.tts, speaker: value },
+                    }))
                   }
                 />
+                <details className="service-advanced no-drag">
+                  <summary>{english ? 'TTS advanced settings' : 'TTS 高级设置'}</summary>
+                  <ServiceField
+                    label="WebSocket endpoint"
+                    value={services.tts.endpoint}
+                    onChange={(value) =>
+                      setServices((current) => ({
+                        ...current,
+                        tts: { ...current.tts, endpoint: value },
+                      }))
+                    }
+                  />
+                  <ServiceField
+                    label={english ? 'Resource ID' : '资源 ID'}
+                    value={services.tts.resourceId}
+                    onChange={(value) =>
+                      setServices((current) => ({
+                        ...current,
+                        tts: { ...current.tts, resourceId: value },
+                      }))
+                    }
+                  />
+                  <ServiceField
+                    label={english ? 'Sample rate' : '采样率'}
+                    type="number"
+                    value={String(services.tts.sampleRate)}
+                    onChange={(value) =>
+                      setServices((current) => ({
+                        ...current,
+                        tts: { ...current.tts, sampleRate: Number(value) },
+                      }))
+                    }
+                  />
+                </details>
               </ServiceGroup>
               <ServiceGroup
+                action={
+                  <ServiceTestControl
+                    english={english}
+                    onTest={() => void testService('search')}
+                    state={serviceTests.search}
+                  />
+                }
                 description={
                   english
                     ? 'Optional. Enables up-to-date web answers and source links.'
@@ -688,6 +847,30 @@ const SettingsDialog = ({ onClose, preferences, savePreferences }: SettingsDialo
                   value={credentials.searchApiKey}
                   onChange={(value) => updateCredential('searchApiKey', value)}
                 />
+                <details className="service-advanced no-drag">
+                  <summary>{english ? 'Advanced settings' : '高级设置'}</summary>
+                  <ServiceField
+                    label="HTTPS endpoint"
+                    value={services.search.endpoint}
+                    onChange={(value) =>
+                      setServices((current) => ({
+                        ...current,
+                        search: { ...current.search, endpoint: value },
+                      }))
+                    }
+                  />
+                  <ServiceField
+                    label={english ? 'Timeout (ms)' : '超时（毫秒）'}
+                    type="number"
+                    value={String(services.search.timeoutMs)}
+                    onChange={(value) =>
+                      setServices((current) => ({
+                        ...current,
+                        search: { ...current.search, timeoutMs: Number(value) },
+                      }))
+                    }
+                  />
+                </details>
               </ServiceGroup>
             </>
           )}
@@ -717,17 +900,22 @@ const SettingsDialog = ({ onClose, preferences, savePreferences }: SettingsDialo
 };
 
 const ServiceGroup = ({
+  action,
   children,
   description,
   title,
 }: {
+  action?: ReactNode;
   children: ReactNode;
   description: string;
   title: string;
 }) => (
   <section className="service-group">
     <header className="service-group-header">
-      <strong>{title}</strong>
+      <span className="service-group-title-row">
+        <strong>{title}</strong>
+        {action}
+      </span>
       <small>{description}</small>
     </header>
     {children}
@@ -739,6 +927,63 @@ const ServiceStatus = ({ configured, label }: { configured: boolean; label: stri
     {label}
   </span>
 );
+const ServiceTestControl = ({
+  english,
+  onTest,
+  state,
+}: {
+  english: boolean;
+  onTest(): void;
+  state: ServiceTestState | undefined;
+}) => {
+  const result = state?.result;
+  const available = result?.status === 'available';
+  const statusLabel = state?.checking
+    ? english
+      ? 'Testing'
+      : '检测中'
+    : available
+      ? english
+        ? 'Available'
+        : '可用'
+      : english
+        ? 'Test'
+        : '检测';
+  return (
+    <span className="service-test-control">
+      <button
+        type="button"
+        className={
+          available ? 'service-test-button no-drag is-available' : 'service-test-button no-drag'
+        }
+        disabled={state?.checking}
+        onClick={onTest}
+      >
+        {state?.checking ? (
+          <CircleNotchIcon className="service-test-spinner" size={13} aria-hidden="true" />
+        ) : available ? (
+          <CheckIcon size={13} weight="bold" aria-hidden="true" />
+        ) : (
+          <MagnifyingGlassIcon size={13} weight="bold" aria-hidden="true" />
+        )}
+        <span>{statusLabel}</span>
+      </button>
+      {result ? (
+        <small
+          className={
+            result.status === 'available'
+              ? 'service-test-result is-available'
+              : 'service-test-result is-unavailable'
+          }
+          role="status"
+        >
+          {result.message}
+          {result.latencyMs !== undefined ? ` · ${result.latencyMs} ms` : ''}
+        </small>
+      ) : null}
+    </span>
+  );
+};
 const ServiceField = ({
   configured = false,
   disabled = false,
@@ -839,7 +1084,7 @@ type AssistantViewProps = {
   onVoiceChannelChange(connected: boolean): void;
   preferences: Preferences;
   readiness: DesktopReadiness | null;
-  retry(): Promise<void>;
+  retry(): Promise<boolean>;
   session: UseSessionReturn;
   savePreferences(next: Preferences): void;
   starting: boolean;
@@ -894,10 +1139,12 @@ const Assistant = () => {
         signal: controller.signal,
         tracks: { microphone: { enabled: false } },
       });
+      return true;
     } catch (error) {
       if (!controller.signal.aborted) {
         setStartupError(error instanceof Error ? error.message : '语音服务连接失败');
       }
+      return false;
     } finally {
       if (!controller.signal.aborted) setStarting(false);
     }
@@ -910,6 +1157,22 @@ const Assistant = () => {
       void sessionRef.current.end();
     };
   }, [startSession]);
+
+  useEffect(
+    () =>
+      window.desktop?.onServiceReconnectNeeded((transitionId) => {
+        void (async () => {
+          const connected = await startSession();
+          if (connected) {
+            const result = await window.desktop?.completeServiceReconnect(transitionId);
+            if (result?.ok) return;
+          }
+          await window.desktop?.rollbackServiceReconnect(transitionId);
+          await startSession();
+        })();
+      }),
+    [startSession],
+  );
 
   return (
     <SessionProvider session={session}>

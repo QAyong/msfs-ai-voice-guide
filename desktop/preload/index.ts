@@ -1,6 +1,16 @@
 import { contextBridge, ipcRenderer } from 'electron';
 import type { GuideSourcesMessage } from '../../shared/guide-events.js';
 import type { SourceWindowState } from '../../shared/source-preview.js';
+import {
+  serviceCheckRequestSchema,
+  serviceSettingsSaveRequestSchema,
+} from '../../shared/desktop-settings.js';
+import type {
+  DesktopServiceSettings,
+  ServiceCheckRequest,
+  ServiceCheckResult,
+  ServiceSettingsSaveRequest,
+} from '../../shared/desktop-settings.js';
 
 contextBridge.exposeInMainWorld('desktop', {
   setCollapsed: (collapsed: boolean) => ipcRenderer.invoke('assistant:set-collapsed', collapsed),
@@ -16,8 +26,47 @@ contextBridge.exposeInMainWorld('desktop', {
   getServiceCredentialStatus: () => ipcRenderer.invoke('settings:get-credential-status'),
   getVisibleLocalServiceCredentials: () =>
     ipcRenderer.invoke('settings:get-visible-local-credentials'),
-  saveServiceCredentials: (credentials: Record<string, string>) =>
-    ipcRenderer.invoke('settings:save-credentials', credentials),
+  getServiceSettings: (): Promise<DesktopServiceSettings> =>
+    ipcRenderer.invoke('settings:get-service-settings'),
+  saveServiceSettings: (request: ServiceSettingsSaveRequest) => {
+    const parsed = serviceSettingsSaveRequestSchema.safeParse(request);
+    if (!parsed.success) {
+      return Promise.resolve({
+        ok: false as const,
+        readiness: { status: 'error' as const, message: '服务配置格式无效。', issues: [] },
+      });
+    }
+    return ipcRenderer.invoke('settings:save-service-settings', parsed.data);
+  },
+  testService: (request: ServiceCheckRequest): Promise<ServiceCheckResult> => {
+    const parsed = serviceCheckRequestSchema.safeParse(request);
+    if (!parsed.success) {
+      return Promise.resolve({
+        target: request.target,
+        status: 'unavailable',
+        message: '服务检测参数无效。',
+      });
+    }
+    return ipcRenderer.invoke('settings:test-service', parsed.data);
+  },
+  onServiceReconnectNeeded: (callback: (transitionId: string) => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, transitionId: string) =>
+      callback(transitionId);
+    ipcRenderer.on('settings:service-reconnect-needed', listener);
+    return () => ipcRenderer.removeListener('settings:service-reconnect-needed', listener);
+  },
+  completeServiceReconnect: (transitionId: string) =>
+    ipcRenderer.invoke('settings:complete-service-reconnect', transitionId),
+  rollbackServiceReconnect: (transitionId: string) =>
+    ipcRenderer.invoke('settings:rollback-service-reconnect', transitionId),
+  onServiceTransitionResult: (callback: (result: { ok: boolean; message: string }) => void) => {
+    const listener = (
+      _event: Electron.IpcRendererEvent,
+      result: { ok: boolean; message: string },
+    ) => callback(result);
+    ipcRenderer.on('settings:service-transition-result', listener);
+    return () => ipcRenderer.removeListener('settings:service-transition-result', listener);
+  },
   openQuitDialog: () => ipcRenderer.invoke('app:open-quit-dialog'),
   closeUtilityWindow: () => ipcRenderer.invoke('utility:close'),
   quitApp: () => ipcRenderer.invoke('app:quit-confirmed'),
