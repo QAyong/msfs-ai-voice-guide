@@ -18,8 +18,9 @@ contextBridge.exposeInMainWorld('desktop', {
   setBallMenuOpen: (open: boolean) => ipcRenderer.invoke('assistant:set-menu-open', open),
   openSettings: () => ipcRenderer.invoke('settings:open'),
   saveLocale: (locale: 'en-US' | 'zh-CN') => ipcRenderer.invoke('settings:save-locale', locale),
-  onLocaleChanged: (callback: () => void) => {
-    const listener = () => callback();
+  onLocaleChanged: (callback: (locale: 'en-US' | 'zh-CN') => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, locale: 'en-US' | 'zh-CN') =>
+      callback(locale);
     ipcRenderer.on('settings:locale-saved', listener);
     return () => ipcRenderer.removeListener('settings:locale-saved', listener);
   },

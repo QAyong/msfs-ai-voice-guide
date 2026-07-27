@@ -23,7 +23,7 @@ declare global {
         ok: boolean;
         readiness: DesktopReadiness;
       }>;
-      onLocaleChanged(callback: () => void): () => void;
+      onLocaleChanged(callback: (locale: 'en-US' | 'zh-CN') => void): () => void;
       getServiceCredentialStatus(): Promise<{
         encryptionAvailable: boolean;
         configured: Record<string, boolean>;

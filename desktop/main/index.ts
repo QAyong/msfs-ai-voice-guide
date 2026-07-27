@@ -1220,6 +1220,9 @@ ipcMain.handle('settings:save-locale', async (event, value: unknown) => {
       if (isLiveWindow(assistantWindow)) {
         assistantWindow.webContents.send('settings:locale-saved', guideLocale);
       }
+      if (isLiveWindow(sourceWindow)) {
+        sourceWindow.webContents.send('settings:locale-saved', guideLocale);
+      }
       return { ok: true, readiness: result.readiness };
     } catch {
       // Fall through to restore the last working locale and worker.
