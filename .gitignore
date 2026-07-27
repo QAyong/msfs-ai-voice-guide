@@ -8,6 +8,7 @@ resources/msfs/
 out/msfs/
 resources/livekit/
 out/livekit/
+native/global-ptt/build/
 
 # Local secrets and overrides
 .env
