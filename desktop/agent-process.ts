@@ -12,7 +12,13 @@ if (!process.env.MSFS_CLI_PATH && resourcesPath) {
 }
 
 const healthHost = '127.0.0.1';
-const healthPort = 8098;
+const configuredHealthPort = Number(process.env.AGENT_HEALTH_PORT ?? '8098');
+const healthPort =
+  Number.isInteger(configuredHealthPort) &&
+  configuredHealthPort >= 1_024 &&
+  configuredHealthPort <= 65_535
+    ? configuredHealthPort
+    : 8098;
 const config = loadConfig();
 const parentPort = process.parentPort;
 const agentPath = fileURLToPath(new URL('./guide-agent.js', import.meta.url));

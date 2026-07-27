@@ -1103,7 +1103,19 @@ button {
   flex-direction: column;
   gap: 4px;
 }
+.service-group-title-row,
+.service-subsection-heading {
+  display: flex;
+  min-width: 0;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
 .service-group-header > strong {
+  color: #2d3746;
+  font-size: 13px;
+}
+.service-group-title-row > strong {
   color: #2d3746;
   font-size: 13px;
 }
@@ -1111,6 +1123,86 @@ button {
   color: #748094;
   font-size: 11px;
   line-height: 1.4;
+}
+.service-subsection-heading {
+  align-items: center;
+  border-top: 1px solid rgba(33, 58, 96, 0.08);
+  margin-top: 2px;
+  padding-top: 10px;
+}
+.service-subsection-heading:first-child {
+  border-top: 0;
+  margin-top: 0;
+  padding-top: 0;
+}
+.service-test-control {
+  display: flex;
+  min-width: 0;
+  align-items: flex-end;
+  flex-direction: column;
+  gap: 4px;
+}
+.service-test-button {
+  display: inline-flex;
+  min-height: 28px;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  border: 1px solid rgba(37, 99, 235, 0.24);
+  border-radius: 999px;
+  background: #f4f8ff;
+  color: #315d9f;
+  cursor: pointer;
+  font: inherit;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  padding: 5px 9px;
+  transition:
+    background 140ms ease,
+    border-color 140ms ease,
+    color 140ms ease,
+    transform 140ms ease;
+}
+.service-test-button:hover:not(:disabled) {
+  border-color: rgba(37, 99, 235, 0.48);
+  background: #eaf2ff;
+  color: #1d4f99;
+  transform: translateY(-1px);
+}
+.service-test-button:focus-visible {
+  outline: 2px solid rgba(37, 99, 235, 0.38);
+  outline-offset: 2px;
+}
+.service-test-button:disabled {
+  cursor: wait;
+  opacity: 0.74;
+}
+.service-test-button.is-available {
+  border-color: rgba(42, 149, 96, 0.28);
+  background: #edf9f2;
+  color: #25704b;
+}
+.service-test-result {
+  max-width: 220px;
+  color: #6f7c90;
+  font-size: 10px;
+  line-height: 1.35;
+  text-align: right;
+}
+.service-test-result.is-available {
+  color: #25704b;
+}
+.service-test-result.is-unavailable {
+  color: #b65448;
+}
+.service-test-spinner {
+  animation: service-test-spin 700ms linear infinite;
+}
+@keyframes service-test-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 .service-progress {
   display: flex;

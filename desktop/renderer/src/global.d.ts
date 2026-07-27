@@ -5,6 +5,12 @@ export {};
 import type { DesktopReadiness, DesktopSessionResult } from '../../../shared/desktop-contracts.js';
 import type { GuideSourcesMessage } from '../../../shared/guide-events.js';
 import type { SourceWindowState } from '../../../shared/source-preview.js';
+import type {
+  DesktopServiceSettings,
+  ServiceCheckRequest,
+  ServiceCheckResult,
+  ServiceSettingsSaveRequest,
+} from '../../../shared/desktop-settings.js';
 
 declare global {
   interface Window {
@@ -31,11 +37,17 @@ declare global {
         ttsAccessToken: string;
         searchApiKey: string;
       }>;
-      saveServiceCredentials(credentials: Record<string, string>): Promise<{
-        encryptionAvailable: boolean;
-        configured: Record<string, boolean>;
-        error?: string;
-      }>;
+      getServiceSettings(): Promise<DesktopServiceSettings>;
+      saveServiceSettings(
+        request: ServiceSettingsSaveRequest,
+      ): Promise<{ ok: true; transitionId: string } | { ok: false; readiness: DesktopReadiness }>;
+      testService(request: ServiceCheckRequest): Promise<ServiceCheckResult>;
+      onServiceReconnectNeeded(callback: (transitionId: string) => void): () => void;
+      completeServiceReconnect(transitionId: string): Promise<{ ok: boolean; message: string }>;
+      rollbackServiceReconnect(transitionId: string): Promise<void>;
+      onServiceTransitionResult(
+        callback: (result: { ok: boolean; message: string }) => void,
+      ): () => void;
       openQuitDialog(): Promise<boolean>;
       closeUtilityWindow(): Promise<void>;
       quitApp(): Promise<void>;
