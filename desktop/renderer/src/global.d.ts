@@ -11,6 +11,11 @@ import type {
   ServiceCheckResult,
   ServiceSettingsSaveRequest,
 } from '../../../shared/desktop-settings.js';
+import type {
+  GlobalPushToTalkConfiguration,
+  GlobalPushToTalkEvent,
+  GlobalPushToTalkStatus,
+} from '../../../shared/global-push-to-talk.js';
 
 declare global {
   interface Window {
@@ -19,6 +24,11 @@ declare global {
       getAssistantState(): Promise<{ collapsed: boolean }>;
       setBallMenuOpen(open: boolean): Promise<'up' | 'down'>;
       openSettings(): Promise<boolean>;
+      getGlobalPushToTalkStatus(): Promise<GlobalPushToTalkStatus>;
+      configureGlobalPushToTalk(
+        configuration: GlobalPushToTalkConfiguration,
+      ): Promise<GlobalPushToTalkStatus>;
+      onGlobalPushToTalk(callback: (event: GlobalPushToTalkEvent) => void): () => void;
       saveLocale(locale: 'en-US' | 'zh-CN'): Promise<{
         ok: boolean;
         readiness: DesktopReadiness;

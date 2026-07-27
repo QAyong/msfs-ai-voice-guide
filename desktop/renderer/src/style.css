@@ -1052,6 +1052,165 @@ button {
   font-weight: 600;
   padding: 5px 7px;
 }
+.push-to-talk-picker {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid rgba(33, 58, 96, 0.1);
+  border-radius: 8px;
+  background: #f8fafc;
+}
+.push-to-talk-picker__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  color: #4a5769;
+  font-size: 11px;
+  font-weight: 700;
+}
+.push-to-talk-picker__header kbd {
+  min-width: 56px;
+  overflow: hidden;
+  padding: 4px 8px;
+  border: 1px solid #cbd4e1;
+  border-bottom-width: 2px;
+  border-radius: 5px;
+  background: #fff;
+  color: #2d3746;
+  font-family: 'Cascadia Mono', Consolas, monospace;
+  font-size: 10px;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.push-to-talk-device-tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+.push-to-talk-device-tabs button {
+  display: inline-flex;
+  min-height: 32px;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: 1px solid #d2dae5;
+  border-radius: 6px;
+  background: #fff;
+  color: #66758a;
+  font: inherit;
+  font-size: 10px;
+  font-weight: 700;
+}
+.push-to-talk-device-tabs button.is-active {
+  border-color: #476eae;
+  background: #edf3ff;
+  color: #365b96;
+}
+.push-to-talk-device-tabs__mouse {
+  width: 10px;
+  height: 14px;
+  border: 1.5px solid currentcolor;
+  border-radius: 6px 6px 4px 4px;
+}
+.push-to-talk-keyboard {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 5px;
+  padding: 9px;
+  border: 1px solid #e0e6ee;
+  border-radius: 7px;
+  background: #e9eef5;
+}
+.push-to-talk-keyboard__blank,
+.push-to-talk-keyboard__key,
+.push-to-talk-keyboard__custom {
+  display: grid;
+  min-width: 0;
+  min-height: 27px;
+  place-items: center;
+  border: 1px solid #c6d0dc;
+  border-bottom-width: 2px;
+  border-radius: 4px;
+  background: #fff;
+  color: #758398;
+  font-family: 'Cascadia Mono', Consolas, monospace;
+  font-size: 9px;
+  font-weight: 700;
+}
+.push-to-talk-keyboard__key,
+.push-to-talk-keyboard__custom {
+  color: #42546c;
+  cursor: pointer;
+}
+.push-to-talk-keyboard__key.is-active,
+.push-to-talk-mouse__side.is-active {
+  border-color: #d16b36;
+  background: #fff0e8;
+  color: #9d421f;
+  box-shadow: 0 0 0 2px rgba(209, 107, 54, 0.14);
+}
+.push-to-talk-keyboard__key--alt {
+  grid-column: span 2;
+}
+.push-to-talk-keyboard__blank--space {
+  grid-column: span 2;
+}
+.push-to-talk-keyboard__custom {
+  grid-column: span 2;
+  border-style: dashed;
+}
+.push-to-talk-mouse {
+  position: relative;
+  width: 96px;
+  height: 104px;
+  justify-self: center;
+  border: 1px solid #c6d0dc;
+  border-radius: 44px 44px 27px 27px;
+  background: #fff;
+}
+.push-to-talk-mouse::before {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  width: 1px;
+  height: 41px;
+  background: #d7dee8;
+  content: '';
+}
+.push-to-talk-mouse__wheel {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  width: 8px;
+  height: 20px;
+  transform: translateX(-50%);
+  border-radius: 5px;
+  background: #aab6c6;
+}
+.push-to-talk-mouse__side {
+  position: absolute;
+  display: grid;
+  width: 35px;
+  height: 23px;
+  place-items: center;
+  border: 1px solid #c6d0dc;
+  border-radius: 5px;
+  background: #fff;
+  color: #65758b;
+  font-family: 'Cascadia Mono', Consolas, monospace;
+  font-size: 10px;
+  font-weight: 800;
+}
+.push-to-talk-mouse__side--x1 {
+  top: 65px;
+  left: -22px;
+}
+.push-to-talk-mouse__side--x2 {
+  top: 39px;
+  left: -22px;
+}
 .diagnostics-row {
   display: flex;
   min-height: 60px;

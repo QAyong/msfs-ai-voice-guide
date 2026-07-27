@@ -29,6 +29,11 @@ import {
   type ServiceSettingsSaveRequest,
   type StoredServiceCredentials,
 } from '../../shared/desktop-settings.js';
+import {
+  globalPushToTalkConfigurationSchema,
+  type GlobalPushToTalkEvent,
+  type GlobalPushToTalkStatus,
+} from '../../shared/global-push-to-talk.js';
 import { EmbeddedAgentRuntime } from './agent-runtime.js';
 import {
   ensureLocalEnvironmentFile,
@@ -77,6 +82,7 @@ import {
   serviceSettingsFromConfig,
 } from './service-settings.js';
 import { ServiceAvailabilityChecker } from './service-checks.js';
+import { getGlobalPushToTalkAddonPath, GlobalPushToTalkController } from './global-push-to-talk.js';
 
 const assistantSize = { width: 320, height: 360 };
 const collapsedSize = { width: 64, height: 72 };
@@ -149,6 +155,17 @@ const getLocalLiveKitExecutablePath = () =>
     resourcesPath: getPackagedResourcesPath(),
     projectRoot: process.cwd(),
   });
+
+const globalPushToTalk = new GlobalPushToTalkController({
+  addonPath: getGlobalPushToTalkAddonPath({
+    isPackaged: app.isPackaged,
+    resourcesPath: getPackagedResourcesPath(),
+    projectRoot: process.cwd(),
+  }),
+  onEvent: (event: GlobalPushToTalkEvent) => {
+    if (isLiveWindow(assistantWindow)) assistantWindow.webContents.send('voice:global-ptt', event);
+  },
+});
 
 const emptyServiceCredentialStatus = (error?: string): ServiceCredentialStatus => ({
   encryptionAvailable: false,
@@ -1193,6 +1210,24 @@ ipcMain.handle('settings:open', async (event) => {
   return openUtilityWindow('settings');
 });
 
+ipcMain.handle('voice:get-global-ptt-status', (event): GlobalPushToTalkStatus => {
+  if (!isAssistantSender(event.sender) && !isUtilitySender(event.sender)) {
+    return { available: false, active: false, message: '无权读取全局按住说话状态。' };
+  }
+  return globalPushToTalk.getStatus();
+});
+
+ipcMain.handle('voice:configure-global-ptt', (event, value: unknown): GlobalPushToTalkStatus => {
+  if (!isAssistantSender(event.sender)) {
+    return { available: false, active: false, message: '无权配置全局按住说话。' };
+  }
+  const parsed = globalPushToTalkConfigurationSchema.safeParse(value);
+  if (!parsed.success) {
+    return { available: false, active: false, message: '全局按住说话键无效。' };
+  }
+  return globalPushToTalk.configure(parsed.data);
+});
+
 ipcMain.handle('settings:save-locale', async (event, value: unknown) => {
   if (!isUtilitySender(event.sender)) {
     return {
@@ -1467,6 +1502,7 @@ app.on('before-quit', (event) => {
     clearTimeout(persistWindowTimer);
     persistWindowTimer = null;
   }
+  globalPushToTalk.dispose();
   persistWindowState();
   const pendingRuntime = pendingServiceTransition?.runtime;
   pendingServiceTransition = null;

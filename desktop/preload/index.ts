@@ -11,6 +11,12 @@ import type {
   ServiceCheckResult,
   ServiceSettingsSaveRequest,
 } from '../../shared/desktop-settings.js';
+import { globalPushToTalkConfigurationSchema } from '../../shared/global-push-to-talk.js';
+import type {
+  GlobalPushToTalkConfiguration,
+  GlobalPushToTalkEvent,
+  GlobalPushToTalkStatus,
+} from '../../shared/global-push-to-talk.js';
 
 contextBridge.exposeInMainWorld('desktop', {
   setCollapsed: (collapsed: boolean) => ipcRenderer.invoke('assistant:set-collapsed', collapsed),
@@ -18,6 +24,31 @@ contextBridge.exposeInMainWorld('desktop', {
   setBallMenuOpen: (open: boolean) => ipcRenderer.invoke('assistant:set-menu-open', open),
   openSettings: () => ipcRenderer.invoke('settings:open'),
   saveLocale: (locale: 'en-US' | 'zh-CN') => ipcRenderer.invoke('settings:save-locale', locale),
+  getGlobalPushToTalkStatus: (): Promise<GlobalPushToTalkStatus> =>
+    ipcRenderer.invoke('voice:get-global-ptt-status'),
+  configureGlobalPushToTalk: (configuration: GlobalPushToTalkConfiguration) => {
+    const parsed = globalPushToTalkConfigurationSchema.safeParse(configuration);
+    if (!parsed.success) {
+      return Promise.resolve({
+        available: false,
+        active: false,
+        message: '全局按住说话键无效。',
+      } satisfies GlobalPushToTalkStatus);
+    }
+    return ipcRenderer.invoke(
+      'voice:configure-global-ptt',
+      parsed.data,
+    ) as Promise<GlobalPushToTalkStatus>;
+  },
+  onGlobalPushToTalk: (callback: (event: GlobalPushToTalkEvent) => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, input: GlobalPushToTalkEvent) => {
+      if (input?.type === 'press' || input?.type === 'release' || input?.type === 'cancel') {
+        callback(input);
+      }
+    };
+    ipcRenderer.on('voice:global-ptt', listener);
+    return () => ipcRenderer.removeListener('voice:global-ptt', listener);
+  },
   onLocaleChanged: (callback: (locale: 'en-US' | 'zh-CN') => void) => {
     const listener = (_event: Electron.IpcRendererEvent, locale: 'en-US' | 'zh-CN') =>
       callback(locale);

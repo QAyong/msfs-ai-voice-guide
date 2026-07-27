@@ -7,7 +7,7 @@ import {
   useRef,
   useState,
 } from 'react';
-import type { ReactNode } from 'react';
+import type { KeyboardEvent as ReactKeyboardEvent, ReactNode } from 'react';
 import { createRoot } from 'react-dom/client';
 import {
   RoomAudioRenderer,
@@ -58,6 +58,12 @@ import {
   type ServiceSettingsSaveRequest,
 } from '../../../shared/desktop-settings.js';
 import {
+  globalPushToTalkKeyLabel,
+  globalPushToTalkPresetKeys,
+  isGlobalPushToTalkKey,
+  type GlobalPushToTalkStatus,
+} from '../../../shared/global-push-to-talk.js';
+import {
   guideSourcesTopic,
   parseGuideSourcesMessage,
   type GuideSourcesMessage,
@@ -91,6 +97,156 @@ type UtilityDialog = 'settings' | 'quit';
 type SettingsTab = 'general' | 'services';
 type SupportedLocale = 'zh-CN' | 'en-US';
 
+const visibleGlobalPushToTalkPresetKeys = ['AltLeft', 'F8', 'MouseX1', 'MouseX2'] as const;
+
+const getPushToTalkDisplayKey = (key: string): string => {
+  if (key.startsWith('Key')) return key.slice(3);
+  if (key.startsWith('Digit')) return key.slice(5);
+  return globalPushToTalkKeyLabel(key);
+};
+
+type PushToTalkInputDevice = 'keyboard' | 'mouse';
+
+type PushToTalkBindingPickerProps = {
+  device: PushToTalkInputDevice;
+  english: boolean;
+  keyName: string;
+  onDeviceChange(device: PushToTalkInputDevice): void;
+  onSelect(key: string): void;
+  onSelectCustom(): void;
+};
+
+const PushToTalkBindingPicker = ({
+  device,
+  english,
+  keyName,
+  onDeviceChange,
+  onSelect,
+  onSelectCustom,
+}: PushToTalkBindingPickerProps) => {
+  const currentKey = getPushToTalkDisplayKey(keyName);
+  return (
+    <section
+      className="push-to-talk-picker"
+      aria-label={english ? 'Global push-to-talk key' : '全局按住说话键'}
+    >
+      <div className="push-to-talk-picker__header">
+        <span>{english ? 'Global push-to-talk key' : '全局按住说话键'}</span>
+        <kbd>{currentKey}</kbd>
+      </div>
+      <div
+        className="push-to-talk-device-tabs"
+        role="tablist"
+        aria-label={english ? 'Input device' : '输入设备'}
+      >
+        <button
+          type="button"
+          role="tab"
+          aria-selected={device === 'keyboard'}
+          className={device === 'keyboard' ? 'is-active' : ''}
+          onClick={() => onDeviceChange('keyboard')}
+        >
+          <KeyboardIcon size={15} weight="duotone" aria-hidden="true" />
+          {english ? 'Keyboard' : '键盘'}
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={device === 'mouse'}
+          className={device === 'mouse' ? 'is-active' : ''}
+          onClick={() => onDeviceChange('mouse')}
+        >
+          <span className="push-to-talk-device-tabs__mouse" aria-hidden="true" />
+          {english ? 'Mouse' : '鼠标'}
+        </button>
+      </div>
+      {device === 'keyboard' ? (
+        <div
+          className="push-to-talk-keyboard"
+          role="group"
+          aria-label={english ? 'Keyboard choices' : '键盘按键选择'}
+        >
+          <span className="push-to-talk-keyboard__blank">Esc</span>
+          <span className="push-to-talk-keyboard__blank">F1</span>
+          <span className="push-to-talk-keyboard__blank">F2</span>
+          <button
+            type="button"
+            className={
+              keyName === 'F8'
+                ? 'push-to-talk-keyboard__key is-active'
+                : 'push-to-talk-keyboard__key'
+            }
+            aria-pressed={keyName === 'F8'}
+            onClick={() => onSelect('F8')}
+          >
+            F8
+          </button>
+          <span className="push-to-talk-keyboard__blank">F12</span>
+          <span className="push-to-talk-keyboard__blank">Q</span>
+          <span className="push-to-talk-keyboard__blank">W</span>
+          <span className="push-to-talk-keyboard__blank">E</span>
+          <span className="push-to-talk-keyboard__blank">R</span>
+          <span className="push-to-talk-keyboard__blank">T</span>
+          <button
+            type="button"
+            className={
+              keyName === 'AltLeft'
+                ? 'push-to-talk-keyboard__key push-to-talk-keyboard__key--alt is-active'
+                : 'push-to-talk-keyboard__key push-to-talk-keyboard__key--alt'
+            }
+            aria-pressed={keyName === 'AltLeft'}
+            onClick={() => onSelect('AltLeft')}
+          >
+            Alt
+          </button>
+          <span className="push-to-talk-keyboard__blank push-to-talk-keyboard__blank--space">
+            Space
+          </span>
+          <button type="button" className="push-to-talk-keyboard__custom" onClick={onSelectCustom}>
+            {english ? 'Custom' : '自定义'}
+          </button>
+        </div>
+      ) : (
+        <div
+          className="push-to-talk-mouse"
+          role="group"
+          aria-label={english ? 'Mouse choices' : '鼠标按键选择'}
+        >
+          <span className="push-to-talk-mouse__wheel" aria-hidden="true" />
+          <button
+            type="button"
+            className={
+              keyName === 'MouseX2'
+                ? 'push-to-talk-mouse__side push-to-talk-mouse__side--x2 is-active'
+                : 'push-to-talk-mouse__side push-to-talk-mouse__side--x2'
+            }
+            aria-label={english ? 'Mouse X2, forward side button' : '鼠标前进侧键 X2'}
+            aria-pressed={keyName === 'MouseX2'}
+            title={english ? 'Forward side button (X2)' : '前进侧键（X2）'}
+            onClick={() => onSelect('MouseX2')}
+          >
+            X2
+          </button>
+          <button
+            type="button"
+            className={
+              keyName === 'MouseX1'
+                ? 'push-to-talk-mouse__side push-to-talk-mouse__side--x1 is-active'
+                : 'push-to-talk-mouse__side push-to-talk-mouse__side--x1'
+            }
+            aria-label={english ? 'Mouse X1, back side button' : '鼠标后退侧键 X1'}
+            aria-pressed={keyName === 'MouseX1'}
+            title={english ? 'Back side button (X1)' : '后退侧键（X1）'}
+            onClick={() => onSelect('MouseX1')}
+          >
+            X1
+          </button>
+        </div>
+      )}
+    </section>
+  );
+};
+
 type Preferences = {
   locale: SupportedLocale;
   alwaysOnTop: boolean;
@@ -123,10 +279,9 @@ const readPreferences = (): Preferences => {
       voiceInputMode: isVoiceInputMode(parsed.voiceInputMode)
         ? parsed.voiceInputMode
         : defaultPreferences.voiceInputMode,
-      globalPushToTalkKey:
-        typeof parsed.globalPushToTalkKey === 'string'
-          ? parsed.globalPushToTalkKey
-          : defaultPreferences.globalPushToTalkKey,
+      globalPushToTalkKey: isGlobalPushToTalkKey(parsed.globalPushToTalkKey)
+        ? parsed.globalPushToTalkKey
+        : defaultPreferences.globalPushToTalkKey,
     };
   } catch {
     return defaultPreferences;
@@ -259,6 +414,14 @@ const SettingsDialog = ({ onClose, preferences, savePreferences }: SettingsDialo
   >({});
   const [voiceCredentialsLinked, setVoiceCredentialsLinked] = useState(true);
   const [notice, setNotice] = useState('');
+  const [globalPushToTalkStatus, setGlobalPushToTalkStatus] =
+    useState<GlobalPushToTalkStatus | null>(null);
+  const [customKeyMode, setCustomKeyMode] = useState(
+    () => !visibleGlobalPushToTalkPresetKeys.includes(preferences.globalPushToTalkKey as never),
+  );
+  const [pushToTalkDevice, setPushToTalkDevice] = useState<PushToTalkInputDevice>(() =>
+    preferences.globalPushToTalkKey.startsWith('Mouse') ? 'mouse' : 'keyboard',
+  );
   const settingsContentRef = useRef<HTMLElement | null>(null);
   const english = preferences.locale === 'en-US';
   const copy = english
@@ -288,11 +451,13 @@ const SettingsDialog = ({ onClose, preferences, savePreferences }: SettingsDialo
       window.desktop?.getServiceCredentialStatus(),
       window.desktop?.getVisibleLocalServiceCredentials(),
       window.desktop?.getServiceSettings(),
-    ]).then(([status, localCredentials, serviceSettings]) => {
+      window.desktop?.getGlobalPushToTalkStatus(),
+    ]).then(([status, localCredentials, serviceSettings, pttStatus]) => {
       if (!active) return;
       if (status) setCredentialStatus(status as ServiceCredentialStatus);
       if (localCredentials) setCredentials(localCredentials);
       if (serviceSettings) setServices(serviceSettings);
+      if (pttStatus) setGlobalPushToTalkStatus(pttStatus);
     });
     return () => {
       active = false;
@@ -311,6 +476,14 @@ const SettingsDialog = ({ onClose, preferences, savePreferences }: SettingsDialo
     [],
   );
   const saveGeneral = async () => {
+    if (!isGlobalPushToTalkKey(draft.globalPushToTalkKey)) {
+      setNotice(
+        english
+          ? 'Choose one supported global push-to-talk key.'
+          : '请选择一个支持的全局按住说话键。',
+      );
+      return;
+    }
     savePreferences(draft);
     const result = await window.desktop?.saveLocale(draft.locale);
     if (result && !result.ok) {
@@ -420,6 +593,22 @@ const SettingsDialog = ({ onClose, preferences, savePreferences }: SettingsDialo
   const selectSettingsTab = (tab: SettingsTab) => {
     setActiveTab(tab);
     requestAnimationFrame(() => settingsContentRef.current?.scrollTo({ top: 0 }));
+  };
+  const captureCustomPushToTalkKey = (event: ReactKeyboardEvent<HTMLInputElement>) => {
+    event.preventDefault();
+    if (
+      !isGlobalPushToTalkKey(event.code) ||
+      globalPushToTalkPresetKeys.includes(event.code as never)
+    ) {
+      setNotice(
+        english
+          ? 'Use one non-modifier keyboard key. Right Alt, Ctrl, Shift and Windows keys are unavailable.'
+          : '请输入一个非修饰键。右 Alt、Ctrl、Shift 和 Windows 键不可用。',
+      );
+      return;
+    }
+    setNotice('');
+    updateDraft('globalPushToTalkKey', event.code);
   };
   const deepseekConfigured =
     credentialStatus.configured.deepseekApiKey || credentials.deepseekApiKey;
@@ -557,22 +746,42 @@ const SettingsDialog = ({ onClose, preferences, savePreferences }: SettingsDialo
               <div className="settings-section-heading">
                 <strong>{english ? 'Voice input' : '语音输入'}</strong>
               </div>
-              <label className="settings-select-row">
-                <span>{english ? 'Global push-to-talk key' : '全局按住说话键'}</span>
-                <select
-                  value={draft.globalPushToTalkKey}
-                  onChange={(event) => updateDraft('globalPushToTalkKey', event.target.value)}
-                >
-                  <option value="AltLeft">Left Alt</option>
-                  <option value="F8">F8</option>
-                  <option value="F9">F9</option>
-                  <option value="ControlRight">Right Ctrl</option>
-                  <option value="CapsLock">Caps Lock</option>
-                  <option value="Space">Space</option>
-                  <option value="MouseX1">Mouse X1</option>
-                  <option value="MouseX2">Mouse X2</option>
-                </select>
-              </label>
+              <PushToTalkBindingPicker
+                device={pushToTalkDevice}
+                english={english}
+                keyName={draft.globalPushToTalkKey}
+                onDeviceChange={setPushToTalkDevice}
+                onSelect={(key) => {
+                  setCustomKeyMode(false);
+                  setPushToTalkDevice(key.startsWith('Mouse') ? 'mouse' : 'keyboard');
+                  updateDraft('globalPushToTalkKey', key);
+                }}
+                onSelectCustom={() => {
+                  setPushToTalkDevice('keyboard');
+                  setCustomKeyMode(true);
+                }}
+              />
+              {customKeyMode ? (
+                <label className="settings-select-row">
+                  <span>{english ? 'Custom keyboard key' : '自定义键盘按键'}</span>
+                  <input
+                    readOnly
+                    value={
+                      globalPushToTalkPresetKeys.includes(draft.globalPushToTalkKey as never)
+                        ? ''
+                        : globalPushToTalkKeyLabel(draft.globalPushToTalkKey)
+                    }
+                    placeholder={english ? 'Press one key' : '按下一个按键'}
+                    aria-label={english ? 'Custom global push-to-talk key' : '自定义全局按住说话键'}
+                    onKeyDown={captureCustomPushToTalkKey}
+                  />
+                </label>
+              ) : null}
+              {globalPushToTalkStatus && !globalPushToTalkStatus.available ? (
+                <p className="settings-inline-notice" role="status">
+                  {globalPushToTalkStatus.message}
+                </p>
+              ) : null}
               <div className="settings-section-heading">
                 <strong>{english ? 'Diagnostics & support' : '诊断与支持'}</strong>
               </div>
@@ -1657,6 +1866,37 @@ const AssistantView = ({
       setVoiceTransitioning(false);
     }
   }, [onVoiceChannelChange, performGuideRpc, retry, setupBlocked]);
+
+  useEffect(
+    () =>
+      window.desktop?.onGlobalPushToTalk((event) => {
+        if (event.type === 'press') {
+          if (voiceChannelActive) beginPushToTalk();
+          return;
+        }
+        if (pushToTalkPressedRef.current) void finishPushToTalk(event.type === 'cancel');
+      }),
+    [beginPushToTalk, finishPushToTalk, voiceChannelActive],
+  );
+
+  useEffect(() => {
+    const enabled =
+      preferences.voiceInputMode === 'push_to_talk' &&
+      voiceChannelActive &&
+      isGlobalPushToTalkKey(preferences.globalPushToTalkKey);
+    void window.desktop?.configureGlobalPushToTalk({
+      key: isGlobalPushToTalkKey(preferences.globalPushToTalkKey)
+        ? preferences.globalPushToTalkKey
+        : defaultPreferences.globalPushToTalkKey,
+      enabled,
+    });
+    return () => {
+      void window.desktop?.configureGlobalPushToTalk({
+        key: defaultPreferences.globalPushToTalkKey,
+        enabled: false,
+      });
+    };
+  }, [preferences.globalPushToTalkKey, preferences.voiceInputMode, voiceChannelActive]);
 
   useEffect(() => {
     if (preferences.voiceInputMode !== 'push_to_talk') return;
