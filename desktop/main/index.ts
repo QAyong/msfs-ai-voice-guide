@@ -116,10 +116,12 @@ let assistantWindow: BrowserWindow | null = null;
 let sourceWindow: BrowserWindow | null = null;
 let sourceView: WebContentsView | null = null;
 let sourceViewAttached = false;
+let sourceViewLoad: ((source: GuideSource, initialUrl: string) => void) | null = null;
 let sourcePreview: GuideSourcesMessage | null = null;
 let selectedSource: GuideSource | null = null;
 let sourceWindowState: SourceWindowState | null = null;
 let sourceLoadTimer: NodeJS.Timeout | null = null;
+let sourceViewPrewarm: Promise<WebContentsView | null> | null = null;
 let sourcePageZoomPercent = SOURCE_PAGE_ZOOM_DEFAULT_PERCENT;
 let utilityWindow: BrowserWindow | null = null;
 let assistantCollapsed = false;
@@ -744,6 +746,8 @@ const clearSourceLoadTimer = () => {
 
 const destroySourceView = () => {
   clearSourceLoadTimer();
+  sourceViewLoad = null;
+  sourceViewPrewarm = null;
   if (!sourceView) return;
   const view = sourceView;
   sourceView = null;
@@ -808,6 +812,7 @@ const failSourceLoad = (
     message,
     ...(statusCode ? { statusCode } : {}),
   });
+  void ensurePrewarmedSourceView();
 };
 
 const startSourceLoadTimer = (view: WebContentsView, currentUrl: string) => {
@@ -817,7 +822,7 @@ const startSourceLoadTimer = (view: WebContentsView, currentUrl: string) => {
       view,
       currentUrl,
       'timeout',
-      '网页在 15 秒内没有完成加载，请重试或改用系统浏览器打开。',
+      '网页在 15 秒内没有显示首屏，请重试或改用系统浏览器打开。',
     );
   }, sourceLoadTimeoutMs);
 };
@@ -883,18 +888,19 @@ const handleDisplayChange = () => {
   positionSourceNextToAssistant();
 };
 
+type SourceNavigation = {
+  currentUrl: string;
+  responseStatusCode?: number;
+  source: GuideSource;
+  visible: boolean;
+};
+
 type SourceLoadOptions = {
   url?: string;
 };
 
-const showRemoteSource = async (source: GuideSource, options: SourceLoadOptions = {}) => {
-  const initialUrl = options.url ?? source.url;
-  if (!isLiveWindow(sourceWindow) || !sourcePreview || !isSafeWebUrl(initialUrl)) return false;
-  destroySourceView();
-  selectedSource = source;
-  resetSourcePageZoom();
-  let currentUrl = initialUrl;
-  let responseStatusCode: number | undefined;
+const createSourceView = () => {
+  let navigation: SourceNavigation | null = null;
   const view = new WebContentsView({
     webPreferences: {
       contextIsolation: true,
@@ -903,18 +909,33 @@ const showRemoteSource = async (source: GuideSource, options: SourceLoadOptions 
       sandbox: true,
     },
   });
+  const showFirstVisibleDocument = () => {
+    if (!navigation || navigation.visible || !sourcePreview || sourceView !== view) return;
+    if (navigation.responseStatusCode && navigation.responseStatusCode >= 400) {
+      failSourceLoad(
+        view,
+        navigation.currentUrl,
+        'http',
+        `网站返回了 HTTP ${navigation.responseStatusCode}，页面无法在应用内显示。`,
+        navigation.responseStatusCode,
+      );
+      return;
+    }
+    navigation.visible = true;
+    clearSourceLoadTimer();
+    attachSourceView(view);
+    applySourcePageZoom();
+    publishSourceWindowState({
+      mode: 'ready',
+      preview: sourcePreview,
+      source: navigation.source,
+      currentUrl: navigation.currentUrl,
+      pageZoomPercent: sourcePageZoomPercent,
+    });
+  };
+
   sourceView = view;
   sourceViewAttached = false;
-  setSourceViewBounds();
-  applySourcePageZoom();
-  publishSourceWindowState({
-    mode: 'loading',
-    preview: sourcePreview,
-    source,
-    currentUrl,
-    pageZoomPercent: sourcePageZoomPercent,
-  });
-  startSourceLoadTimer(view, currentUrl);
   view.webContents.setWindowOpenHandler((details) => {
     if (isSafeWebUrl(details.url)) void shell.openExternal(details.url);
     return { action: 'deny' };
@@ -923,95 +944,138 @@ const showRemoteSource = async (source: GuideSource, options: SourceLoadOptions 
     callback(false),
   );
   view.webContents.session.webRequest.onHeadersReceived((details, callback) => {
-    if (details.webContentsId === view.webContents.id && details.resourceType === 'mainFrame') {
-      responseStatusCode = details.statusCode;
-      currentUrl = details.url;
+    if (
+      navigation &&
+      details.webContentsId === view.webContents.id &&
+      details.resourceType === 'mainFrame'
+    ) {
+      navigation.responseStatusCode = details.statusCode;
+      navigation.currentUrl = details.url;
     }
     callback({});
   });
   view.webContents.on('will-navigate', (event, targetUrl) => {
-    if (isSafeWebUrl(targetUrl)) return;
+    if (!navigation || isSafeWebUrl(targetUrl)) return;
     event.preventDefault();
     queueMicrotask(() =>
-      failSourceLoad(view, currentUrl, 'blocked', '该页面尝试跳转到不受支持的地址。'),
+      failSourceLoad(
+        view,
+        navigation?.currentUrl ?? targetUrl,
+        'blocked',
+        '该页面尝试跳转到不受支持的地址。',
+      ),
     );
   });
   view.webContents.on('will-redirect', (event, targetUrl) => {
-    if (isSafeWebUrl(targetUrl)) return;
+    if (!navigation || isSafeWebUrl(targetUrl)) return;
     event.preventDefault();
     queueMicrotask(() =>
-      failSourceLoad(view, currentUrl, 'blocked', '该页面尝试跳转到不受支持的地址。'),
+      failSourceLoad(
+        view,
+        navigation?.currentUrl ?? targetUrl,
+        'blocked',
+        '该页面尝试跳转到不受支持的地址。',
+      ),
     );
   });
   view.webContents.on('did-start-navigation', (_event, targetUrl, isInPlace, isMainFrame) => {
-    if (!isMainFrame || isInPlace || !isSafeWebUrl(targetUrl) || sourceView !== view) return;
-    currentUrl = targetUrl;
-    responseStatusCode = undefined;
+    if (!navigation || !isMainFrame || isInPlace || !isSafeWebUrl(targetUrl) || sourceView !== view)
+      return;
+    navigation.currentUrl = targetUrl;
+    delete navigation.responseStatusCode;
+    navigation.visible = false;
+    detachSourceView(view);
+    publishSourceWindowState({
+      mode: 'loading',
+      preview: sourcePreview!,
+      source: navigation.source,
+      currentUrl: targetUrl,
+      pageZoomPercent: sourcePageZoomPercent,
+    });
+    startSourceLoadTimer(view, targetUrl);
+  });
+  view.webContents.on('dom-ready', showFirstVisibleDocument);
+  view.webContents.on('did-finish-load', showFirstVisibleDocument);
+  view.webContents.on(
+    'did-fail-load',
+    (_event, errorCode, errorDescription, validatedUrl, isMainFrame) => {
+      if (!navigation || !isMainFrame || sourceView !== view) return;
+      failSourceLoad(
+        view,
+        isSafeWebUrl(validatedUrl) ? validatedUrl : navigation.currentUrl,
+        navigation.responseStatusCode && navigation.responseStatusCode >= 400 ? 'http' : 'network',
+        navigation.responseStatusCode && navigation.responseStatusCode >= 400
+          ? `网站返回了 HTTP ${navigation.responseStatusCode}，页面无法在应用内显示。`
+          : `网络加载失败（${errorCode}：${errorDescription}）。`,
+        navigation.responseStatusCode && navigation.responseStatusCode >= 400
+          ? navigation.responseStatusCode
+          : undefined,
+      );
+    },
+  );
+  view.webContents.on('render-process-gone', () => {
+    if (!navigation) {
+      destroySourceView();
+      return;
+    }
+    failSourceLoad(view, navigation.currentUrl, 'renderer', '网页渲染进程意外退出，请重试。');
+  });
+
+  sourceViewLoad = (source, initialUrl) => {
+    navigation = { currentUrl: initialUrl, source, visible: false };
     detachSourceView(view);
     publishSourceWindowState({
       mode: 'loading',
       preview: sourcePreview!,
       source,
-      currentUrl,
+      currentUrl: initialUrl,
       pageZoomPercent: sourcePageZoomPercent,
     });
-    startSourceLoadTimer(view, currentUrl);
-  });
-  view.webContents.on('did-finish-load', async () => {
-    if (!sourcePreview || sourceView !== view) return;
-    if (responseStatusCode && responseStatusCode >= 400) {
+    startSourceLoadTimer(view, initialUrl);
+    void view.webContents.loadURL(initialUrl).catch((error: unknown) => {
+      if (sourceView !== view || !navigation || navigation.currentUrl !== initialUrl) return;
       failSourceLoad(
         view,
-        currentUrl,
-        'http',
-        `网站返回了 HTTP ${responseStatusCode}，页面无法在应用内显示。`,
-        responseStatusCode,
-      );
-      return;
-    }
-    clearSourceLoadTimer();
-    attachSourceView(view);
-    applySourcePageZoom();
-    publishSourceWindowState({
-      mode: 'ready',
-      preview: sourcePreview,
-      source,
-      currentUrl,
-      pageZoomPercent: sourcePageZoomPercent,
-    });
-  });
-  view.webContents.on(
-    'did-fail-load',
-    (_event, errorCode, errorDescription, validatedUrl, isMainFrame) => {
-      if (!isMainFrame || sourceView !== view) return;
-      failSourceLoad(
-        view,
-        isSafeWebUrl(validatedUrl) ? validatedUrl : currentUrl,
-        responseStatusCode && responseStatusCode >= 400 ? 'http' : 'network',
-        responseStatusCode && responseStatusCode >= 400
-          ? `网站返回了 HTTP ${responseStatusCode}，页面无法在应用内显示。`
-          : `网络加载失败（${errorCode}：${errorDescription}）。`,
-        responseStatusCode && responseStatusCode >= 400 ? responseStatusCode : undefined,
-      );
-    },
-  );
-  view.webContents.on('render-process-gone', () => {
-    failSourceLoad(view, currentUrl, 'renderer', '网页渲染进程意外退出，请重试。');
-  });
-  try {
-    await view.webContents.loadURL(initialUrl);
-    return sourceView === view;
-  } catch (error) {
-    if (sourceView === view) {
-      failSourceLoad(
-        view,
-        currentUrl,
+        initialUrl,
         'network',
         error instanceof Error ? `网络加载失败：${error.message}` : '网络加载失败。',
       );
-    }
-    return false;
-  }
+    });
+  };
+
+  return view;
+};
+
+const ensurePrewarmedSourceView = async () => {
+  if (sourceView && !sourceView.webContents.isDestroyed()) return sourceView;
+  if (sourceViewPrewarm) return sourceViewPrewarm;
+
+  const view = createSourceView();
+  setSourceViewBounds();
+  applySourcePageZoom();
+  // A newly created WebContentsView already owns an about:blank renderer.
+  // Do not await a second navigation to the same URL: Electron may coalesce it
+  // without completing the load promise, which would block source selection.
+  const prewarm = Promise.resolve(view);
+  sourceViewPrewarm = prewarm;
+  queueMicrotask(() => {
+    if (sourceViewPrewarm === prewarm) sourceViewPrewarm = null;
+  });
+  return prewarm;
+};
+
+const showRemoteSource = async (source: GuideSource, options: SourceLoadOptions = {}) => {
+  const initialUrl = options.url ?? source.url;
+  if (!isLiveWindow(sourceWindow) || !sourcePreview || !isSafeWebUrl(initialUrl)) return false;
+  selectedSource = source;
+  resetSourcePageZoom();
+  const view = await ensurePrewarmedSourceView();
+  if (!view || sourceView !== view || view.webContents.isDestroyed()) return false;
+
+  if (!sourceViewLoad) return false;
+  applySourcePageZoom();
+  sourceViewLoad(source, initialUrl);
+  return true;
 };
 
 const createAssistantWindow = async () => {
@@ -1135,6 +1199,7 @@ const createSourceWindow = async () => {
   window.on('close', releaseSourceWindow);
   window.on('closed', releaseSourceWindow);
   await loadRenderer(window, 'source');
+  void ensurePrewarmedSourceView();
 };
 
 ipcMain.handle('assistant:set-collapsed', (event, collapsed: boolean) => {
@@ -1515,6 +1580,7 @@ ipcMain.handle('source:open-preview', async (event, value: unknown) => {
   sourceWindow.show();
   sourceWindow.focus();
   publishSourceWindowState({ mode: 'preview', preview: parsed.data });
+  void ensurePrewarmedSourceView();
   return true;
 });
 
@@ -1535,6 +1601,7 @@ ipcMain.handle('source:back', (event) => {
   selectedSource = null;
   resetSourcePageZoom();
   publishSourceWindowState({ mode: 'preview', preview: sourcePreview });
+  void ensurePrewarmedSourceView();
   return true;
 });
 
