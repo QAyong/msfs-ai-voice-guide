@@ -14,7 +14,10 @@ export class EmbeddedAgentRuntime {
   private fingerprint = '';
   private stopping = false;
 
-  constructor(private readonly healthPort = 8098) {}
+  constructor(
+    private readonly healthPort = 8098,
+    private readonly onOutput?: (stream: 'stdout' | 'stderr', chunk: string) => void,
+  ) {}
 
   private get healthUrl() {
     return `http://127.0.0.1:${this.healthPort}/`;
@@ -59,11 +62,13 @@ export class EmbeddedAgentRuntime {
     });
     this.child = child;
     let childErrorOutput = '';
-    const captureChildOutput = (chunk: Uint8Array | string) => {
-      childErrorOutput = `${childErrorOutput}${String(chunk)}`.slice(-2_000).trim();
+    const captureChildOutput = (stream: 'stdout' | 'stderr') => (chunk: Uint8Array | string) => {
+      const text = String(chunk);
+      if (stream === 'stderr') childErrorOutput = `${childErrorOutput}${text}`.slice(-2_000).trim();
+      this.onOutput?.(stream, text);
     };
-    child.stdout?.resume();
-    child.stderr?.on('data', captureChildOutput);
+    child.stdout?.on('data', captureChildOutput('stdout'));
+    child.stderr?.on('data', captureChildOutput('stderr'));
 
     child.on('message', (message: AgentProcessMessage) => {
       if (this.child !== child) return;

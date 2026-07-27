@@ -1,6 +1,6 @@
 # Feature-012：设置、全局按住说话和诊断导出的框架合规记录
 
-**状态：** 部分实施；全局按住说话已实现，诊断导出待实施
+**状态：** 已实施；待 Windows/MSFS 人工验收
 **对应规格：** [Spec-012](../../specs/spec-012-desktop-settings-localization-global-ptt-and-diagnostics.md)  
 **对应决策：** [ADR-010](../../adr/adr-010-secure-desktop-settings-global-ptt-and-diagnostics.md)
 
@@ -32,8 +32,15 @@
 1. 在 Electron 43.1.1 的 Windows 打包态验证 N-API ABI、签名及加载失败路径。
 2. 验证 `Left Alt`、`F8`、`Mouse X1` 和 `Mouse X2` 在 MSFS 前台、助手窗口关闭、Room 断开和辅助功能键盘环境中的行为；仅在语音可用时消费匹配输入，不截获未匹配键盘或鼠标输入。
 3. 在目标 Windows 版本验证 `safeStorage` 可用性、损坏 blob 和凭据迁移；确保任何失败不产生明文设置文件。
-4. 选择 ZIP 归档实现后，记录其固定版本、许可证、流式写入、临时文件清理能力与安全更新策略到框架登记表。
+4. 验证 Windows 系统保存对话框取消、目标文件已存在、磁盘满与无写权限时，临时 ZIP 会清理且不会留下部分目标文件。
 5. 在当前安装的 LiveKit 类型定义中复验受控重连、`manual`、`commitUserTurn()`、`clearUserTurn()` 和断开清理顺序。
+
+## 已完成诊断实现
+
+1. 使用固定版本 `archiver` 7.0.1（MIT）流式创建标准 ZIP，并在框架登记表记录版本和官方文档。
+2. 主进程按日写入 main、Worker、conversation、tool-events JSON Lines，统一执行对象字段、Bearer Header 和 URL 敏感查询参数脱敏；日志保留 7 天且总量不超过 10 MiB。
+3. 通过 Electron `dialog.showSaveDialog` 选择目标；归档先写同目录临时文件，完成后以 `rename` 原子移动，失败时清理临时文件。
+4. 单元测试覆盖脱敏、保留上限和 ZIP 固定清单；Electron-Vite 主/Preload/Renderer 构建通过。
 
 ## 明确不采用
 

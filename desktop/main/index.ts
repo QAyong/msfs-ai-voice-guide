@@ -1,4 +1,13 @@
-import { app, BrowserWindow, ipcMain, safeStorage, screen, shell, WebContentsView } from 'electron';
+import {
+  app,
+  BrowserWindow,
+  dialog,
+  ipcMain,
+  safeStorage,
+  screen,
+  shell,
+  WebContentsView,
+} from 'electron';
 import { readFile, writeFile } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
@@ -14,6 +23,11 @@ import type {
   DesktopSessionResult,
   StoredWindowState,
 } from '../../shared/desktop-contracts.js';
+import {
+  diagnosticConversationRecordSchema,
+  diagnosticToolEventSchema,
+  type DiagnosticExportResult,
+} from '../../shared/desktop-diagnostics.js';
 import {
   defaultDesktopServiceSettings,
   desktopServiceSettingsSchema,
@@ -83,6 +97,7 @@ import {
 } from './service-settings.js';
 import { ServiceAvailabilityChecker } from './service-checks.js';
 import { getGlobalPushToTalkAddonPath, GlobalPushToTalkController } from './global-push-to-talk.js';
+import { DiagnosticLogger, writeDiagnosticArchive } from './diagnostics.js';
 
 const assistantSize = { width: 320, height: 360 };
 const collapsedSize = { width: 64, height: 72 };
@@ -118,7 +133,18 @@ let expandedAssistantBounds: Electron.Rectangle | null = null;
 let storedWindowState: StoredWindowState = {};
 let persistWindowTimer: NodeJS.Timeout | null = null;
 
-let agentRuntime = new EmbeddedAgentRuntime();
+let diagnosticsLogger: DiagnosticLogger | null = null;
+const getDiagnosticsLogger = () => {
+  diagnosticsLogger ??= new DiagnosticLogger({
+    directory: join(app.getPath('userData'), 'diagnostics'),
+  });
+  return diagnosticsLogger;
+};
+const createAgentRuntime = (healthPort = 8098) =>
+  new EmbeddedAgentRuntime(healthPort, (stream, message) => {
+    void getDiagnosticsLogger().append('worker', { stream, message });
+  });
+let agentRuntime = createAgentRuntime();
 const localLiveKitRuntime = new LocalLiveKitRuntime();
 const serviceAvailabilityChecker = new ServiceAvailabilityChecker();
 let guideLocale: GuideLocale = 'zh-CN';
@@ -387,6 +413,7 @@ const serviceSettingsFailure = (message: string): ServiceSettingsSaveResult => (
 });
 
 const sendServiceTransitionResult = (result: { ok: boolean; message: string }) => {
+  void getDiagnosticsLogger().append('main', { event: 'service_transition_result', ...result });
   if (isLiveWindow(utilityWindow) && !utilityWindow.webContents.isDestroyed()) {
     utilityWindow.webContents.send('settings:service-transition-result', result);
   }
@@ -395,6 +422,7 @@ const sendServiceTransitionResult = (result: { ok: boolean; message: string }) =
 const prepareServiceTransition = async (
   request: ServiceSettingsSaveRequest,
 ): Promise<ServiceSettingsSaveResult> => {
+  void getDiagnosticsLogger().append('main', { event: 'service_transition_requested' });
   if (pendingServiceTransition) return serviceSettingsFailure('已有服务配置正在重新连接。');
 
   const hasCredentialUpdate = serviceCredentialKeys.some(
@@ -437,7 +465,7 @@ const prepareServiceTransition = async (
     ...environment,
     LIVEKIT_AGENT_NAME: candidateConfig.livekit.agentName,
   };
-  const candidateRuntime = new EmbeddedAgentRuntime(8099);
+  const candidateRuntime = createAgentRuntime(8099);
   try {
     await candidateRuntime.ensureStarted(
       candidateConfig,
@@ -463,6 +491,7 @@ const prepareServiceTransition = async (
     credentials,
     persistCredentials: hasCredentialUpdate,
   };
+  void getDiagnosticsLogger().append('main', { event: 'service_transition_candidate_ready' });
   if (isLiveWindow(assistantWindow) && !assistantWindow.webContents.isDestroyed()) {
     assistantWindow.webContents.send('settings:service-reconnect-needed', transitionId);
   }
@@ -1172,6 +1201,82 @@ ipcMain.handle('diagnostics:retry', async (event) => {
   }
   const result = await startConfiguredAgent(true);
   return result.readiness;
+});
+
+const diagnosticConfigurationSummary = async () => {
+  const services = await readStoredServiceSettings();
+  const credentialStatus = await getServiceCredentialStatus();
+  return {
+    schemaVersion: 1,
+    locale: guideLocale,
+    credentialsConfigured: credentialStatus.configured,
+    encryptionAvailable: credentialStatus.encryptionAvailable,
+    services: services ?? defaultDesktopServiceSettings,
+  };
+};
+
+ipcMain.handle('diagnostics:export', async (event): Promise<DiagnosticExportResult> => {
+  if (!isUtilitySender(event.sender)) {
+    return { ok: false, message: '无权导出诊断包。' };
+  }
+  const saveDialogOptions = {
+    title: '导出诊断包',
+    defaultPath: `msfs-ai-guide-diagnostics-${new Date().toISOString().slice(0, 10)}.zip`,
+    filters: [{ name: 'ZIP archive', extensions: ['zip'] }],
+    showOverwriteConfirmation: true,
+  };
+  const result = isLiveWindow(utilityWindow)
+    ? await dialog.showSaveDialog(utilityWindow, saveDialogOptions)
+    : await dialog.showSaveDialog(saveDialogOptions);
+  if (result.canceled || !result.filePath) {
+    return { ok: false, cancelled: true, message: '已取消导出诊断包。' };
+  }
+
+  try {
+    const logger = getDiagnosticsLogger();
+    const snapshot = await logger.snapshot();
+    const readiness = agentRuntime.getReadiness();
+    const manifest = {
+      formatVersion: 1,
+      createdAt: new Date().toISOString(),
+      applicationVersion: app.getVersion(),
+      runtime: {
+        electron: process.versions.electron,
+        node: process.versions.node,
+        platform: process.platform,
+        arch: process.arch,
+      },
+      timeRange: snapshot.timeRange,
+      redactionCount: snapshot.redactionCount,
+    };
+    await writeDiagnosticArchive({
+      targetPath: result.filePath,
+      snapshot,
+      manifest,
+      readiness,
+      configurationSummary: await diagnosticConfigurationSummary(),
+    });
+    void logger.append('main', { event: 'diagnostic_exported' });
+    return { ok: true, message: '诊断包已导出。' };
+  } catch (error) {
+    void getDiagnosticsLogger().append('main', {
+      event: 'diagnostic_export_failed',
+      message: error instanceof Error ? error.message : 'unknown error',
+    });
+    return { ok: false, message: '无法写入诊断包，请确认目标位置可用且磁盘空间充足。' };
+  }
+});
+
+ipcMain.on('diagnostics:record-conversation', (event, value: unknown) => {
+  if (!isAssistantSender(event.sender)) return;
+  const parsed = diagnosticConversationRecordSchema.safeParse(value);
+  if (parsed.success) void getDiagnosticsLogger().append('conversation', parsed.data);
+});
+
+ipcMain.on('diagnostics:record-tool-event', (event, value: unknown) => {
+  if (!isAssistantSender(event.sender)) return;
+  const parsed = diagnosticToolEventSchema.safeParse(value);
+  if (parsed.success) void getDiagnosticsLogger().append('tool-events', parsed.data);
 });
 
 ipcMain.handle('configuration:open', async (event) => {

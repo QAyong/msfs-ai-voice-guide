@@ -1,6 +1,6 @@
 # 框架登记表
 
-**最后更新：** 2026-07-25
+**最后更新：** 2026-07-28
 
 | 框架或核心库                    | 实际版本 | 版本证据                                                                                                                                                                                          | 对应版本官方文档                                                                 | 项目用途                                             |
 | ------------------------------- | -------: | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- | ---------------------------------------------------- |
@@ -16,6 +16,7 @@
 | `react-markdown`                |   10.1.0 | `package.json`、`pnpm-lock.yaml`                                                                                                                                                                  | [react-markdown](https://github.com/remarkjs/react-markdown)                     | 将 Agent Markdown 安全渲染为 React 元素              |
 | `remark-gfm`                    |    4.0.1 | `package.json`、`pnpm-lock.yaml`                                                                                                                                                                  | [remark-gfm](https://github.com/remarkjs/remark-gfm)                             | 表格、任务列表、删除线等 GFM 扩展                    |
 | Zod                             |    4.4.3 | `package.json`、`pnpm-lock.yaml`                                                                                                                                                                  | [Zod documentation](https://zod.dev/)                                            | 配置、IPC 与来源消息边界校验                         |
+| `archiver`                      |    7.0.1 | `package.json`、`pnpm-lock.yaml`、`node_modules/archiver/package.json`                                                                                                                            | [Archiver API](https://www.archiverjs.com/docs/archiver/)                        | 以流方式生成诊断 ZIP，避免手写归档格式               |
 | Mem0                            |   未安装 | `package.json` 与 `pnpm-lock.yaml` 中不存在 Mem0 依赖                                                                                                                                             | [Mem0 Node SDK](https://docs.mem0.ai/open-source/node-quickstart)                | Spec-005 的长期记忆候选实现，实施前必须固定版本      |
 
 ## 规划依赖说明

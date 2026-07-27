@@ -1243,10 +1243,19 @@ button {
   border-radius: 7px;
   background: #fff;
   color: #647084;
-  cursor: not-allowed;
+  cursor: pointer;
   font-size: 10px;
   font-weight: 700;
   padding: 7px 8px;
+}
+.secondary-settings-button:hover:not(:disabled) {
+  border-color: rgba(37, 99, 235, 0.42);
+  background: #eef4ff;
+  color: #2454a4;
+}
+.secondary-settings-button:disabled {
+  cursor: wait;
+  opacity: 0.6;
 }
 .service-group {
   display: flex;

@@ -3,6 +3,11 @@
 export {};
 
 import type { DesktopReadiness, DesktopSessionResult } from '../../../shared/desktop-contracts.js';
+import type {
+  DiagnosticConversationRecord,
+  DiagnosticExportResult,
+  DiagnosticToolEvent,
+} from '../../../shared/desktop-diagnostics.js';
 import type { GuideSourcesMessage } from '../../../shared/guide-events.js';
 import type { SourceWindowState } from '../../../shared/source-preview.js';
 import type {
@@ -75,6 +80,9 @@ declare global {
       openExternal(url: string): Promise<void>;
       getReadiness(): Promise<DesktopReadiness>;
       retryReadiness(): Promise<DesktopReadiness>;
+      exportDiagnostics(): Promise<DiagnosticExportResult>;
+      recordDiagnosticConversation(record: DiagnosticConversationRecord): void;
+      recordDiagnosticToolEvent(event: DiagnosticToolEvent): void;
       openConfiguration(): Promise<boolean>;
       createLiveKitSession(): Promise<DesktopSessionResult>;
     };
