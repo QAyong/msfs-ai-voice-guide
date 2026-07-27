@@ -1,5 +1,9 @@
 import { defineAgent, llm, voice } from '@livekit/agents';
-import { guideSourcesTopic } from '../../shared/guide-events.js';
+import {
+  guideSourcesTopic,
+  guideToolEventSchema,
+  guideToolEventsTopic,
+} from '../../shared/guide-events.js';
 import {
   guideVoiceAttributes,
   guideVoiceRpc,
@@ -187,6 +191,21 @@ export default defineAgent({
       return 'ok';
     });
     session.on(voice.AgentSessionEventTypes.FunctionToolsExecuted, (event) => {
+      if (participant && event.functionCalls.length > 0) {
+        const toolEvent = guideToolEventSchema.parse({
+          type: 'guide.tools',
+          tools: event.functionCalls.map((call, index) => ({
+            name: call.name,
+            isError: Boolean(event.functionCallOutputs[index]?.isError),
+          })),
+        });
+        void participant
+          .publishData(new TextEncoder().encode(JSON.stringify(toolEvent)), {
+            reliable: true,
+            topic: guideToolEventsTopic,
+          })
+          .catch(() => undefined);
+      }
       const message = extractGuideSources(event);
       if (!message || !participant) return;
       void participant

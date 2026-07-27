@@ -2,6 +2,15 @@ import { contextBridge, ipcRenderer } from 'electron';
 import type { GuideSourcesMessage } from '../../shared/guide-events.js';
 import type { SourceWindowState } from '../../shared/source-preview.js';
 import {
+  diagnosticConversationRecordSchema,
+  diagnosticToolEventSchema,
+} from '../../shared/desktop-diagnostics.js';
+import type {
+  DiagnosticConversationRecord,
+  DiagnosticExportResult,
+  DiagnosticToolEvent,
+} from '../../shared/desktop-diagnostics.js';
+import {
   serviceCheckRequestSchema,
   serviceSettingsSaveRequestSchema,
 } from '../../shared/desktop-settings.js';
@@ -123,6 +132,16 @@ contextBridge.exposeInMainWorld('desktop', {
   openExternal: (url: string) => ipcRenderer.invoke('external:open', url),
   getReadiness: () => ipcRenderer.invoke('diagnostics:get-readiness'),
   retryReadiness: () => ipcRenderer.invoke('diagnostics:retry'),
+  exportDiagnostics: (): Promise<DiagnosticExportResult> =>
+    ipcRenderer.invoke('diagnostics:export'),
+  recordDiagnosticConversation: (record: DiagnosticConversationRecord) => {
+    const parsed = diagnosticConversationRecordSchema.safeParse(record);
+    if (parsed.success) ipcRenderer.send('diagnostics:record-conversation', parsed.data);
+  },
+  recordDiagnosticToolEvent: (event: DiagnosticToolEvent) => {
+    const parsed = diagnosticToolEventSchema.safeParse(event);
+    if (parsed.success) ipcRenderer.send('diagnostics:record-tool-event', parsed.data);
+  },
   openConfiguration: () => ipcRenderer.invoke('configuration:open'),
   createLiveKitSession: () => ipcRenderer.invoke('livekit:create-session'),
 });

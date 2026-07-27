@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { guideSourcesTopic, parseGuideSourcesMessage } from '../../shared/guide-events.js';
+import {
+  guideSourcesTopic,
+  guideToolEventsTopic,
+  parseGuideSourcesMessage,
+  parseGuideToolEvent,
+} from '../../shared/guide-events.js';
 
 describe('guide source events', () => {
   it('keeps application source cards on their own data topic', () => {
@@ -71,6 +76,26 @@ describe('guide source events', () => {
               openMode: 'external',
             },
           ],
+        }),
+      ),
+    ).toBeNull();
+  });
+
+  it('publishes tool diagnostics as a constrained summary without call arguments or output', () => {
+    expect(guideToolEventsTopic).toBe('msfs.guide.tool-events');
+    expect(
+      parseGuideToolEvent(
+        JSON.stringify({
+          type: 'guide.tools',
+          tools: [{ name: 'searchWeb', isError: false }],
+        }),
+      ),
+    ).toEqual({ type: 'guide.tools', tools: [{ name: 'searchWeb', isError: false }] });
+    expect(
+      parseGuideToolEvent(
+        JSON.stringify({
+          type: 'guide.tools',
+          tools: [{ name: 'searchWeb', isError: false, arguments: 'not allowed' }],
         }),
       ),
     ).toBeNull();

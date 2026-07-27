@@ -65,7 +65,9 @@ import {
 } from '../../../shared/global-push-to-talk.js';
 import {
   guideSourcesTopic,
+  guideToolEventsTopic,
   parseGuideSourcesMessage,
+  parseGuideToolEvent,
   type GuideSourcesMessage,
 } from '../../../shared/guide-events.js';
 import type { SourceWindowState } from '../../../shared/source-preview.js';
@@ -414,6 +416,9 @@ const SettingsDialog = ({ onClose, preferences, savePreferences }: SettingsDialo
   >({});
   const [voiceCredentialsLinked, setVoiceCredentialsLinked] = useState(true);
   const [notice, setNotice] = useState('');
+  const [diagnosticNotice, setDiagnosticNotice] = useState('');
+  const [diagnosticReadiness, setDiagnosticReadiness] = useState<DesktopReadiness | null>(null);
+  const [diagnosticExporting, setDiagnosticExporting] = useState(false);
   const [globalPushToTalkStatus, setGlobalPushToTalkStatus] =
     useState<GlobalPushToTalkStatus | null>(null);
   const [customKeyMode, setCustomKeyMode] = useState(
@@ -452,12 +457,14 @@ const SettingsDialog = ({ onClose, preferences, savePreferences }: SettingsDialo
       window.desktop?.getVisibleLocalServiceCredentials(),
       window.desktop?.getServiceSettings(),
       window.desktop?.getGlobalPushToTalkStatus(),
-    ]).then(([status, localCredentials, serviceSettings, pttStatus]) => {
+      window.desktop?.getReadiness(),
+    ]).then(([status, localCredentials, serviceSettings, pttStatus, readiness]) => {
       if (!active) return;
       if (status) setCredentialStatus(status as ServiceCredentialStatus);
       if (localCredentials) setCredentials(localCredentials);
       if (serviceSettings) setServices(serviceSettings);
       if (pttStatus) setGlobalPushToTalkStatus(pttStatus);
+      if (readiness) setDiagnosticReadiness(readiness);
     });
     return () => {
       active = false;
@@ -511,7 +518,7 @@ const SettingsDialog = ({ onClose, preferences, savePreferences }: SettingsDialo
           ? result.readiness.message
           : english
             ? 'Candidate service is ready. Reconnecting the guide…'
-            : '服务配置已保存。凭据由 Windows 加密保存，重新打开设置后不会显示原文。',
+            : '候选服务已就绪，正在重新连接导游…',
       );
       return;
     }
@@ -520,6 +527,13 @@ const SettingsDialog = ({ onClose, preferences, savePreferences }: SettingsDialo
         ? 'Non-secret service fields saved. Credentials require the desktop app to be encrypted.'
         : '非敏感服务参数已保存。凭据需要在桌面应用中加密保存。',
     );
+  };
+  const exportDiagnostics = async () => {
+    if (!window.desktop) return;
+    setDiagnosticExporting(true);
+    const result = await window.desktop.exportDiagnostics();
+    setDiagnosticExporting(false);
+    setDiagnosticNotice(result.message);
   };
   const testService = async (target: ServiceCheckTarget) => {
     const parsed = serviceCheckRequestSchema.safeParse({
@@ -789,13 +803,24 @@ const SettingsDialog = ({ onClose, preferences, savePreferences }: SettingsDialo
                 <span>
                   <strong>{english ? 'Guide service' : '导游服务'}</strong>
                   <small>
-                    {english
-                      ? 'Runtime diagnostics will be available here.'
-                      : '运行诊断将在此处提供。'}
+                    {diagnosticNotice ||
+                      diagnosticReadiness?.message ||
+                      (english ? 'Checking guide service…' : '正在检查导游服务…')}
                   </small>
                 </span>
-                <button type="button" className="secondary-settings-button" disabled>
-                  {english ? 'Export diagnostic package' : '导出诊断包'}
+                <button
+                  type="button"
+                  className="secondary-settings-button"
+                  disabled={diagnosticExporting}
+                  onClick={() => void exportDiagnostics()}
+                >
+                  {diagnosticExporting
+                    ? english
+                      ? 'Exporting…'
+                      : '正在导出…'
+                    : english
+                      ? 'Export diagnostic package'
+                      : '导出诊断包'}
                 </button>
               </div>
             </>
@@ -1448,6 +1473,7 @@ const AssistantView = ({
   const continuousTransitionRef = useRef(false);
   const latestAgentMessageIdRef = useRef<string | null>(null);
   const latestAgentMessageTextRef = useRef('');
+  const recordedDiagnosticMessagesRef = useRef(new Set<string>());
   const textInputRef = useRef<HTMLTextAreaElement | null>(null);
   const agent = useAgent();
   const { isSending: isSendingText, messages, send: sendText } = useSessionMessages();
@@ -1525,6 +1551,19 @@ const AssistantView = ({
     () => createDisplayMessages(messages, session.room.localParticipant.identity, sourcesByMessage),
     [messages, session.room.localParticipant.identity, sourcesByMessage],
   );
+
+  useEffect(() => {
+    for (const message of displayMessages) {
+      const signature = `${message.id}:${message.text}`;
+      if (recordedDiagnosticMessagesRef.current.has(signature)) continue;
+      recordedDiagnosticMessagesRef.current.add(signature);
+      window.desktop?.recordDiagnosticConversation({
+        id: message.id,
+        role: message.role,
+        text: message.text,
+      });
+    }
+  }, [displayMessages]);
 
   const scrollToLatestMessage = useCallback((behavior: ScrollBehavior = 'auto') => {
     const messageList = messagesRef.current;
@@ -1606,6 +1645,7 @@ const AssistantView = ({
     (message: { payload: Uint8Array }) => {
       const parsed = parseGuideSourcesMessage(new TextDecoder().decode(message.payload));
       if (!parsed) return;
+      window.desktop?.recordDiagnosticToolEvent({ type: 'guide.sources', event: parsed });
       setPendingSources({
         preview: parsed,
         anchorMessageId: latestAgentMessageIdRef.current,
@@ -1616,6 +1656,11 @@ const AssistantView = ({
     [agent.state],
   );
   useDataChannel(guideSourcesTopic, onSourcesMessage);
+  const onToolEvent = useCallback((message: { payload: Uint8Array }) => {
+    const parsed = parseGuideToolEvent(new TextDecoder().decode(message.payload));
+    if (parsed) window.desktop?.recordDiagnosticToolEvent({ type: 'guide.tools', event: parsed });
+  }, []);
+  useDataChannel(guideToolEventsTopic, onToolEvent);
 
   const performGuideRpc = useCallback(
     async (method: GuideVoiceRpcMethod) => {
