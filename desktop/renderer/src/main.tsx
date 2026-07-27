@@ -2565,7 +2565,7 @@ const getSourceCopy = (english: boolean): SourceCopy =>
         errorNetwork: 'The page could not be loaded because of a network error.',
         errorRenderer: 'The page renderer stopped unexpectedly. Try again.',
         errorTimeout:
-          'The page did not finish loading within 15 seconds. Try again or open it in your system browser.',
+          'The page did not show a first view within 15 seconds. Try again or open it in your system browser.',
         loadedPage: 'Original page loaded',
         loadingOriginalPage: 'Loading original page',
         loadingPage: 'Loading page',
@@ -2595,7 +2595,7 @@ const getSourceCopy = (english: boolean): SourceCopy =>
             : '页面无法在应用内显示。',
         errorNetwork: '网络加载失败，无法打开这个网页。',
         errorRenderer: '网页渲染进程意外退出，请重试。',
-        errorTimeout: '网页在 15 秒内没有完成加载，请重试或改用系统浏览器打开。',
+        errorTimeout: '网页在 15 秒内没有显示首屏，请重试或改用系统浏览器打开。',
         loadedPage: '原始网页已加载',
         loadingOriginalPage: '正在加载原始页面',
         loadingPage: '正在加载网页',

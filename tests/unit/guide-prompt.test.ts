@@ -27,4 +27,12 @@ describe('createGuideInstructions', () => {
     expect(instructions).toContain('可以依据自身已有知识给出概括性回答');
     expect(instructions).toContain('这部分未经联网核实');
   });
+
+  it('会自然处理语音转写中的误识别', () => {
+    const instructions = createGuideInstructions();
+
+    expect(instructions).toContain('用户输入可能来自语音转写');
+    expect(instructions).toContain('不要机械地逐字理解转写文本');
+    expect(instructions).toContain('不解释内部判断过程');
+  });
 });

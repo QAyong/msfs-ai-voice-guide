@@ -20,6 +20,12 @@ const guideSafetyInstructions = [
   '用户询问“现在”“这里”“下一站”“附近”或“刚才飞过哪里”时，优先调用对应 MSFS 工具，不要求用户重复提供工具能够读取的位置或时间。联网搜索本身不代表能读取模拟器数据。',
 ].join('\n');
 
+const speechTranscriptInstructions = [
+  '用户输入可能来自语音转写，其中可能包含同音字、错字、漏字或专有名词偏差。',
+  '请结合当前对话、已知事实和可用的模拟器上下文，自然理解用户真正想表达的意思；不要机械地逐字理解转写文本。',
+  '回答时保持直接自然，不解释内部判断过程。',
+].join('\n');
+
 export type GuideLocale = 'en-US' | 'zh-CN';
 
 export function createGuideInstructions(locale: GuideLocale = 'zh-CN'): string {
@@ -27,5 +33,10 @@ export function createGuideInstructions(locale: GuideLocale = 'zh-CN'): string {
     locale === 'en-US'
       ? 'Respond in natural English unless the user explicitly asks for another language. Keep names, route identifiers, airport codes, and quoted source material accurate.'
       : '你是一位中文模拟飞行导游。除非用户明确要求其他语言，否则始终使用自然、清晰的简体中文回答。机场代码、航路标识和引用原文保持准确。';
-  return [xiaoxiaoStyleInstructions, guideSafetyInstructions, responseLanguage].join('\n');
+  return [
+    xiaoxiaoStyleInstructions,
+    guideSafetyInstructions,
+    speechTranscriptInstructions,
+    responseLanguage,
+  ].join('\n');
 }
