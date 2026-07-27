@@ -2237,10 +2237,123 @@ const AssistantView = ({
   );
 };
 
+type SourceCopy = {
+  backToSources: string;
+  close: string;
+  closeWindow: string;
+  currentZoom(percent: number): string;
+  errorBlocked: string;
+  httpError(statusCode?: number): string;
+  errorNetwork: string;
+  errorRenderer: string;
+  errorTimeout: string;
+  loadedPage: string;
+  loadingOriginalPage: string;
+  loadingPage: string;
+  openExternal: string;
+  pageLoadFailed: string;
+  pageZoom: string;
+  preparingSources: string;
+  resetZoom: string;
+  retry: string;
+  sourceFallback: string;
+  sourceList: string;
+  sourcePage: string;
+  sourceCount(count: number): string;
+  sources: string;
+  zoomIn: string;
+  zoomOut: string;
+};
+
+const getSourceCopy = (english: boolean): SourceCopy =>
+  english
+    ? {
+        backToSources: 'Back to sources',
+        close: 'Close',
+        closeWindow: 'Close source window',
+        currentZoom: (percent) => `Current zoom ${percent}%. Click to reset to 100%.`,
+        errorBlocked: 'This page tried to navigate to an unsupported address.',
+        httpError: (statusCode) =>
+          statusCode
+            ? `The site returned HTTP ${statusCode}. The page cannot be displayed in the app.`
+            : 'The page cannot be displayed in the app.',
+        errorNetwork: 'The page could not be loaded because of a network error.',
+        errorRenderer: 'The page renderer stopped unexpectedly. Try again.',
+        errorTimeout:
+          'The page did not finish loading within 15 seconds. Try again or open it in your system browser.',
+        loadedPage: 'Original page loaded',
+        loadingOriginalPage: 'Loading original page',
+        loadingPage: 'Loading page',
+        openExternal: 'Open in system browser',
+        pageLoadFailed: "Couldn't open this page",
+        pageZoom: 'Page zoom',
+        preparingSources: 'Preparing sources…',
+        resetZoom: 'Reset to 100%',
+        retry: 'Try again',
+        sourceFallback: 'Source',
+        sourceList: 'Sources',
+        sourcePage: 'Source page',
+        sourceCount: (count) => `${count} source${count === 1 ? '' : 's'} available`,
+        sources: 'Sources',
+        zoomIn: 'Zoom in',
+        zoomOut: 'Zoom out',
+      }
+    : {
+        backToSources: '返回搜索来源',
+        close: '关闭',
+        closeWindow: '关闭来源窗口',
+        currentZoom: (percent) => `当前缩放 ${percent}% ，点击恢复 100%`,
+        errorBlocked: '该页面尝试跳转到不受支持的地址。',
+        httpError: (statusCode) =>
+          statusCode
+            ? `网站返回了 HTTP ${statusCode}，页面无法在应用内显示。`
+            : '页面无法在应用内显示。',
+        errorNetwork: '网络加载失败，无法打开这个网页。',
+        errorRenderer: '网页渲染进程意外退出，请重试。',
+        errorTimeout: '网页在 15 秒内没有完成加载，请重试或改用系统浏览器打开。',
+        loadedPage: '原始网页已加载',
+        loadingOriginalPage: '正在加载原始页面',
+        loadingPage: '正在加载网页',
+        openExternal: '在系统浏览器打开',
+        pageLoadFailed: '无法打开这个网页',
+        pageZoom: '网页缩放',
+        preparingSources: '正在准备来源预览…',
+        resetZoom: '恢复 100%',
+        retry: '重试',
+        sourceFallback: '来源网页',
+        sourceList: '搜索来源列表',
+        sourcePage: '原始页面',
+        sourceCount: (count) => `${count} 个可查看来源`,
+        sources: '搜索来源',
+        zoomIn: '放大网页',
+        zoomOut: '缩小网页',
+      };
+
+const getSourceErrorMessage = (
+  state: Extract<SourceWindowState, { mode: 'error' }>,
+  copy: SourceCopy,
+) => {
+  switch (state.error) {
+    case 'timeout':
+      return copy.errorTimeout;
+    case 'blocked':
+      return copy.errorBlocked;
+    case 'http':
+      return copy.httpError(state.statusCode);
+    case 'renderer':
+      return copy.errorRenderer;
+    default:
+      return copy.errorNetwork;
+  }
+};
+
 const Source = () => {
   const [state, setState] = useState<SourceWindowState | null>(null);
+  const [locale, setLocale] = useState<SupportedLocale>(() => readPreferences().locale);
   const listRef = useRef<HTMLDivElement | null>(null);
   const previewScrollTopRef = useRef(0);
+  const english = locale === 'en-US';
+  const copy = getSourceCopy(english);
 
   useEffect(() => {
     void window.desktop?.getSourceState().then((nextState) => {
@@ -2248,6 +2361,8 @@ const Source = () => {
     });
     return window.desktop?.onSourceState(setState);
   }, []);
+
+  useEffect(() => window.desktop?.onLocaleChanged(setLocale), []);
 
   useLayoutEffect(() => {
     if (state?.mode === 'preview' && listRef.current) {
@@ -2275,8 +2390,8 @@ const Source = () => {
           <button
             type="button"
             className="source-icon-button no-drag"
-            aria-label="返回搜索来源"
-            title="返回搜索来源"
+            aria-label={copy.backToSources}
+            title={copy.backToSources}
             onClick={() => void window.desktop?.backToSources()}
           >
             <ArrowLeftIcon size={17} aria-hidden="true" />
@@ -2285,25 +2400,25 @@ const Source = () => {
           <MagnifyingGlassIcon size={17} color="#476eae" aria-hidden="true" />
         )}
         <span className="source-heading">
-          <b>{state?.mode === 'preview' ? '搜索来源' : (hostname ?? '来源网页')}</b>
+          <b>{state?.mode === 'preview' ? copy.sources : (hostname ?? copy.sourceFallback)}</b>
           <small>
             {state?.mode === 'preview'
-              ? `${state.preview.sources.length} 个可查看来源`
+              ? copy.sourceCount(state.preview.sources.length)
               : state?.mode === 'loading'
-                ? '正在加载原始页面'
+                ? copy.loadingOriginalPage
                 : state?.mode === 'error'
-                  ? '页面加载失败'
-                  : '原始页面'}
+                  ? copy.pageLoadFailed
+                  : copy.sourcePage}
           </small>
         </span>
         {state && state.mode !== 'preview' ? (
           <>
-            <div className="source-zoom-controls no-drag" role="group" aria-label="网页缩放">
+            <div className="source-zoom-controls no-drag" role="group" aria-label={copy.pageZoom}>
               <button
                 type="button"
                 className="source-icon-button"
-                aria-label="缩小网页"
-                title="缩小网页"
+                aria-label={copy.zoomOut}
+                title={copy.zoomOut}
                 disabled={!canZoomOut}
                 onClick={() => adjustPageZoom('out')}
               >
@@ -2312,17 +2427,17 @@ const Source = () => {
               <button
                 type="button"
                 className="source-zoom-percent"
-                aria-label={`当前缩放 ${pageZoomPercent}% ，点击恢复 100%`}
-                title="恢复 100%"
+                aria-label={copy.currentZoom(pageZoomPercent ?? 100)}
+                title={copy.resetZoom}
                 onClick={() => adjustPageZoom('reset')}
               >
-                {pageZoomPercent}%
+                {pageZoomPercent ?? 100}%
               </button>
               <button
                 type="button"
                 className="source-icon-button"
-                aria-label="放大网页"
-                title="放大网页"
+                aria-label={copy.zoomIn}
+                title={copy.zoomIn}
                 disabled={!canZoomIn}
                 onClick={() => adjustPageZoom('in')}
               >
@@ -2332,8 +2447,8 @@ const Source = () => {
             <button
               type="button"
               className="source-icon-button no-drag"
-              aria-label="在系统浏览器打开"
-              title="在系统浏览器打开"
+              aria-label={copy.openExternal}
+              title={copy.openExternal}
               onClick={() => void window.desktop?.openCurrentSourceExternal()}
             >
               <ArrowSquareOutIcon size={16} aria-hidden="true" />
@@ -2342,8 +2457,8 @@ const Source = () => {
         ) : null}
         <button
           className="source-icon-button no-drag"
-          aria-label="关闭来源窗口"
-          title="关闭"
+          aria-label={copy.closeWindow}
+          title={copy.close}
           onClick={() => void window.desktop?.closeSource()}
         >
           <XIcon size={16} aria-hidden="true" />
@@ -2352,14 +2467,14 @@ const Source = () => {
       {!state ? (
         <div className="source-status" role="status">
           <CircleNotchIcon className="source-spinner" size={22} aria-hidden="true" />
-          <span>正在准备来源预览…</span>
+          <span>{copy.preparingSources}</span>
         </div>
       ) : state.mode === 'preview' ? (
         <div
           ref={listRef}
           className="source-results"
           onScroll={rememberListPosition}
-          aria-label="搜索来源列表"
+          aria-label={copy.sourceList}
         >
           {state.preview.query ? <p className="source-query">“{state.preview.query}”</p> : null}
           {state.preview.sources.map((source) => (
@@ -2382,7 +2497,7 @@ const Source = () => {
                     }}
                   />
                 ) : (
-                  <span>源</span>
+                  <span>{copy.sourceFallback.slice(0, 1)}</span>
                 )}
                 <b>{source.siteName}</b>
                 {source.publishTime ? <time>{source.publishTime.slice(0, 10)}</time> : null}
@@ -2408,31 +2523,31 @@ const Source = () => {
       ) : state.mode === 'error' ? (
         <div className="source-error" role="alert">
           <WarningCircleIcon size={30} weight="duotone" aria-hidden="true" />
-          <strong>无法打开这个网页</strong>
+          <strong>{copy.pageLoadFailed}</strong>
           <span>{state.source.title}</span>
-          <p>{state.message}</p>
+          <p>{getSourceErrorMessage(state, copy)}</p>
           <small>{state.currentUrl}</small>
           <div>
             <button type="button" onClick={() => void window.desktop?.retrySource()}>
-              重试
+              {copy.retry}
             </button>
             <button type="button" onClick={() => void window.desktop?.openCurrentSourceExternal()}>
-              系统浏览器打开
+              {copy.openExternal}
             </button>
             <button type="button" onClick={() => void window.desktop?.backToSources()}>
-              返回来源列表
+              {copy.backToSources}
             </button>
           </div>
         </div>
       ) : state.mode === 'loading' ? (
         <div className="source-status" role="status">
           <CircleNotchIcon className="source-spinner" size={24} aria-hidden="true" />
-          <strong>正在加载网页</strong>
+          <strong>{copy.loadingPage}</strong>
           <span>{state.source.title}</span>
           <span>{hostname}</span>
         </div>
       ) : (
-        <div className="source-remote-placeholder" aria-label="原始网页已加载" />
+        <div className="source-remote-placeholder" aria-label={copy.loadedPage} />
       )}
     </main>
   );
