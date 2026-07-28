@@ -21,6 +21,7 @@ import type {
   GlobalPushToTalkEvent,
   GlobalPushToTalkStatus,
 } from '../../../shared/global-push-to-talk.js';
+import type { AboutInfo, AboutLinkId } from '../../../shared/about-info.js';
 
 declare global {
   interface Window {
@@ -29,6 +30,8 @@ declare global {
       getAssistantState(): Promise<{ collapsed: boolean }>;
       setBallMenuOpen(open: boolean): Promise<'up' | 'down'>;
       openSettings(): Promise<boolean>;
+      getAboutInfo(): Promise<AboutInfo | null>;
+      openAboutLink(id: AboutLinkId): Promise<boolean>;
       getGlobalPushToTalkStatus(): Promise<GlobalPushToTalkStatus>;
       configureGlobalPushToTalk(
         configuration: GlobalPushToTalkConfiguration,

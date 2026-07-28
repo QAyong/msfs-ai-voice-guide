@@ -48,6 +48,13 @@ import {
   type GlobalPushToTalkEvent,
   type GlobalPushToTalkStatus,
 } from '../../shared/global-push-to-talk.js';
+import {
+  aboutLinkSchema,
+  aboutInfoSchema,
+  aboutOpenLinkRequestSchema,
+  type AboutInfo,
+  type AboutLink,
+} from '../../shared/about-info.js';
 import { EmbeddedAgentRuntime } from './agent-runtime.js';
 import {
   ensureLocalEnvironmentFile,
@@ -160,6 +167,31 @@ type PendingServiceTransition = {
   persistCredentials: boolean;
 };
 let pendingServiceTransition: PendingServiceTransition | null = null;
+
+const aboutLinks: readonly AboutLink[] = [];
+
+const getAboutInfo = (): AboutInfo =>
+  aboutInfoSchema.parse({
+    schemaVersion: 1,
+    productName: '晓晓飞行导游',
+    version: app.getVersion(),
+    supportChannels: [
+      { id: 'wechat', label: '微信', qrAsset: 'wechat-qr' },
+      { id: 'alipay', label: '支付宝', qrAsset: 'alipay-qr' },
+    ],
+    links: aboutLinks,
+  });
+
+const openAboutLink = async (value: unknown): Promise<boolean> => {
+  const request = aboutOpenLinkRequestSchema.safeParse(value);
+  if (!request.success) return false;
+  const link = aboutLinks.find((candidate) => candidate.id === request.data.id);
+  if (!link) return false;
+  const parsed = aboutLinkSchema.safeParse(link);
+  if (!parsed.success || new URL(parsed.data.url).protocol !== 'https:') return false;
+  await shell.openExternal(parsed.data.url);
+  return true;
+};
 
 const isDevelopment = Boolean(process.env.ELECTRON_RENDERER_URL);
 const localConfigurationRoot = app.isPackaged ? app.getPath('userData') : process.cwd();
@@ -1378,6 +1410,16 @@ ipcMain.handle('livekit:create-session', async (event): Promise<DesktopSessionRe
 ipcMain.handle('settings:open', async (event) => {
   if (!isAssistantSender(event.sender)) return false;
   return openUtilityWindow('settings');
+});
+
+ipcMain.handle('about:get-info', (event): AboutInfo | null => {
+  if (!isUtilitySender(event.sender)) return null;
+  return getAboutInfo();
+});
+
+ipcMain.handle('about:open-link', async (event, value: unknown): Promise<boolean> => {
+  if (!isUtilitySender(event.sender)) return false;
+  return openAboutLink(value);
 });
 
 ipcMain.handle('voice:get-global-ptt-status', (event): GlobalPushToTalkStatus => {

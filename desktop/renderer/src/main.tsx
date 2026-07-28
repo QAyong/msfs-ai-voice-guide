@@ -32,6 +32,8 @@ import { CheckIcon } from '@phosphor-icons/react/dist/csr/Check';
 import { EyeClosedIcon } from '@phosphor-icons/react/dist/csr/EyeClosed';
 import { EyeIcon } from '@phosphor-icons/react/dist/csr/Eye';
 import { GearSixIcon } from '@phosphor-icons/react/dist/csr/GearSix';
+import { HeartIcon } from '@phosphor-icons/react/dist/csr/Heart';
+import { InfoIcon } from '@phosphor-icons/react/dist/csr/Info';
 import { KeyboardIcon } from '@phosphor-icons/react/dist/csr/Keyboard';
 import { MagnifyingGlassIcon } from '@phosphor-icons/react/dist/csr/MagnifyingGlass';
 import { MicrophoneIcon } from '@phosphor-icons/react/dist/csr/Microphone';
@@ -48,6 +50,7 @@ import { WarningCircleIcon } from '@phosphor-icons/react/dist/csr/WarningCircle'
 import { WaveformIcon } from '@phosphor-icons/react/dist/csr/Waveform';
 import { XIcon } from '@phosphor-icons/react/dist/csr/X';
 import type { DesktopReadiness } from '../../../shared/desktop-contracts.js';
+import type { AboutInfo, AboutLinkId, AboutSupportChannel } from '../../../shared/about-info.js';
 import {
   defaultDesktopServiceSettings,
   serviceCheckRequestSchema,
@@ -90,13 +93,15 @@ import { resolveGuideAvatarExpression } from './avatar-state.js';
 import { GuideExpression, GuideFloatingPortrait } from './guide-avatar.js';
 import { MessageMarkdown } from './message-markdown.js';
 import { createDisplayMessages, shouldAttachSourcePreview } from './session-messages.js';
+import alipayQrImage from './assets/about/alipay-qr.jpg';
+import wechatQrImage from './assets/about/wechat-qr.png';
 import './style.css';
 
 const preferenceStorageKey = 'cloudpath-guide-preferences';
 
 type MenuDirection = 'up' | 'down';
 type UtilityDialog = 'settings' | 'quit';
-type SettingsTab = 'general' | 'services';
+type SettingsTab = 'general' | 'services' | 'about';
 type SupportedLocale = 'zh-CN' | 'en-US';
 
 const visibleGlobalPushToTalkPresetKeys = ['AltLeft', 'F8', 'MouseX1', 'MouseX2'] as const;
@@ -394,6 +399,133 @@ const PreferenceRow = ({ checked, description, icon, label, onChange }: Preferen
   </div>
 );
 
+type AboutPanelProps = {
+  english: boolean;
+  info: AboutInfo | null;
+  onOpenLink(id: AboutLinkId): void;
+};
+
+const AboutPanel = ({ english, info, onOpenLink }: AboutPanelProps) => {
+  const productName = info?.productName ?? (english ? 'Xiaoxiao Flight Guide' : '晓晓飞行导游');
+  const fallbackSupportChannels: readonly AboutSupportChannel[] = [
+    { id: 'wechat', label: english ? 'WeChat' : '微信', qrAsset: 'wechat-qr' },
+    { id: 'alipay', label: english ? 'Alipay' : '支付宝', qrAsset: 'alipay-qr' },
+  ];
+  const supportChannels = info?.supportChannels ?? (window.desktop ? [] : fallbackSupportChannels);
+  const qrImages: Record<AboutSupportChannel['qrAsset'], string> = {
+    'wechat-qr': wechatQrImage,
+    'alipay-qr': alipayQrImage,
+  };
+  const tutorials = info?.links.filter((link) => link.id === 'tutorial') ?? [];
+  const promotions = info?.links.filter((link) => link.id === 'promotion') ?? [];
+
+  return (
+    <div className="about-page">
+      <section className="about-product" aria-labelledby="about-product-name">
+        <span className="about-product-icon" aria-hidden="true">
+          <InfoIcon size={21} weight="duotone" />
+        </span>
+        <span>
+          <strong id="about-product-name">{productName}</strong>
+          <small>{english ? 'Your companion for every flight' : '陪伴每一段模拟飞行旅程'}</small>
+        </span>
+      </section>
+
+      <section className="about-section" aria-labelledby="about-software-title">
+        <div className="about-section-heading">
+          <strong id="about-software-title">{english ? 'Software' : '软件信息'}</strong>
+        </div>
+        <div className="about-version-row">
+          <span>{english ? 'Version' : '版本'}</span>
+          <strong>
+            {info?.version ?? (english ? 'Available in the desktop app' : '请在桌面应用中查看')}
+          </strong>
+        </div>
+      </section>
+
+      {supportChannels.length > 0 ? (
+        <section className="about-section" aria-labelledby="about-support-title">
+          <div className="about-section-heading">
+            <strong id="about-support-title">{english ? 'Support the project' : '赞赏支持'}</strong>
+            <small>
+              {english
+                ? 'Optional support helps keep this guide improving.'
+                : '完全自愿，感谢你愿意支持这个小项目。'}
+            </small>
+          </div>
+          <div className="about-support-grid">
+            {supportChannels.map((channel) => (
+              <article className="about-support-card" key={channel.id}>
+                <img
+                  src={qrImages[channel.qrAsset]}
+                  alt={
+                    english
+                      ? `${channel.label} support QR code for ${productName}`
+                      : `${productName}${channel.label}赞赏码`
+                  }
+                />
+                <span className="about-support-copy">
+                  <span className="about-support-icon" aria-hidden="true">
+                    <HeartIcon size={17} weight="fill" />
+                  </span>
+                  <strong>{channel.label}</strong>
+                  <small>
+                    {english
+                      ? 'Open the app and scan to support the project.'
+                      : '打开对应应用扫一扫，支持这个小项目。'}
+                  </small>
+                </span>
+              </article>
+            ))}
+          </div>
+        </section>
+      ) : null}
+
+      {tutorials.length > 0 ? (
+        <section className="about-section" aria-labelledby="about-tutorial-title">
+          <div className="about-section-heading">
+            <strong id="about-tutorial-title">{english ? 'Tutorials' : '教程'}</strong>
+          </div>
+          <div className="about-link-list">
+            {tutorials.map((link) => (
+              <button key={link.id} type="button" onClick={() => onOpenLink(link.id)}>
+                <span>
+                  <strong>{link.label}</strong>
+                  {link.description ? <small>{link.description}</small> : null}
+                </span>
+                <span>{link.hostname}</span>
+                <ArrowSquareOutIcon size={16} weight="bold" aria-hidden="true" />
+              </button>
+            ))}
+          </div>
+        </section>
+      ) : null}
+
+      {promotions.length > 0 ? (
+        <section className="about-section" aria-labelledby="about-promotion-title">
+          <div className="about-section-heading">
+            <strong id="about-promotion-title">
+              {english ? 'Promotions and partners' : '推广与合作'}
+            </strong>
+          </div>
+          <div className="about-link-list about-link-list--promotion">
+            {promotions.map((link) => (
+              <button key={link.id} type="button" onClick={() => onOpenLink(link.id)}>
+                <span>
+                  <strong>{link.label}</strong>
+                  {link.description ? <small>{link.description}</small> : null}
+                </span>
+                <span>{link.hostname}</span>
+                <ArrowSquareOutIcon size={16} weight="bold" aria-hidden="true" />
+              </button>
+            ))}
+          </div>
+        </section>
+      ) : null}
+    </div>
+  );
+};
+
 type SettingsDialogProps = {
   onClose(): void;
   preferences: Preferences;
@@ -419,6 +551,7 @@ const SettingsDialog = ({ onClose, preferences, savePreferences }: SettingsDialo
   const [diagnosticNotice, setDiagnosticNotice] = useState('');
   const [diagnosticReadiness, setDiagnosticReadiness] = useState<DesktopReadiness | null>(null);
   const [diagnosticExporting, setDiagnosticExporting] = useState(false);
+  const [aboutInfo, setAboutInfo] = useState<AboutInfo | null>(null);
   const [globalPushToTalkStatus, setGlobalPushToTalkStatus] =
     useState<GlobalPushToTalkStatus | null>(null);
   const [customKeyMode, setCustomKeyMode] = useState(
@@ -435,6 +568,7 @@ const SettingsDialog = ({ onClose, preferences, savePreferences }: SettingsDialo
         subtitle: 'Configure your floating guide',
         general: 'General',
         services: 'Services',
+        about: 'About',
         save: 'Save',
         saveReconnect: 'Save and reconnect',
         saved: 'Preferences saved.',
@@ -444,6 +578,7 @@ const SettingsDialog = ({ onClose, preferences, savePreferences }: SettingsDialo
         subtitle: '调整悬浮助手的显示方式',
         general: '通用',
         services: '服务配置',
+        about: '关于',
         save: '保存',
         saveReconnect: '保存并重新连接',
         saved: '设置已保存。',
@@ -482,6 +617,15 @@ const SettingsDialog = ({ onClose, preferences, savePreferences }: SettingsDialo
       }),
     [],
   );
+  useEffect(() => {
+    let active = true;
+    void window.desktop?.getAboutInfo().then((info) => {
+      if (active) setAboutInfo(info ?? null);
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
   const saveGeneral = async () => {
     if (!isGlobalPushToTalkKey(draft.globalPushToTalkKey)) {
       setNotice(
@@ -608,6 +752,9 @@ const SettingsDialog = ({ onClose, preferences, savePreferences }: SettingsDialo
     setActiveTab(tab);
     requestAnimationFrame(() => settingsContentRef.current?.scrollTo({ top: 0 }));
   };
+  const openAboutLink = (id: AboutLinkId) => {
+    void window.desktop?.openAboutLink(id);
+  };
   const captureCustomPushToTalkKey = (event: ReactKeyboardEvent<HTMLInputElement>) => {
     event.preventDefault();
     if (
@@ -676,11 +823,25 @@ const SettingsDialog = ({ onClose, preferences, savePreferences }: SettingsDialo
             <WaveformIcon size={17} weight="duotone" aria-hidden="true" />
             <span>{copy.services}</span>
           </button>
+          <button
+            type="button"
+            className={activeTab === 'about' ? 'settings-nav-item is-active' : 'settings-nav-item'}
+            onClick={() => selectSettingsTab('about')}
+          >
+            <InfoIcon size={17} weight="duotone" aria-hidden="true" />
+            <span>{copy.about}</span>
+          </button>
         </nav>
         <section
           ref={settingsContentRef}
           className="settings-content"
-          aria-label={activeTab === 'general' ? copy.general : copy.services}
+          aria-label={
+            activeTab === 'general'
+              ? copy.general
+              : activeTab === 'services'
+                ? copy.services
+                : copy.about
+          }
         >
           {activeTab === 'general' ? (
             <>
@@ -824,7 +985,7 @@ const SettingsDialog = ({ onClose, preferences, savePreferences }: SettingsDialo
                 </button>
               </div>
             </>
-          ) : (
+          ) : activeTab === 'services' ? (
             <>
               <div className="settings-section-heading">
                 <strong>{english ? 'Service configuration' : '服务配置'}</strong>
@@ -1107,28 +1268,32 @@ const SettingsDialog = ({ onClose, preferences, savePreferences }: SettingsDialo
                 </details>
               </ServiceGroup>
             </>
+          ) : (
+            <AboutPanel english={english} info={aboutInfo} onOpenLink={openAboutLink} />
           )}
         </section>
       </div>
-      <footer className="settings-footer">
-        <span role="status">
-          {(notice === 'saved' ? copy.saved : notice) ||
-            (activeTab === 'general'
-              ? english
-                ? 'Changes are saved when you press Save.'
-                : '修改将在点击保存后生效。'
-              : english
-                ? 'Changing a service will reconnect the guide.'
-                : '保存服务配置后将重新连接导游。')}
-        </span>
-        <button
-          type="button"
-          className="done-button no-drag"
-          onClick={activeTab === 'general' ? saveGeneral : saveServices}
-        >
-          {activeTab === 'general' ? copy.save : copy.saveReconnect}
-        </button>
-      </footer>
+      {activeTab === 'about' ? null : (
+        <footer className="settings-footer">
+          <span role="status">
+            {(notice === 'saved' ? copy.saved : notice) ||
+              (activeTab === 'general'
+                ? english
+                  ? 'Changes are saved when you press Save.'
+                  : '修改将在点击保存后生效。'
+                : english
+                  ? 'Changing a service will reconnect the guide.'
+                  : '保存服务配置后将重新连接导游。')}
+          </span>
+          <button
+            type="button"
+            className="done-button no-drag"
+            onClick={activeTab === 'general' ? saveGeneral : saveServices}
+          >
+            {activeTab === 'general' ? copy.save : copy.saveReconnect}
+          </button>
+        </footer>
+      )}
     </main>
   );
 };
