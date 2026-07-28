@@ -26,12 +26,21 @@ import type {
   GlobalPushToTalkEvent,
   GlobalPushToTalkStatus,
 } from '../../shared/global-push-to-talk.js';
+import { aboutOpenLinkRequestSchema } from '../../shared/about-info.js';
+import type { AboutInfo, AboutLinkId } from '../../shared/about-info.js';
 
 contextBridge.exposeInMainWorld('desktop', {
   setCollapsed: (collapsed: boolean) => ipcRenderer.invoke('assistant:set-collapsed', collapsed),
   getAssistantState: () => ipcRenderer.invoke('assistant:get-state'),
   setBallMenuOpen: (open: boolean) => ipcRenderer.invoke('assistant:set-menu-open', open),
   openSettings: () => ipcRenderer.invoke('settings:open'),
+  getAboutInfo: (): Promise<AboutInfo | null> => ipcRenderer.invoke('about:get-info'),
+  openAboutLink: (id: AboutLinkId): Promise<boolean> => {
+    const parsed = aboutOpenLinkRequestSchema.safeParse({ id });
+    return parsed.success
+      ? ipcRenderer.invoke('about:open-link', parsed.data)
+      : Promise.resolve(false);
+  },
   saveLocale: (locale: 'en-US' | 'zh-CN') => ipcRenderer.invoke('settings:save-locale', locale),
   getGlobalPushToTalkStatus: (): Promise<GlobalPushToTalkStatus> =>
     ipcRenderer.invoke('voice:get-global-ptt-status'),

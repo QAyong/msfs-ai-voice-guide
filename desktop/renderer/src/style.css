@@ -1008,6 +1008,200 @@ button {
   -webkit-app-region: no-drag;
   app-region: no-drag;
 }
+.about-page {
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+  gap: 16px;
+  padding-bottom: 8px;
+}
+.about-product {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 15px;
+  border: 1px solid rgba(37, 99, 235, 0.14);
+  border-radius: 12px;
+  background: linear-gradient(135deg, rgba(238, 245, 255, 0.96), rgba(250, 252, 255, 0.88));
+}
+.about-product-icon,
+.about-support-icon {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+}
+.about-product-icon {
+  width: 38px;
+  height: 38px;
+  border: 1px solid rgba(37, 99, 235, 0.16);
+  border-radius: 11px;
+  background: #fff;
+  color: #285aa5;
+}
+.about-product > span:last-child,
+.about-support-copy {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 4px;
+}
+.about-product strong {
+  color: #243142;
+  font-size: 14px;
+}
+.about-product small,
+.about-support-copy small {
+  color: #718096;
+  font-size: 10px;
+  line-height: 1.45;
+}
+.about-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.about-section-heading {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.about-section-heading strong {
+  color: #2d3746;
+  font-size: 12px;
+}
+.about-section-heading small {
+  color: #7a8494;
+  font-size: 10px;
+  line-height: 1.45;
+}
+.about-version-row {
+  display: flex;
+  min-height: 42px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 11px;
+  border: 1px solid rgba(33, 58, 96, 0.09);
+  border-radius: 10px;
+  background: rgba(246, 249, 253, 0.78);
+  color: #657185;
+  font-size: 11px;
+}
+.about-version-row strong {
+  overflow: hidden;
+  color: #334155;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.about-support-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+.about-support-card {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid rgba(37, 99, 235, 0.14);
+  border-radius: 12px;
+  background: rgba(248, 251, 255, 0.92);
+}
+.about-support-card > img {
+  display: block;
+  width: 100%;
+  height: 168px;
+  max-width: 168px;
+  border: 1px solid rgba(33, 58, 96, 0.08);
+  border-radius: 10px;
+  background: #fff;
+  object-fit: contain;
+}
+.about-support-copy {
+  align-items: flex-start;
+  align-self: stretch;
+}
+.about-support-icon {
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+  background: rgba(209, 107, 54, 0.11);
+  color: #b3542d;
+}
+.about-support-copy strong {
+  color: #374151;
+  font-size: 12px;
+}
+.about-link-list {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+.about-link-list button {
+  display: grid;
+  min-height: 56px;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 9px;
+  padding: 9px 10px;
+  border: 1px solid rgba(33, 58, 96, 0.1);
+  border-radius: 10px;
+  background: #fff;
+  color: #315c9f;
+  cursor: pointer;
+  text-align: left;
+  transition:
+    background 140ms ease,
+    border-color 140ms ease,
+    transform 140ms ease;
+}
+.about-link-list button:hover {
+  border-color: rgba(37, 99, 235, 0.34);
+  background: #f4f8ff;
+  transform: translateY(-1px);
+}
+.about-link-list button:active {
+  transform: translateY(0);
+}
+.about-link-list button > span:first-child {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 3px;
+}
+.about-link-list button > span:first-child strong {
+  overflow: hidden;
+  color: #334155;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.about-link-list button > span:first-child small {
+  color: #7a8494;
+  font-size: 10px;
+  line-height: 1.35;
+}
+.about-link-list button > span:nth-child(2) {
+  max-width: 96px;
+  overflow: hidden;
+  color: #758398;
+  font-size: 9px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.about-link-list--promotion button {
+  border-color: rgba(209, 107, 54, 0.18);
+}
+.about-link-list--promotion button:hover {
+  border-color: rgba(209, 107, 54, 0.42);
+  background: #fff9f5;
+  color: #a84a25;
+}
 .settings-section-heading {
   display: flex;
   flex-direction: column;
@@ -1734,6 +1928,17 @@ button {
   }
   .settings-content {
     padding: 11px;
+  }
+  .about-support-grid {
+    grid-template-columns: 1fr;
+  }
+  .about-support-card > img {
+    width: min(100%, 220px);
+    height: 220px;
+  }
+  .about-support-copy {
+    align-items: center;
+    text-align: center;
   }
   .settings-select-row {
     align-items: flex-start;
