@@ -9,6 +9,9 @@ describe('desktop window state', () => {
           assistant: { x: -1920, y: 80, width: 64, height: 72 },
           expandedAssistant: { x: -320, y: 80, width: 320, height: 360 },
           source: { width: 520, height: 640 },
+          sourceReadingPreferences: {
+            'https://example.com': { mode: 'mobile', zoomPercent: 110 },
+          },
           collapsed: true,
           dockSide: 'left',
         }),
@@ -17,9 +20,26 @@ describe('desktop window state', () => {
       assistant: { x: -1920, y: 80, width: 64, height: 72 },
       expandedAssistant: { x: -320, y: 80, width: 320, height: 360 },
       source: { width: 520, height: 640 },
+      sourceReadingPreferences: {
+        'https://example.com': { mode: 'mobile', zoomPercent: 110 },
+      },
       collapsed: true,
       dockSide: 'left',
     });
+  });
+
+  it('drops invalid reading preferences without losing valid window state', () => {
+    expect(
+      parseStoredWindowState(
+        JSON.stringify({
+          source: { width: 520, height: 640 },
+          sourceReadingPreferences: {
+            'https://example.com': { mode: 'mobile', zoomPercent: 105 },
+            'ftp://example.com': { mode: 'desktop', zoomPercent: 100 },
+          },
+        }),
+      ),
+    ).toEqual({ source: { width: 520, height: 640 } });
   });
 
   it('falls back safely when the state file is corrupt', () => {

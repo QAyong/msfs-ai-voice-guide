@@ -23,6 +23,8 @@ import {
 } from '@livekit/components-react';
 import { ConnectionState, serializers, TokenSource, Track } from 'livekit-client';
 import { BrowserIcon } from '@phosphor-icons/react/dist/csr/Browser';
+import { DesktopIcon } from '@phosphor-icons/react/dist/csr/Desktop';
+import { DeviceMobileIcon } from '@phosphor-icons/react/dist/csr/DeviceMobile';
 import { ArrowLeftIcon } from '@phosphor-icons/react/dist/csr/ArrowLeft';
 import { ArrowSquareOutIcon } from '@phosphor-icons/react/dist/csr/ArrowSquareOut';
 import { CaretDownIcon } from '@phosphor-icons/react/dist/csr/CaretDown';
@@ -2692,6 +2694,7 @@ type SourceCopy = {
   close: string;
   closeWindow: string;
   currentZoom(percent: number): string;
+  desktopReading: string;
   errorBlocked: string;
   httpError(statusCode?: number): string;
   errorNetwork: string;
@@ -2700,10 +2703,12 @@ type SourceCopy = {
   loadedPage: string;
   loadingOriginalPage: string;
   loadingPage: string;
+  mobileReading: string;
   openExternal: string;
   pageLoadFailed: string;
   pageZoom: string;
   preparingSources: string;
+  readingMode: string;
   resetZoom: string;
   retry: string;
   sourceFallback: string;
@@ -2722,6 +2727,7 @@ const getSourceCopy = (english: boolean): SourceCopy =>
         close: 'Close',
         closeWindow: 'Close source window',
         currentZoom: (percent) => `Current zoom ${percent}%. Click to reset to 100%.`,
+        desktopReading: 'Desktop page',
         errorBlocked: 'This page tried to navigate to an unsupported address.',
         httpError: (statusCode) =>
           statusCode
@@ -2734,10 +2740,12 @@ const getSourceCopy = (english: boolean): SourceCopy =>
         loadedPage: 'Original page loaded',
         loadingOriginalPage: 'Loading original page',
         loadingPage: 'Loading page',
+        mobileReading: 'Mobile reading',
         openExternal: 'Open in system browser',
         pageLoadFailed: "Couldn't open this page",
         pageZoom: 'Page zoom',
         preparingSources: 'Preparing sources…',
+        readingMode: 'Page reading mode',
         resetZoom: 'Reset to 100%',
         retry: 'Try again',
         sourceFallback: 'Source',
@@ -2761,12 +2769,15 @@ const getSourceCopy = (english: boolean): SourceCopy =>
         errorNetwork: '网络加载失败，无法打开这个网页。',
         errorRenderer: '网页渲染进程意外退出，请重试。',
         errorTimeout: '网页在 15 秒内没有显示首屏，请重试或改用系统浏览器打开。',
+        desktopReading: '桌面网页',
         loadedPage: '原始网页已加载',
         loadingOriginalPage: '正在加载原始页面',
         loadingPage: '正在加载网页',
+        mobileReading: '移动阅读',
         openExternal: '在系统浏览器打开',
         pageLoadFailed: '无法打开这个网页',
         pageZoom: '网页缩放',
+        readingMode: '网页阅读模式',
         preparingSources: '正在准备来源预览…',
         resetZoom: '恢复 100%',
         retry: '重试',
@@ -2832,6 +2843,9 @@ const Source = () => {
   const adjustPageZoom = (action: 'in' | 'out' | 'reset') => {
     void window.desktop?.setSourcePageZoom(action);
   };
+  const setReadingMode = (mode: 'mobile' | 'desktop') => {
+    void window.desktop?.setSourceReadingMode(mode);
+  };
 
   return (
     <main className="source-shell">
@@ -2863,6 +2877,32 @@ const Source = () => {
         </span>
         {state && state.mode !== 'preview' ? (
           <>
+            <div
+              className="source-reading-controls no-drag"
+              role="group"
+              aria-label={copy.readingMode}
+            >
+              <button
+                type="button"
+                className="source-reading-mode"
+                aria-label={copy.mobileReading}
+                title={copy.mobileReading}
+                aria-pressed={state.readingMode === 'mobile'}
+                onClick={() => setReadingMode('mobile')}
+              >
+                <DeviceMobileIcon size={14} aria-hidden="true" />
+              </button>
+              <button
+                type="button"
+                className="source-reading-mode"
+                aria-label={copy.desktopReading}
+                title={copy.desktopReading}
+                aria-pressed={state.readingMode === 'desktop'}
+                onClick={() => setReadingMode('desktop')}
+              >
+                <DesktopIcon size={14} aria-hidden="true" />
+              </button>
+            </div>
             <div className="source-zoom-controls no-drag" role="group" aria-label={copy.pageZoom}>
               <button
                 type="button"

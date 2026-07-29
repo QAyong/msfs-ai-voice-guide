@@ -138,6 +138,8 @@ contextBridge.exposeInMainWorld('desktop', {
   closeSource: () => ipcRenderer.invoke('source:close'),
   setSourcePageZoom: (action: 'in' | 'out' | 'reset') =>
     ipcRenderer.invoke('source:set-page-zoom', action) as Promise<number | null>,
+  setSourceReadingMode: (mode: 'mobile' | 'desktop') =>
+    ipcRenderer.invoke('source:set-reading-mode', mode) as Promise<boolean>,
   openExternal: (url: string) => ipcRenderer.invoke('external:open', url),
   getReadiness: () => ipcRenderer.invoke('diagnostics:get-readiness'),
   retryReadiness: () => ipcRenderer.invoke('diagnostics:retry'),

@@ -26,6 +26,7 @@ describe('source preview window state', () => {
             source: preview.sources[0]!,
             currentUrl: preview.sources[0]!.url,
             pageZoomPercent: 100,
+            readingMode: 'mobile',
           };
     expect(sourceWindowStateSchema.safeParse(value).success).toBe(true);
   });
@@ -38,6 +39,7 @@ describe('source preview window state', () => {
         source: preview.sources[0]!,
         currentUrl: preview.sources[0]!.url,
         pageZoomPercent: 100,
+        readingMode: 'mobile',
         error: 'http',
         message: '网站返回了 HTTP 406。',
         statusCode: 406,
@@ -67,6 +69,7 @@ describe('source preview window state', () => {
         source: httpSource,
         currentUrl: httpSource.url,
         pageZoomPercent: 110,
+        readingMode: 'desktop',
       }).success,
     ).toBe(true);
   });
@@ -78,6 +81,7 @@ describe('source preview window state', () => {
         preview,
         source: preview.sources[0]!,
         currentUrl: preview.sources[0]!.url,
+        readingMode: 'mobile',
       }).success,
     ).toBe(false);
     expect(
@@ -87,6 +91,7 @@ describe('source preview window state', () => {
         source: preview.sources[0]!,
         currentUrl: preview.sources[0]!.url,
         pageZoomPercent: 105,
+        readingMode: 'mobile',
       }).success,
     ).toBe(false);
   });

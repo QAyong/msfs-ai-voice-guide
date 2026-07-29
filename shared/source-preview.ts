@@ -5,6 +5,7 @@ import {
   SOURCE_PAGE_ZOOM_MIN_PERCENT,
   SOURCE_PAGE_ZOOM_STEP_PERCENT,
 } from './source-page-zoom.js';
+import { isSourceReadingMode, type SourceReadingMode } from './source-reading-preferences.js';
 
 const sourceSelectionSchema = z.object({
   preview: guideSourcesMessageSchema,
@@ -19,6 +20,7 @@ const sourceSelectionSchema = z.object({
     .min(SOURCE_PAGE_ZOOM_MIN_PERCENT)
     .max(SOURCE_PAGE_ZOOM_MAX_PERCENT)
     .refine((value) => value % SOURCE_PAGE_ZOOM_STEP_PERCENT === 0),
+  readingMode: z.custom<SourceReadingMode>(isSourceReadingMode),
 });
 
 export const sourceWindowStateSchema = z.discriminatedUnion('mode', [
