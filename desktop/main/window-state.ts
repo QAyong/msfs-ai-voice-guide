@@ -1,5 +1,6 @@
 import { readFileSync, renameSync, writeFileSync } from 'node:fs';
 import type { StoredWindowState, WindowRectangle } from '../../shared/desktop-contracts.js';
+import { normalizeSourceReadingPreferences } from '../../shared/source-reading-preferences.js';
 
 const isFiniteNumber = (value: unknown): value is number =>
   typeof value === 'number' && Number.isFinite(value);
@@ -23,6 +24,9 @@ export function parseStoredWindowState(value: string): StoredWindowState {
     if (!parsed || typeof parsed !== 'object') return {};
     const candidate = parsed as Record<string, unknown>;
     const source = candidate.source as Record<string, unknown> | undefined;
+    const sourceReadingPreferences = normalizeSourceReadingPreferences(
+      candidate.sourceReadingPreferences,
+    );
     return {
       ...(isRectangle(candidate.assistant) ? { assistant: candidate.assistant } : {}),
       ...(isRectangle(candidate.expandedAssistant)
@@ -35,6 +39,7 @@ export function parseStoredWindowState(value: string): StoredWindowState {
       ...(candidate.dockSide === 'left' || candidate.dockSide === 'right'
         ? { dockSide: candidate.dockSide }
         : {}),
+      ...(Object.keys(sourceReadingPreferences).length > 0 ? { sourceReadingPreferences } : {}),
     };
   } catch {
     return {};

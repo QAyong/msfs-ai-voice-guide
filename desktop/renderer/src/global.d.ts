@@ -80,6 +80,7 @@ declare global {
       openCurrentSourceExternal(): Promise<boolean>;
       closeSource(): Promise<void>;
       setSourcePageZoom(action: 'in' | 'out' | 'reset'): Promise<number | null>;
+      setSourceReadingMode(mode: 'mobile' | 'desktop'): Promise<boolean>;
       openExternal(url: string): Promise<void>;
       getReadiness(): Promise<DesktopReadiness>;
       retryReadiness(): Promise<DesktopReadiness>;

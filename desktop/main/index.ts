@@ -24,6 +24,13 @@ import type {
   StoredWindowState,
 } from '../../shared/desktop-contracts.js';
 import {
+  defaultSourceReadingPreference,
+  sourceReadingPreferenceForUrl,
+  updateSourceReadingPreference,
+  type SourceReadingMode,
+  type SourceReadingPreferences,
+} from '../../shared/source-reading-preferences.js';
+import {
   diagnosticConversationRecordSchema,
   diagnosticToolEventSchema,
   type DiagnosticExportResult,
@@ -114,6 +121,8 @@ const sourceSize = { width: 440, height: 600 };
 const settingsSize = { width: 620, height: 640 };
 const quitDialogSize = { width: 328, height: 224 };
 const sourceLoadTimeoutMs = 15_000;
+const sourceMobileUserAgent =
+  'Mozilla/5.0 (Linux; Android 14; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Mobile Safari/537.36';
 
 type MenuDirection = 'up' | 'down';
 type UtilityKind = 'settings' | 'quit';
@@ -131,6 +140,8 @@ let sourceWindowState: SourceWindowState | null = null;
 let sourceLoadTimer: NodeJS.Timeout | null = null;
 let sourceViewPrewarm: Promise<WebContentsView | null> | null = null;
 let sourcePageZoomPercent = SOURCE_PAGE_ZOOM_DEFAULT_PERCENT;
+let sourceReadingMode: SourceReadingMode = defaultSourceReadingPreference.mode;
+let sourceReadingPreferences: SourceReadingPreferences = {};
 let utilityWindow: BrowserWindow | null = null;
 let assistantCollapsed = false;
 let assistantMenuOpen = false;
@@ -382,6 +393,7 @@ const persistWindowState = () => {
     ...(sourceBounds ? { source: { width: sourceBounds.width, height: sourceBounds.height } } : {}),
     collapsed: assistantCollapsed,
     dockSide: assistantDockSide,
+    ...(Object.keys(sourceReadingPreferences).length > 0 ? { sourceReadingPreferences } : {}),
   };
   storedWindowState = next;
   try {
@@ -755,6 +767,29 @@ const resetSourcePageZoom = () => {
   sourcePageZoomPercent = resetSourcePageZoomPercent();
 };
 
+const resetSourceReadingPreference = () => {
+  sourceReadingMode = defaultSourceReadingPreference.mode;
+  resetSourcePageZoom();
+};
+
+const currentSourceReadingUrl = () =>
+  sourceWindowState && sourceWindowState.mode !== 'preview'
+    ? sourceWindowState.currentUrl
+    : selectedSource?.url;
+
+const persistSourceReadingPreference = (
+  update: Partial<Pick<ReturnType<typeof sourceReadingPreferenceForUrl>, 'mode' | 'zoomPercent'>>,
+) => {
+  const currentUrl = currentSourceReadingUrl();
+  if (!currentUrl) return;
+  sourceReadingPreferences = updateSourceReadingPreference(
+    sourceReadingPreferences,
+    currentUrl,
+    update,
+  );
+  schedulePersistWindowState();
+};
+
 const applySourcePageZoom = () => {
   if (!sourceView || sourceView.webContents.isDestroyed()) return;
   sourceView.webContents.setZoomFactor(sourcePageZoomFactorFromPercent(sourcePageZoomPercent));
@@ -763,10 +798,12 @@ const applySourcePageZoom = () => {
 const setSourcePageZoomPercent = (percent: number) => {
   sourcePageZoomPercent = clampSourcePageZoomPercent(percent);
   applySourcePageZoom();
+  persistSourceReadingPreference({ zoomPercent: sourcePageZoomPercent });
   if (!sourceWindowState || sourceWindowState.mode === 'preview') return sourcePageZoomPercent;
   publishSourceWindowState({
     ...sourceWindowState,
     pageZoomPercent: sourcePageZoomPercent,
+    readingMode: sourceReadingMode,
   });
   return sourcePageZoomPercent;
 };
@@ -842,6 +879,7 @@ const failSourceLoad = (
     source: selectedSource,
     currentUrl,
     pageZoomPercent: sourcePageZoomPercent,
+    readingMode: sourceReadingMode,
     error,
     message,
     ...(statusCode ? { statusCode } : {}),
@@ -931,6 +969,7 @@ type SourceNavigation = {
 
 type SourceLoadOptions = {
   url?: string;
+  readingMode?: SourceReadingMode;
 };
 
 const createSourceView = () => {
@@ -943,6 +982,12 @@ const createSourceView = () => {
       sandbox: true,
     },
   });
+  const desktopUserAgent = view.webContents.getUserAgent();
+  const applySourceReadingMode = () => {
+    view.webContents.setUserAgent(
+      sourceReadingMode === 'mobile' ? sourceMobileUserAgent : desktopUserAgent,
+    );
+  };
   const showFirstVisibleDocument = () => {
     if (!navigation || navigation.visible || !sourcePreview || sourceView !== view) return;
     if (navigation.responseStatusCode && navigation.responseStatusCode >= 400) {
@@ -965,6 +1010,7 @@ const createSourceView = () => {
       source: navigation.source,
       currentUrl: navigation.currentUrl,
       pageZoomPercent: sourcePageZoomPercent,
+      readingMode: sourceReadingMode,
     });
   };
 
@@ -1028,6 +1074,7 @@ const createSourceView = () => {
       source: navigation.source,
       currentUrl: targetUrl,
       pageZoomPercent: sourcePageZoomPercent,
+      readingMode: sourceReadingMode,
     });
     startSourceLoadTimer(view, targetUrl);
   });
@@ -1067,8 +1114,10 @@ const createSourceView = () => {
       source,
       currentUrl: initialUrl,
       pageZoomPercent: sourcePageZoomPercent,
+      readingMode: sourceReadingMode,
     });
     startSourceLoadTimer(view, initialUrl);
+    applySourceReadingMode();
     void view.webContents.loadURL(initialUrl).catch((error: unknown) => {
       if (sourceView !== view || !navigation || navigation.currentUrl !== initialUrl) return;
       failSourceLoad(
@@ -1105,7 +1154,9 @@ const showRemoteSource = async (source: GuideSource, options: SourceLoadOptions 
   const initialUrl = options.url ?? source.url;
   if (!isLiveWindow(sourceWindow) || !sourcePreview || !isSafeWebUrl(initialUrl)) return false;
   selectedSource = source;
-  resetSourcePageZoom();
+  const preference = sourceReadingPreferenceForUrl(sourceReadingPreferences, initialUrl);
+  sourceReadingMode = options.readingMode ?? preference.mode;
+  sourcePageZoomPercent = preference.zoomPercent;
   const view = await ensurePrewarmedSourceView();
   if (!view || sourceView !== view || view.webContents.isDestroyed()) return false;
 
@@ -1230,7 +1281,7 @@ const createSourceWindow = async () => {
     sourcePreview = null;
     selectedSource = null;
     sourceWindowState = null;
-    resetSourcePageZoom();
+    resetSourceReadingPreference();
     sourceWindowFollowMode = startSourceWindowSession();
   };
   window.on('close', releaseSourceWindow);
@@ -1627,7 +1678,7 @@ ipcMain.handle('source:open-preview', async (event, value: unknown) => {
   sourcePreview = parsed.data;
   selectedSource = null;
   destroySourceView();
-  resetSourcePageZoom();
+  resetSourceReadingPreference();
   publishSourceWindowState({ mode: 'preview', preview: parsed.data });
   if (!isLiveWindow(sourceWindow)) await createSourceWindow();
   if (!isLiveWindow(sourceWindow)) return false;
@@ -1654,7 +1705,7 @@ ipcMain.handle('source:back', (event) => {
   if (!isSourceSender(event.sender) || !sourcePreview) return false;
   destroySourceView();
   selectedSource = null;
-  resetSourcePageZoom();
+  resetSourceReadingPreference();
   publishSourceWindowState({ mode: 'preview', preview: sourcePreview });
   void ensurePrewarmedSourceView();
   return true;
@@ -1681,6 +1732,25 @@ ipcMain.handle('source:set-page-zoom', (event, action: 'in' | 'out' | 'reset') =
   return setSourcePageZoomPercent(stepSourcePageZoomPercent(sourcePageZoomPercent, direction));
 });
 
+ipcMain.handle('source:set-reading-mode', async (event, mode: unknown) => {
+  if (
+    !isSourceSender(event.sender) ||
+    !selectedSource ||
+    (mode !== 'mobile' && mode !== 'desktop')
+  ) {
+    return false;
+  }
+  if (mode === sourceReadingMode) return true;
+  const currentUrl =
+    sourceWindowState && sourceWindowState.mode !== 'preview'
+      ? sourceWindowState.currentUrl
+      : selectedSource.url;
+  if (!isSafeWebUrl(currentUrl)) return false;
+  sourceReadingMode = mode;
+  persistSourceReadingPreference({ mode });
+  return showRemoteSource(selectedSource, { url: currentUrl, readingMode: mode });
+});
+
 ipcMain.handle('source:open-current-external', async (event) => {
   if (!isSourceSender(event.sender) || !selectedSource) return false;
   const currentUrl =
@@ -1703,6 +1773,7 @@ ipcMain.handle('external:open', (event, url: string) => {
 
 app.whenReady().then(async () => {
   storedWindowState = readStoredWindowState(getWindowStatePath());
+  sourceReadingPreferences = storedWindowState.sourceReadingPreferences ?? {};
   guideLocale = await readStoredGuideLocale();
   await createAssistantWindow();
   void startConfiguredAgent(false).then(async (result) => {
