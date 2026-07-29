@@ -222,6 +222,7 @@ export default defineAgent({
             endpoint: config.search.endpoint,
             timeoutMs: config.search.timeoutMs,
           }),
+          locale,
         )
       : undefined;
     const tools = observeToolActivity(
