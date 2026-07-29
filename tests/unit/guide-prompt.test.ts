@@ -11,6 +11,8 @@ describe('createGuideInstructions', () => {
     expect(instructions).toContain('不要反复使用同一种开头或固定口头禅');
     expect(instructions).toContain('避免机械重复');
     expect(instructions).toContain('用户想深入了解时，再逐步展开');
+    expect(instructions).toContain('默认只用一到三句短句');
+    expect(instructions).toContain('不要使用 Markdown 表格、标题、列表');
   });
 
   it('明确遥测边界并区分联网证据与模型已有知识', () => {
@@ -42,5 +44,10 @@ describe('createGuideInstructions', () => {
     expect(instructions).toContain('write the search query in English');
     expect(instructions).toContain('Prefer English-language primary sources');
     expect(instructions).toContain('Respond in natural English');
+    expect(instructions).toContain('formal Chinese name is Zhou Xiaoxiao');
+    expect(instructions).toContain('My name is Xiaoxiao');
+    expect(instructions).toContain('no more than 60 English words');
+    expect(instructions).toContain('Do not use Markdown tables, headings, lists');
+    expect(instructions).not.toMatch(/[\u4e00-\u9fff]/);
   });
 });
