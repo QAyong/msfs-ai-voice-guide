@@ -105,6 +105,7 @@ import {
 import { ServiceAvailabilityChecker } from './service-checks.js';
 import { getGlobalPushToTalkAddonPath, GlobalPushToTalkController } from './global-push-to-talk.js';
 import { DiagnosticLogger, writeDiagnosticArchive } from './diagnostics.js';
+import { withSourceAcceptLanguage } from './source-locale.js';
 
 const assistantSize = { width: 320, height: 360 };
 const collapsedSize = { width: 64, height: 72 };
@@ -788,6 +789,7 @@ const destroySourceView = () => {
   }
   sourceViewAttached = false;
   if (!view.webContents.isDestroyed()) {
+    view.webContents.session.webRequest.onBeforeSendHeaders(null);
     view.webContents.session.webRequest.onHeadersReceived(null);
     view.webContents.close();
   }
@@ -975,6 +977,9 @@ const createSourceView = () => {
   view.webContents.session.setPermissionRequestHandler((_webContents, _permission, callback) =>
     callback(false),
   );
+  view.webContents.session.webRequest.onBeforeSendHeaders((details, callback) => {
+    callback({ requestHeaders: withSourceAcceptLanguage(details.requestHeaders, guideLocale) });
+  });
   view.webContents.session.webRequest.onHeadersReceived((details, callback) => {
     if (
       navigation &&
@@ -1469,6 +1474,14 @@ ipcMain.handle('settings:save-locale', async (event, value: unknown) => {
       }
       if (isLiveWindow(sourceWindow)) {
         sourceWindow.webContents.send('settings:locale-saved', guideLocale);
+      }
+      if (
+        sourceView &&
+        !sourceView.webContents.isDestroyed() &&
+        sourceWindowState &&
+        sourceWindowState.mode !== 'preview'
+      ) {
+        sourceView.webContents.reloadIgnoringCache();
       }
       return { ok: true, readiness: result.readiness };
     } catch {

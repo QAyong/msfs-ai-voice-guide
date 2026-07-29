@@ -35,4 +35,12 @@ describe('createGuideInstructions', () => {
     expect(instructions).toContain('不要机械地逐字理解转写文本');
     expect(instructions).toContain('不解释内部判断过程');
   });
+
+  it('英文模式要求使用英文检索并优先英文来源', () => {
+    const instructions = createGuideInstructions('en-US');
+
+    expect(instructions).toContain('write the search query in English');
+    expect(instructions).toContain('Prefer English-language primary sources');
+    expect(instructions).toContain('Respond in natural English');
+  });
 });

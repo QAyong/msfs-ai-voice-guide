@@ -29,6 +29,10 @@ const speechTranscriptInstructions = [
 export type GuideLocale = 'en-US' | 'zh-CN';
 
 export function createGuideInstructions(locale: GuideLocale = 'zh-CN'): string {
+  const searchLanguage =
+    locale === 'en-US'
+      ? 'When using searchWeb, write the search query in English. Prefer English-language primary sources or English versions of official sites when they are available, while preserving proper nouns, airport codes, route identifiers, and quoted text exactly.'
+      : '使用 searchWeb 时，默认使用简体中文检索；如主题、专有名词或可靠来源以其他语言为主，可使用相应语言检索，并保持专有名词、机场代码、航路标识和引用原文准确。';
   const responseLanguage =
     locale === 'en-US'
       ? 'Respond in natural English unless the user explicitly asks for another language. Keep names, route identifiers, airport codes, and quoted source material accurate.'
@@ -37,6 +41,7 @@ export function createGuideInstructions(locale: GuideLocale = 'zh-CN'): string {
     xiaoxiaoStyleInstructions,
     guideSafetyInstructions,
     speechTranscriptInstructions,
+    searchLanguage,
     responseLanguage,
   ].join('\n');
 }
