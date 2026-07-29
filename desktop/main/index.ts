@@ -121,6 +121,7 @@ const sourceSize = { width: 440, height: 600 };
 const settingsSize = { width: 620, height: 640 };
 const quitDialogSize = { width: 328, height: 224 };
 const sourceLoadTimeoutMs = 15_000;
+const sourceSessionPartition = 'persist:source-preview';
 const sourceMobileUserAgent =
   'Mozilla/5.0 (Linux; Android 14; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Mobile Safari/537.36';
 
@@ -978,7 +979,9 @@ const createSourceView = () => {
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,
-      partition: 'persist:source-preview',
+      // Keep one named Chromium profile for all source pages. Its cookies and
+      // user-completed verification state survive document recreation and restarts.
+      partition: sourceSessionPartition,
       sandbox: true,
     },
   });
