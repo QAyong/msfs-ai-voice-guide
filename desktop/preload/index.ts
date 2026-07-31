@@ -1,5 +1,7 @@
 import { contextBridge, ipcRenderer } from 'electron';
 import type { GuideSourcesMessage } from '../../shared/guide-events.js';
+import { exploreRequestSchema } from '../../shared/explore-contracts.js';
+import type { ExploreRequest, ExploreResponse } from '../../shared/explore-contracts.js';
 import type { SourceWindowState } from '../../shared/source-preview.js';
 import {
   diagnosticConversationRecordSchema,
@@ -124,6 +126,20 @@ contextBridge.exposeInMainWorld('desktop', {
   openSource: (url: string) => ipcRenderer.invoke('source:open', url),
   openSourcePreview: (preview: GuideSourcesMessage) =>
     ipcRenderer.invoke('source:open-preview', preview),
+  requestExplore: (request: ExploreRequest): Promise<ExploreResponse> => {
+    const parsed = exploreRequestSchema.safeParse(request);
+    return parsed.success
+      ? ipcRenderer.invoke('explore:request', parsed.data)
+      : Promise.resolve({ ok: false, code: 'configuration', message: '探索请求格式无效。' });
+  },
+  cancelExplore: () => ipcRenderer.invoke('explore:cancel') as Promise<boolean>,
+  prefillExploreSuggestion: (text: string) =>
+    ipcRenderer.send('explore:prefill-suggestion', { text }),
+  onExplorePrefillSuggestion: (callback: (text: string) => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, text: string) => callback(text);
+    ipcRenderer.on('explore:prefill-suggestion', listener);
+    return () => ipcRenderer.removeListener('explore:prefill-suggestion', listener);
+  },
   getSourceState: (): Promise<SourceWindowState | null> => ipcRenderer.invoke('source:get-state'),
   onSourceState: (callback: (state: SourceWindowState) => void) => {
     const listener = (_event: Electron.IpcRendererEvent, state: SourceWindowState) =>

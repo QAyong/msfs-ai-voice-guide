@@ -75,7 +75,11 @@ import {
   parseGuideToolEvent,
   type GuideSourcesMessage,
 } from '../../../shared/guide-events.js';
-import type { SourceWindowState } from '../../../shared/source-preview.js';
+import {
+  explorePreferencesSchema,
+  type ExploreRequest,
+} from '../../../shared/explore-contracts.js';
+import { companionPreviewSources, type SourceWindowState } from '../../../shared/source-preview.js';
 import { canZoomSourcePageIn, canZoomSourcePageOut } from '../../../shared/source-page-zoom.js';
 import {
   guideVoiceAttributes,
@@ -261,6 +265,8 @@ type Preferences = {
   alwaysOnTop: boolean;
   agentVolume: number;
   openSourcesInApp: boolean;
+  exploreEncyclopedia: 'wikipedia' | 'baidu_baike' | 'douyin_baike';
+  exploreVideoPlatforms: Array<'youtube' | 'tiktok' | 'douyin'>;
   interfaceMotion: boolean;
   voiceInputMode: VoiceInputMode;
   globalPushToTalkKey: string;
@@ -271,6 +277,8 @@ const defaultPreferences: Preferences = {
   alwaysOnTop: true,
   agentVolume: 0.85,
   openSourcesInApp: true,
+  exploreEncyclopedia: 'wikipedia',
+  exploreVideoPlatforms: ['youtube'],
   interfaceMotion: true,
   voiceInputMode: 'push_to_talk',
   globalPushToTalkKey: 'AltLeft',
@@ -291,6 +299,17 @@ const readPreferences = (): Preferences => {
       globalPushToTalkKey: isGlobalPushToTalkKey(parsed.globalPushToTalkKey)
         ? parsed.globalPushToTalkKey
         : defaultPreferences.globalPushToTalkKey,
+      exploreEncyclopedia:
+        parsed.exploreEncyclopedia === 'baidu_baike' ||
+        parsed.exploreEncyclopedia === 'douyin_baike'
+          ? parsed.exploreEncyclopedia
+          : defaultPreferences.exploreEncyclopedia,
+      exploreVideoPlatforms: Array.isArray(parsed.exploreVideoPlatforms)
+        ? parsed.exploreVideoPlatforms.filter(
+            (value): value is Preferences['exploreVideoPlatforms'][number] =>
+              value === 'youtube' || value === 'tiktok' || value === 'douyin',
+          )
+        : defaultPreferences.exploreVideoPlatforms,
     };
   } catch {
     return defaultPreferences;
@@ -920,6 +939,51 @@ const SettingsDialog = ({ onClose, preferences, savePreferences }: SettingsDialo
                 label={english ? 'Open sources in app' : '应用内打开来源'}
                 onChange={(checked) => updateDraft('openSourcesInApp', checked)}
               />
+              <div className="settings-section-heading">
+                <strong>{english ? 'Explore sources' : '探索来源'}</strong>
+              </div>
+              <label className="settings-select-row">
+                <span>{english ? 'Encyclopedia' : '百科来源'}</span>
+                <select
+                  value={draft.exploreEncyclopedia}
+                  onChange={(event) =>
+                    updateDraft(
+                      'exploreEncyclopedia',
+                      event.target.value as Preferences['exploreEncyclopedia'],
+                    )
+                  }
+                >
+                  <option value="wikipedia">Wikipedia</option>
+                  <option value="baidu_baike">{english ? 'Baidu Baike' : '百度百科'}</option>
+                  <option value="douyin_baike">
+                    {english ? 'Douyin Baike' : '抖音百科 / 快懂百科'}
+                  </option>
+                </select>
+              </label>
+              <div
+                className="explore-platform-settings"
+                role="group"
+                aria-label={english ? 'Video platforms' : '视频来源'}
+              >
+                <span>{english ? 'Video platforms' : '视频来源'}</span>
+                {(['youtube', 'tiktok', 'douyin'] as const).map((platform) => (
+                  <label key={platform}>
+                    <input
+                      type="checkbox"
+                      checked={draft.exploreVideoPlatforms.includes(platform)}
+                      onChange={(event) =>
+                        updateDraft(
+                          'exploreVideoPlatforms',
+                          event.target.checked
+                            ? [...new Set([...draft.exploreVideoPlatforms, platform])]
+                            : draft.exploreVideoPlatforms.filter((value) => value !== platform),
+                        )
+                      }
+                    />
+                    {platform === 'youtube' ? 'YouTube' : platform === 'tiktok' ? 'TikTok' : '抖音'}
+                  </label>
+                ))}
+              </div>
               <div className="settings-section-heading">
                 <strong>{english ? 'Voice input' : '语音输入'}</strong>
               </div>
@@ -1616,6 +1680,8 @@ const AssistantView = ({
   const [textComposerOpen, setTextComposerOpen] = useState(false);
   const [textDraft, setTextDraft] = useState('');
   const [textInputError, setTextInputError] = useState('');
+  const [exploring, setExploring] = useState(false);
+  const [exploreError, setExploreError] = useState('');
   const [voiceModeMenuOpen, setVoiceModeMenuOpen] = useState(false);
   const [usedToolsInTurn, setUsedToolsInTurn] = useState(false);
   const [hasUnreadMessages, setHasUnreadMessages] = useState(false);
@@ -1653,6 +1719,9 @@ const AssistantView = ({
         connectionIssue: 'Voice service is temporarily unavailable',
         continuousConversation: 'Continuous conversation',
         endContinuousConversation: 'End continuous conversation',
+        explore: 'Explore',
+        exploring: 'Exploring…',
+        exploreUnavailable: 'Explore is temporarily unavailable',
         enterText: 'Type a message, Enter to send',
         inputAfterConnection: 'Connect Xiaoxiao to type a message',
         messageInput: 'Text input',
@@ -1678,6 +1747,9 @@ const AssistantView = ({
         connectionIssue: '语音服务暂时不可用',
         continuousConversation: '连续对话',
         endContinuousConversation: '结束连续对话',
+        explore: '探索',
+        exploring: '正在探索…',
+        exploreUnavailable: '探索暂时不可用',
         enterText: '输入文字，Enter 发送',
         inputAfterConnection: '连接晓晓后即可输入文字',
         messageInput: '文字输入',
@@ -1716,6 +1788,16 @@ const AssistantView = ({
 
   const displayMessages = useMemo(
     () => createDisplayMessages(messages, session.room.localParticipant.identity, sourcesByMessage),
+    [messages, session.room.localParticipant.identity, sourcesByMessage],
+  );
+  const exploreConversation = useMemo(
+    () =>
+      createDisplayMessages(
+        messages,
+        session.room.localParticipant.identity,
+        sourcesByMessage,
+        16,
+      ).map(({ id, role, text }) => ({ id, role, text })),
     [messages, session.room.localParticipant.identity, sourcesByMessage],
   );
 
@@ -1912,6 +1994,43 @@ const AssistantView = ({
       setTextInputError(error instanceof Error ? error.message : '文字消息发送失败，请重试');
     }
   }, [isSendingText, sendText, textDraft, textInputBlocked]);
+
+  const requestExplore = useCallback(async () => {
+    if (exploring || !window.desktop) return;
+    const preferencesSnapshot = explorePreferencesSchema.safeParse({
+      encyclopedia: preferences.exploreEncyclopedia,
+      videoPlatforms: preferences.exploreVideoPlatforms,
+    });
+    if (!preferencesSnapshot.success) {
+      setExploreError(copy.exploreUnavailable);
+      return;
+    }
+    setExploreError('');
+    setExploring(true);
+    try {
+      const request: ExploreRequest = {
+        recentConversation: exploreConversation,
+        preferences: preferencesSnapshot.data,
+        locale: preferences.locale,
+      };
+      const result = await window.desktop.requestExplore(request);
+      if (!result.ok) setExploreError(result.message);
+    } catch {
+      setExploreError(copy.exploreUnavailable);
+    } finally {
+      setExploring(false);
+    }
+  }, [copy.exploreUnavailable, exploreConversation, exploring, preferences]);
+
+  useEffect(
+    () =>
+      window.desktop?.onExplorePrefillSuggestion((text) => {
+        setTextComposerOpen(true);
+        setTextDraft(text);
+        setTextInputError('');
+      }),
+    [],
+  );
 
   useEffect(() => {
     if (!textComposerOpen) return;
@@ -2522,6 +2641,20 @@ const AssistantView = ({
             <CaretUpIcon size={12} weight="bold" aria-hidden="true" />
           )}
         </button>
+        <button
+          type="button"
+          className="console-text-button console-explore-button"
+          disabled={exploring}
+          onClick={() => void requestExplore()}
+          title={exploring ? copy.exploring : copy.explore}
+        >
+          {exploring ? (
+            <CircleNotchIcon className="source-spinner" size={15} aria-hidden="true" />
+          ) : (
+            <MagnifyingGlassIcon size={15} aria-hidden="true" />
+          )}
+          <span>{exploring ? copy.exploring : copy.explore}</span>
+        </button>
 
         <div
           className="voice-mode-control"
@@ -2685,6 +2818,11 @@ const AssistantView = ({
           )}
         </button>
       </footer>
+      {exploreError ? (
+        <small className="explore-error no-drag" role="alert">
+          {exploreError}
+        </small>
+      ) : null}
     </main>
   );
 };
@@ -2700,6 +2838,9 @@ type SourceCopy = {
   errorNetwork: string;
   errorRenderer: string;
   errorTimeout: string;
+  explore: string;
+  exploreSuggestions: string;
+  exploreSourcesUnavailable: string;
   loadedPage: string;
   loadingOriginalPage: string;
   loadingPage: string;
@@ -2737,6 +2878,9 @@ const getSourceCopy = (english: boolean): SourceCopy =>
         errorRenderer: 'The page renderer stopped unexpectedly. Try again.',
         errorTimeout:
           'The page did not show a first view within 15 seconds. Try again or open it in your system browser.',
+        explore: 'Explore',
+        exploreSuggestions: 'Continue chatting',
+        exploreSourcesUnavailable: 'Some selected sources are temporarily unavailable.',
         loadedPage: 'Original page loaded',
         loadingOriginalPage: 'Loading original page',
         loadingPage: 'Loading page',
@@ -2769,6 +2913,9 @@ const getSourceCopy = (english: boolean): SourceCopy =>
         errorNetwork: '网络加载失败，无法打开这个网页。',
         errorRenderer: '网页渲染进程意外退出，请重试。',
         errorTimeout: '网页在 15 秒内没有显示首屏，请重试或改用系统浏览器打开。',
+        explore: '探索',
+        exploreSuggestions: '继续聊',
+        exploreSourcesUnavailable: '部分已选来源暂时不可用。',
         desktopReading: '桌面网页',
         loadedPage: '原始网页已加载',
         loadingOriginalPage: '正在加载原始页面',
@@ -2846,6 +2993,11 @@ const Source = () => {
   const setReadingMode = (mode: 'mobile' | 'desktop') => {
     void window.desktop?.setSourceReadingMode(mode);
   };
+  const previewSources = state?.mode === 'preview' ? companionPreviewSources(state.preview) : [];
+  const explorePreview =
+    state?.mode === 'preview' && state.preview.type === 'explore.result'
+      ? state.preview.result
+      : null;
 
   return (
     <main className="source-shell">
@@ -2864,10 +3016,16 @@ const Source = () => {
           <MagnifyingGlassIcon size={17} color="#476eae" aria-hidden="true" />
         )}
         <span className="source-heading">
-          <b>{state?.mode === 'preview' ? copy.sources : (hostname ?? copy.sourceFallback)}</b>
+          <b>
+            {state?.mode === 'preview'
+              ? explorePreview
+                ? copy.explore
+                : copy.sources
+              : (hostname ?? copy.sourceFallback)}
+          </b>
           <small>
             {state?.mode === 'preview'
-              ? copy.sourceCount(state.preview.sources.length)
+              ? copy.sourceCount(previewSources.length)
               : state?.mode === 'loading'
                 ? copy.loadingOriginalPage
                 : state?.mode === 'error'
@@ -2966,49 +3124,98 @@ const Source = () => {
           onScroll={rememberListPosition}
           aria-label={copy.sourceList}
         >
-          {state.preview.query ? <p className="source-query">“{state.preview.query}”</p> : null}
-          {state.preview.sources.map((source) => (
-            <button
-              type="button"
-              className="source-result no-drag"
-              key={source.url}
-              onClick={() => {
-                rememberListPosition();
-                void window.desktop?.selectSource(source.url);
-              }}
-            >
-              <span className="source-result-meta">
-                {source.iconUrl ? (
-                  <img
-                    src={source.iconUrl}
-                    alt=""
-                    onError={(event) => {
-                      event.currentTarget.style.display = 'none';
-                    }}
-                  />
-                ) : (
-                  <span>{copy.sourceFallback.slice(0, 1)}</span>
-                )}
-                <b>{source.siteName}</b>
-                {source.publishTime ? <time>{source.publishTime.slice(0, 10)}</time> : null}
-              </span>
-              <span className="source-result-body">
-                <span>
-                  <strong>{source.title}</strong>
-                  {source.summary ? <small>{source.summary}</small> : null}
-                </span>
-                {source.thumbnailUrl ? (
-                  <img
-                    src={source.thumbnailUrl}
-                    alt=""
-                    onError={(event) => {
-                      event.currentTarget.style.display = 'none';
-                    }}
-                  />
-                ) : null}
-              </span>
-            </button>
-          ))}
+          {state.preview.type === 'guide.sources' && state.preview.query ? (
+            <p className="source-query">“{state.preview.query}”</p>
+          ) : null}
+          {explorePreview
+            ? explorePreview.topics.map((topic) => (
+                <section className="explore-topic" key={topic.id}>
+                  <h2>{topic.title}</h2>
+                  <p>{topic.reason}</p>
+                  {topic.cards.map((card) => (
+                    <button
+                      type="button"
+                      className="source-result no-drag"
+                      key={card.id}
+                      onClick={() => {
+                        rememberListPosition();
+                        void window.desktop?.selectSource(card.url);
+                      }}
+                    >
+                      <span className="source-result-meta">
+                        <span>{card.kind === 'video' ? '▶' : 'W'}</span>
+                        <b>{card.siteName}</b>
+                      </span>
+                      <span className="source-result-body">
+                        <span>
+                          <strong>{card.title}</strong>
+                          {card.summary ? <small>{card.summary}</small> : null}
+                        </span>
+                        {card.thumbnailUrl ? <img src={card.thumbnailUrl} alt="" /> : null}
+                      </span>
+                    </button>
+                  ))}
+                </section>
+              ))
+            : previewSources.map((source) => (
+                <button
+                  type="button"
+                  className="source-result no-drag"
+                  key={source.url}
+                  onClick={() => {
+                    rememberListPosition();
+                    void window.desktop?.selectSource(source.url);
+                  }}
+                >
+                  <span className="source-result-meta">
+                    {source.iconUrl ? (
+                      <img
+                        src={source.iconUrl}
+                        alt=""
+                        onError={(event) => {
+                          event.currentTarget.style.display = 'none';
+                        }}
+                      />
+                    ) : (
+                      <span>{copy.sourceFallback.slice(0, 1)}</span>
+                    )}
+                    <b>{source.siteName}</b>
+                    {source.publishTime ? <time>{source.publishTime.slice(0, 10)}</time> : null}
+                  </span>
+                  <span className="source-result-body">
+                    <span>
+                      <strong>{source.title}</strong>
+                      {source.summary ? <small>{source.summary}</small> : null}
+                    </span>
+                    {source.thumbnailUrl ? (
+                      <img
+                        src={source.thumbnailUrl}
+                        alt=""
+                        onError={(event) => {
+                          event.currentTarget.style.display = 'none';
+                        }}
+                      />
+                    ) : null}
+                  </span>
+                </button>
+              ))}
+          {explorePreview ? (
+            <section className="explore-suggestions">
+              <b>{copy.exploreSuggestions}</b>
+              {explorePreview.suggestedPrompts.map((prompt) => (
+                <button
+                  key={prompt}
+                  type="button"
+                  onClick={() => window.desktop?.prefillExploreSuggestion(prompt)}
+                >
+                  {prompt}
+                </button>
+              ))}
+            </section>
+          ) : null}
+          {explorePreview?.unavailableProviders.length ? (
+            <p className="source-query">{copy.exploreSourcesUnavailable}</p>
+          ) : null}
         </div>
       ) : state.mode === 'error' ? (
         <div className="source-error" role="alert">

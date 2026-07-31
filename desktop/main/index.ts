@@ -12,12 +12,32 @@ import { readFile, writeFile } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 import type { AppConfig } from '../../src/config/schema.js';
+import { guideSourcesMessageSchema, type GuideSource } from '../../shared/guide-events.js';
 import {
-  guideSourcesMessageSchema,
-  type GuideSource,
-  type GuideSourcesMessage,
-} from '../../shared/guide-events.js';
-import type { SourceWindowState } from '../../shared/source-preview.js';
+  companionPreviewSources,
+  type CompanionPreview,
+  type SourceWindowState,
+} from '../../shared/source-preview.js';
+import {
+  exploreRequestSchema,
+  exploreSuggestionSchema,
+  type ExploreResult,
+} from '../../shared/explore-contracts.js';
+import { MsfsCliClient } from '../../src/msfs/cli-client.js';
+import { MsfsGuideService } from '../../src/msfs/guide-service.js';
+import { MsfsExploreContextProvider } from '../../src/msfs/explore-context.js';
+import { resolveMsfsCliPath } from '../../src/msfs/path.js';
+import { ExploreService } from '../../src/explore/service.js';
+import { EncyclopediaService } from '../../src/explore/encyclopedia/service.js';
+import { WikipediaProvider } from '../../src/explore/encyclopedia/wikipedia.js';
+import { BaiduBaikeSearchPageProvider } from '../../src/explore/encyclopedia/baidu-baike.js';
+import { DouyinBaikeSearchPageProvider } from '../../src/explore/encyclopedia/douyin-baike.js';
+import { DuckDuckGoDiscoveryProvider } from '../../src/explore/discovery/duckduckgo.js';
+import { VideoService } from '../../src/explore/video/service.js';
+import { DouyinSearchPageProvider } from '../../src/explore/video/douyin-search-page.js';
+import { YouTubeProvider } from '../../src/explore/video/youtube.js';
+import { WebDiscoveryVideoProvider } from '../../src/explore/video/web-discovery.js';
+import { DeepSeekExplorePlanner } from '../../src/providers/llm/deepseek-explore.js';
 import type {
   DesktopReadiness,
   DesktopSessionResult,
@@ -113,6 +133,7 @@ import { ServiceAvailabilityChecker } from './service-checks.js';
 import { getGlobalPushToTalkAddonPath, GlobalPushToTalkController } from './global-push-to-talk.js';
 import { DiagnosticLogger, writeDiagnosticArchive } from './diagnostics.js';
 import { withSourceAcceptLanguage } from './source-locale.js';
+import { ExploreController } from './explore-controller.js';
 
 const assistantSize = { width: 320, height: 360 };
 const collapsedSize = { width: 64, height: 72 };
@@ -135,7 +156,7 @@ let sourceWindow: BrowserWindow | null = null;
 let sourceView: WebContentsView | null = null;
 let sourceViewAttached = false;
 let sourceViewLoad: ((source: GuideSource, initialUrl: string) => void) | null = null;
-let sourcePreview: GuideSourcesMessage | null = null;
+let sourcePreview: CompanionPreview | null = null;
 let selectedSource: GuideSource | null = null;
 let sourceWindowState: SourceWindowState | null = null;
 let sourceLoadTimer: NodeJS.Timeout | null = null;
@@ -170,6 +191,7 @@ let agentRuntime = createAgentRuntime();
 const localLiveKitRuntime = new LocalLiveKitRuntime();
 const serviceAvailabilityChecker = new ServiceAvailabilityChecker();
 let guideLocale: GuideLocale = 'zh-CN';
+let exploreController: ExploreController | null = null;
 
 type PendingServiceTransition = {
   id: string;
@@ -616,6 +638,65 @@ const isSafeWebUrl = (value: string) => {
     return false;
   }
 };
+
+const createExploreService = async (): Promise<ExploreService | null> => {
+  const environment = await getEffectiveServiceEnvironment();
+  const configuration = checkDesktopConfiguration(environment);
+  if (!configuration.ok) return null;
+  const discovery = new DuckDuckGoDiscoveryProvider();
+  return new ExploreService(
+    new DeepSeekExplorePlanner(configuration.config.llm),
+    new EncyclopediaService([
+      new WikipediaProvider(),
+      new BaiduBaikeSearchPageProvider(),
+      new DouyinBaikeSearchPageProvider(),
+    ]),
+    new VideoService([
+      new YouTubeProvider(),
+      new WebDiscoveryVideoProvider(discovery, {
+        id: 'tiktok',
+        siteName: 'TikTok',
+        domains: ['tiktok.com'],
+        enrichWithTikTokOEmbed: true,
+      }),
+      new DouyinSearchPageProvider(),
+    ]),
+  );
+};
+
+const getExploreMsfsContext = async (signal: AbortSignal) => {
+  const environment = await getEffectiveServiceEnvironment();
+  const configuration = checkDesktopConfiguration(environment);
+  if (!configuration.ok) return undefined;
+  const config = configuration.config;
+  const resourcesPath = (process as NodeJS.Process & { resourcesPath?: string }).resourcesPath;
+  const service = new MsfsGuideService(
+    new MsfsCliClient({
+      executablePath: resolveMsfsCliPath({
+        ...(config.msfs.cliPath ? { configuredPath: config.msfs.cliPath } : {}),
+        ...(resourcesPath ? { resourcesPath } : {}),
+      }),
+      timeoutMs: config.msfs.timeoutMs,
+      maxConcurrency: config.msfs.maxConcurrency,
+    }),
+    {
+      trackIntervalMs: config.msfs.trackIntervalMs,
+      trackMaximumPoints: config.msfs.trackMaximumPoints,
+    },
+  );
+  try {
+    return await new MsfsExploreContextProvider(service).get(signal);
+  } finally {
+    await service.close();
+  }
+};
+
+const getExploreController = () =>
+  (exploreController ??= new ExploreController({
+    createService: createExploreService,
+    getMsfsContext: getExploreMsfsContext,
+    present: async (result) => openExplorePreview(result),
+  }));
 
 const setAssistantBounds = (bounds: Electron.Rectangle) => {
   if (!isLiveWindow(assistantWindow)) return;
@@ -1674,23 +1755,56 @@ ipcMain.handle('source:open', async (event, url: string) => {
   return selectedSource ? showRemoteSource(selectedSource) : false;
 });
 
-ipcMain.handle('source:open-preview', async (event, value: unknown) => {
-  if (!isLiveWindow(assistantWindow) || !isAssistantSender(event.sender)) return false;
-  const parsed = guideSourcesMessageSchema.safeParse(value);
-  if (!parsed.success || parsed.data.sources.length === 0) return false;
-  sourcePreview = parsed.data;
+const openCompanionPreview = async (preview: CompanionPreview) => {
+  sourcePreview = preview;
   selectedSource = null;
   destroySourceView();
   resetSourceReadingPreference();
-  publishSourceWindowState({ mode: 'preview', preview: parsed.data });
+  publishSourceWindowState({ mode: 'preview', preview });
   if (!isLiveWindow(sourceWindow)) await createSourceWindow();
   if (!isLiveWindow(sourceWindow)) return false;
   positionSourceNextToAssistant();
   sourceWindow.show();
   sourceWindow.focus();
-  publishSourceWindowState({ mode: 'preview', preview: parsed.data });
+  publishSourceWindowState({ mode: 'preview', preview });
   void ensurePrewarmedSourceView();
   return true;
+};
+
+const openExplorePreview = async (result: ExploreResult) =>
+  openCompanionPreview({ type: 'explore.result', result });
+
+ipcMain.handle('source:open-preview', async (event, value: unknown) => {
+  if (!isLiveWindow(assistantWindow) || !isAssistantSender(event.sender)) return false;
+  const parsed = guideSourcesMessageSchema.safeParse(value);
+  if (!parsed.success || parsed.data.sources.length === 0) return false;
+  return openCompanionPreview(parsed.data);
+});
+
+ipcMain.handle('explore:request', async (event, value: unknown) => {
+  if (!isLiveWindow(assistantWindow) || !isAssistantSender(event.sender)) {
+    return { ok: false, code: 'configuration', message: '不允许的探索请求。' };
+  }
+  const parsed = exploreRequestSchema.safeParse(value);
+  if (!parsed.success) {
+    return { ok: false, code: 'configuration', message: '探索请求格式无效。' };
+  }
+  return getExploreController().execute(parsed.data);
+});
+
+ipcMain.handle('explore:cancel', (event) => {
+  if (!isAssistantSender(event.sender)) return false;
+  exploreController?.cancel();
+  return true;
+});
+
+ipcMain.on('explore:prefill-suggestion', (event, value: unknown) => {
+  if (!isSourceSender(event.sender) || !isLiveWindow(assistantWindow)) return;
+  const parsed = exploreSuggestionSchema.safeParse(value);
+  if (!parsed.success) return;
+  assistantWindow.webContents.send('explore:prefill-suggestion', parsed.data.text);
+  assistantWindow.show();
+  assistantWindow.focus();
 });
 
 ipcMain.handle('source:get-state', (event) =>
@@ -1699,7 +1813,7 @@ ipcMain.handle('source:get-state', (event) =>
 
 ipcMain.handle('source:select', async (event, url: string) => {
   if (!isSourceSender(event.sender) || !sourcePreview) return false;
-  const source = sourcePreview.sources.find((candidate) => candidate.url === url);
+  const source = companionPreviewSources(sourcePreview).find((candidate) => candidate.url === url);
   if (!source) return false;
   return showRemoteSource(source);
 });

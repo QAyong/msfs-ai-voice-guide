@@ -2318,6 +2318,81 @@ html[data-motion='off'] *::after {
   flex: 1;
   background: #fff;
 }
+.console-explore-button:disabled {
+  cursor: wait;
+  opacity: 0.72;
+}
+.explore-error {
+  display: block;
+  margin: -5px 14px 7px;
+  color: #ad5734;
+  font-size: 10px;
+  line-height: 1.35;
+}
+.explore-topic {
+  border-bottom: 1px solid #edf0f5;
+  padding: 12px 3px 6px;
+}
+.explore-topic:first-child {
+  padding-top: 4px;
+}
+.explore-topic > h2 {
+  margin: 0;
+  color: #1f2837;
+  font-size: 13px;
+  line-height: 1.4;
+}
+.explore-topic > p {
+  margin: 4px 0 2px;
+  color: #687386;
+  font-size: 10px;
+  line-height: 1.5;
+}
+.explore-suggestions {
+  padding: 12px 3px 4px;
+}
+.explore-suggestions > b {
+  display: block;
+  margin-bottom: 7px;
+  color: #3d4d66;
+  font-size: 11px;
+}
+.explore-suggestions button {
+  display: block;
+  width: 100%;
+  margin: 5px 0;
+  border: 1px solid #cedbef;
+  border-radius: 8px;
+  padding: 7px 8px;
+  background: #f7faff;
+  color: #315b9f;
+  cursor: pointer;
+  font-size: 10px;
+  line-height: 1.35;
+  text-align: left;
+}
+.explore-suggestions button:hover {
+  background: #edf4ff;
+}
+.explore-platform-settings {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 7px 11px;
+  padding: 6px 10px 10px;
+  color: #4a5568;
+  font-size: 11px;
+}
+.explore-platform-settings > span {
+  width: 100%;
+  color: #687386;
+}
+.explore-platform-settings label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+}
 button:focus-visible {
   outline: 2px solid #93c5fd;
   outline-offset: 2px;
