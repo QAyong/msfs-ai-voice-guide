@@ -10,7 +10,8 @@ import {
 } from 'electron';
 import { readFile, writeFile } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import type { AppConfig } from '../../src/config/schema.js';
 import { guideSourcesMessageSchema, type GuideSource } from '../../shared/guide-events.js';
 import {
@@ -70,6 +71,7 @@ import {
   type ServiceSettingsSaveRequest,
   type StoredServiceCredentials,
 } from '../../shared/desktop-settings.js';
+
 import {
   globalPushToTalkConfigurationSchema,
   type GlobalPushToTalkEvent,
@@ -134,6 +136,9 @@ import { getGlobalPushToTalkAddonPath, GlobalPushToTalkController } from './glob
 import { DiagnosticLogger, writeDiagnosticArchive } from './diagnostics.js';
 import { withSourceAcceptLanguage } from './source-locale.js';
 import { ExploreController } from './explore-controller.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 const assistantSize = { width: 320, height: 360 };
 const collapsedSize = { width: 64, height: 72 };
