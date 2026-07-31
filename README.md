@@ -13,6 +13,7 @@
 - [桌面悬浮前端与来源浏览规格](docs/specs/spec-004-web-frontend-and-source-preview.md)
 - [桌面真实语音闭环与启动诊断](docs/specs/spec-006-desktop-live-voice-and-readiness.md)
 - [桌面文字输入](docs/specs/spec-007-desktop-text-input.md)
+- [用户触发的探索模式](docs/specs/spec-015-user-triggered-explore-mode.md)
 - [原生 MSFS CLI 导游工具接入](docs/specs/spec-008-native-msfs-cli-guide-tools.md)
 - [MSFS CLI 发布物集成](docs/architecture/msfs-cli-release-integration.md)
 - [桌面安装包的本地 LiveKit 运行时](docs/specs/spec-011-packaged-local-livekit-runtime.md)
@@ -48,6 +49,7 @@ pnpm run verify
 生产方向的桌面入口位于 [`desktop/`](desktop/)。当前 Electron 实现包括：
 
 - 64×72px 收起窗口：顶部 36×14px 原生拖动把手与 48px 头像点击区明确分离。
+- 展开标题栏左侧以指南针触发探索，中间仅显示带状态点的头像，右侧分别收起或结束当前对话；悬浮菜单中的电源按钮才退出整个应用。
 - 拖动结束后根据光标所在显示器吸附到最近的左右工作区边缘，并支持负坐标扩展屏。
 - 可移动、可收起、可从四边和四角拉伸的语音与文字聊天面板。
 - 两种输入模式复用同一个 LiveKit Session（会话）与麦克风管线：鼠标或空格键按住说话，以及基于官方自动 Turn Detector（轮次检测器）的连续对话。
@@ -59,6 +61,7 @@ pnpm run verify
 - AI 回答中的真实搜索来源卡片和搜索结果入口。
 - 自动启动/检查 Agent Worker、首次配置引导、脱敏故障提示、重试、音量/置顶/窗口状态保存。
 - 独立伴随来源浏览窗，通过隔离的 `WebContentsView` 加载经过校验的 HTTPS 页面，并始终跟随聊天面板定位。
+- 探索结果在伴随窗顶部显示浏览建议与“继续聊”问题，百科与视频来源在下方以单一列表呈现；来源的全局排序和跨 Provider 语义去重仍待后续重构。
 
 可使用以下命令验证并打开桌面实现：
 

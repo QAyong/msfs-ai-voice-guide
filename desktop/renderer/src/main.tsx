@@ -31,6 +31,7 @@ import { CaretDownIcon } from '@phosphor-icons/react/dist/csr/CaretDown';
 import { CaretUpIcon } from '@phosphor-icons/react/dist/csr/CaretUp';
 import { CircleNotchIcon } from '@phosphor-icons/react/dist/csr/CircleNotch';
 import { CheckIcon } from '@phosphor-icons/react/dist/csr/Check';
+import { CompassIcon } from '@phosphor-icons/react/dist/csr/Compass';
 import { EyeClosedIcon } from '@phosphor-icons/react/dist/csr/EyeClosed';
 import { EyeIcon } from '@phosphor-icons/react/dist/csr/Eye';
 import { GearSixIcon } from '@phosphor-icons/react/dist/csr/GearSix';
@@ -94,7 +95,6 @@ import {
   msfsReadinessAttributes,
   type MsfsReadinessStatus,
 } from '../../../shared/msfs-readiness.js';
-import { resolveVoiceStatus } from './voice-ui-state.js';
 import { resolveGuideAvatarExpression } from './avatar-state.js';
 import { GuideExpression, GuideFloatingPortrait } from './guide-avatar.js';
 import { MessageMarkdown } from './message-markdown.js';
@@ -107,6 +107,9 @@ const preferenceStorageKey = 'cloudpath-guide-preferences';
 
 type MenuDirection = 'up' | 'down';
 type UtilityDialog = 'settings' | 'quit';
+type BrowserDialog = UtilityDialog | 'end-conversation';
+type ExploreNoticeKind = 'context' | 'error' | 'configuration';
+type ExploreNotice = { kind: ExploreNoticeKind; title: string; description: string };
 type SettingsTab = 'general' | 'services' | 'about';
 type SupportedLocale = 'zh-CN' | 'en-US';
 
@@ -1545,7 +1548,56 @@ const QuitDialog = ({ onClose }: QuitDialogProps) => {
   );
 };
 
+type EndConversationDialogProps = {
+  closing: boolean;
+  english: boolean;
+  onClose(): void;
+  onConfirm(): void;
+};
+
+const EndConversationDialog = ({
+  closing,
+  english,
+  onClose,
+  onConfirm,
+}: EndConversationDialogProps) => (
+  <main className="utility-card quit-dialog" role="alertdialog" aria-modal="true">
+    <header className="quit-header drag-region">
+      <span className="quit-icon" aria-hidden="true">
+        <XIcon size={22} weight="duotone" />
+      </span>
+      <button
+        type="button"
+        className="utility-close no-drag"
+        aria-label={english ? 'Close confirmation' : '关闭确认'}
+        title={english ? 'Close' : '关闭'}
+        disabled={closing}
+        onClick={onClose}
+      >
+        <XIcon size={16} weight="bold" aria-hidden="true" />
+      </button>
+    </header>
+    <section className="quit-copy">
+      <h1>{english ? 'End this conversation?' : '结束当前对话？'}</h1>
+      <p>
+        {english
+          ? 'The current conversation and source preview will be cleared. The app will remain available from the floating portrait.'
+          : '当前对话与来源预览将被清空，应用仍可从悬浮球继续使用。'}
+      </p>
+    </section>
+    <footer className="quit-actions">
+      <button type="button" className="cancel-button" disabled={closing} onClick={onClose}>
+        {english ? 'Keep talking' : '继续对话'}
+      </button>
+      <button type="button" className="quit-button" disabled={closing} onClick={onConfirm}>
+        {closing ? (english ? 'Closing…' : '正在关闭…') : english ? 'End and close' : '结束并关闭'}
+      </button>
+    </footer>
+  </main>
+);
+
 type AssistantViewProps = {
+  endSession(): Promise<void>;
   onVoiceChannelChange(connected: boolean): void;
   preferences: Preferences;
   readiness: DesktopReadiness | null;
@@ -1615,6 +1667,11 @@ const Assistant = () => {
     }
   }, []);
 
+  const endSession = useCallback(async () => {
+    connectAbortRef.current?.abort();
+    await sessionRef.current.end();
+  }, []);
+
   useEffect(() => {
     void startSession();
     return () => {
@@ -1643,6 +1700,7 @@ const Assistant = () => {
     <SessionProvider session={session}>
       <RoomAudioRenderer volume={voiceChannelConnected ? preferences.agentVolume : 0} />
       <AssistantView
+        endSession={endSession}
         onVoiceChannelChange={setVoiceChannelConnected}
         preferences={preferences}
         readiness={readiness}
@@ -1659,6 +1717,7 @@ const Assistant = () => {
 };
 
 const AssistantView = ({
+  endSession,
   onVoiceChannelChange,
   preferences,
   readiness,
@@ -1673,7 +1732,7 @@ const AssistantView = ({
   const [collapsed, setCollapsed] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [menuDirection, setMenuDirection] = useState<MenuDirection>('down');
-  const [browserDialog, setBrowserDialog] = useState<UtilityDialog | null>(null);
+  const [browserDialog, setBrowserDialog] = useState<BrowserDialog | null>(null);
   const [voiceTransitioning, setVoiceTransitioning] = useState(false);
   const [controlError, setControlError] = useState('');
   const [microphoneError, setMicrophoneError] = useState('');
@@ -1681,7 +1740,8 @@ const AssistantView = ({
   const [textDraft, setTextDraft] = useState('');
   const [textInputError, setTextInputError] = useState('');
   const [exploring, setExploring] = useState(false);
-  const [exploreError, setExploreError] = useState('');
+  const [exploreNotice, setExploreNotice] = useState<ExploreNotice | null>(null);
+  const [closingConversation, setClosingConversation] = useState(false);
   const [voiceModeMenuOpen, setVoiceModeMenuOpen] = useState(false);
   const [usedToolsInTurn, setUsedToolsInTurn] = useState(false);
   const [hasUnreadMessages, setHasUnreadMessages] = useState(false);
@@ -1706,6 +1766,7 @@ const AssistantView = ({
   const continuousTransitionRef = useRef(false);
   const latestAgentMessageIdRef = useRef<string | null>(null);
   const latestAgentMessageTextRef = useRef('');
+  const exploreRequestVersionRef = useRef(0);
   const recordedDiagnosticMessagesRef = useRef(new Set<string>());
   const textInputRef = useRef<HTMLTextAreaElement | null>(null);
   const agent = useAgent();
@@ -1721,12 +1782,18 @@ const AssistantView = ({
         endContinuousConversation: 'End continuous conversation',
         explore: 'Explore',
         exploring: 'Exploring…',
+        exploreConfigurationDescription: 'Check the service configuration, then try again.',
+        exploreConfigurationTitle: 'Explore needs setup',
+        exploreNoContextDescription: 'Start a conversation or connect flight data, then try again.',
+        exploreNoContextTitle: 'Nothing to explore yet',
+        exploreRetryDescription: 'Try again in a moment.',
+        exploreRetry: 'Retry',
+        exploreSettings: 'Open settings',
         exploreUnavailable: 'Explore is temporarily unavailable',
         enterText: 'Type a message, Enter to send',
         inputAfterConnection: 'Connect Xiaoxiao to type a message',
         messageInput: 'Text input',
         micUnavailable: 'Microphone unavailable',
-        name: 'Xiaoxiao',
         newMessages: 'New messages',
         openConfiguration: 'Open configuration file',
         pressToTalk: 'Hold to talk',
@@ -1735,6 +1802,8 @@ const AssistantView = ({
         releaseToEnd: 'Release to finish',
         sourceCount: (count: number) => `${count} web sources found`,
         text: 'Text',
+        thinking: 'Xiaoxiao is thinking',
+        usingTools: 'Using tools',
         voiceDisconnected: 'Voice disconnected',
         voiceInput: 'Voice input',
         waitingForGuide: 'Preparing Xiaoxiao',
@@ -1749,12 +1818,18 @@ const AssistantView = ({
         endContinuousConversation: '结束连续对话',
         explore: '探索',
         exploring: '正在探索…',
+        exploreConfigurationDescription: '请检查服务配置后重试。',
+        exploreConfigurationTitle: '探索需要完成配置',
+        exploreNoContextDescription: '先聊一句，或连接飞行数据后再试。',
+        exploreNoContextTitle: '暂无可探索内容',
+        exploreRetryDescription: '请稍后重试。',
+        exploreRetry: '重试',
+        exploreSettings: '前往设置',
         exploreUnavailable: '探索暂时不可用',
         enterText: '输入文字，Enter 发送',
         inputAfterConnection: '连接晓晓后即可输入文字',
         messageInput: '文字输入',
         micUnavailable: '麦克风不可用',
-        name: '晓晓',
         newMessages: '新消息',
         openConfiguration: '打开配置文件',
         pressToTalk: '按住说话',
@@ -1763,6 +1838,8 @@ const AssistantView = ({
         releaseToEnd: '松开结束',
         sourceCount: (count: number) => `已检索 ${count} 个网页来源`,
         text: '文字',
+        thinking: '晓晓正在思考',
+        usingTools: '正在调用工具',
         voiceDisconnected: '语音已挂断',
         voiceInput: '语音输入',
         waitingForGuide: '正在准备晓晓',
@@ -1945,16 +2022,6 @@ const AssistantView = ({
     if (toolActivity === 'calling') setUsedToolsInTurn(true);
   }, [toolActivity]);
 
-  const statusLabel = resolveVoiceStatus({
-    agentState: agent.state,
-    connectionState: session.connectionState,
-    continuousActive,
-    hasError: Boolean(errorMessage),
-    locale: preferences.locale,
-    starting,
-    ...(toolActivity ? { toolActivity } : {}),
-    ...(userState ? { userState } : {}),
-  });
   const setupBlocked =
     Boolean(startupError) ||
     Boolean(readiness) ||
@@ -1963,8 +2030,6 @@ const AssistantView = ({
   const voiceChannelActive = voiceChannelConnected && !setupBlocked;
   const interactionBlocked = setupBlocked || !agent.canListen || !voiceChannelConnected;
   const textInputBlocked = setupBlocked || !agent.isConnected;
-  const visibleStatusLabel =
-    !voiceChannelConnected && !setupBlocked ? copy.voiceDisconnected : statusLabel;
   const avatarExpression = resolveGuideAvatarExpression({
     agentState: agent.state,
     connectionState: session.connectionState,
@@ -1973,6 +2038,20 @@ const AssistantView = ({
     ...(toolActivity ? { toolActivity } : {}),
     ...(userState ? { userState } : {}),
   });
+  const avatarPresence =
+    Boolean(errorMessage) || !voiceChannelConnected || setupBlocked
+      ? 'error'
+      : session.isConnected && agent.isConnected
+        ? 'online'
+        : 'neutral';
+  const assistantActivity =
+    !setupBlocked &&
+    userState !== 'speaking' &&
+    (toolActivity === 'calling' || agent.state === 'thinking')
+      ? toolActivity === 'calling'
+        ? copy.usingTools
+        : copy.thinking
+      : null;
   const voiceButtonState = microphoneError
     ? 'error'
     : voiceTransitioning || microphone.pending || starting || agent.isPending
@@ -2002,10 +2081,15 @@ const AssistantView = ({
       videoPlatforms: preferences.exploreVideoPlatforms,
     });
     if (!preferencesSnapshot.success) {
-      setExploreError(copy.exploreUnavailable);
+      setExploreNotice({
+        kind: 'configuration',
+        title: copy.exploreConfigurationTitle,
+        description: copy.exploreConfigurationDescription,
+      });
       return;
     }
-    setExploreError('');
+    const requestVersion = ++exploreRequestVersionRef.current;
+    setExploreNotice(null);
     setExploring(true);
     try {
       const request: ExploreRequest = {
@@ -2014,13 +2098,59 @@ const AssistantView = ({
         locale: preferences.locale,
       };
       const result = await window.desktop.requestExplore(request);
-      if (!result.ok) setExploreError(result.message);
+      if (requestVersion === exploreRequestVersionRef.current && !result.ok) {
+        if (result.code === 'cancelled') return;
+        if (result.code === 'no_context') {
+          setExploreNotice({
+            kind: 'context',
+            title: copy.exploreNoContextTitle,
+            description: copy.exploreNoContextDescription,
+          });
+          return;
+        }
+        if (result.code === 'configuration') {
+          setExploreNotice({
+            kind: 'configuration',
+            title: copy.exploreConfigurationTitle,
+            description: copy.exploreConfigurationDescription,
+          });
+          return;
+        }
+        setExploreNotice({
+          kind: 'error',
+          title: copy.exploreUnavailable,
+          description: copy.exploreRetryDescription,
+        });
+      }
     } catch {
-      setExploreError(copy.exploreUnavailable);
+      if (requestVersion === exploreRequestVersionRef.current) {
+        setExploreNotice({
+          kind: 'error',
+          title: copy.exploreUnavailable,
+          description: copy.exploreRetryDescription,
+        });
+      }
     } finally {
-      setExploring(false);
+      if (requestVersion === exploreRequestVersionRef.current) setExploring(false);
     }
-  }, [copy.exploreUnavailable, exploreConversation, exploring, preferences]);
+  }, [
+    copy.exploreConfigurationDescription,
+    copy.exploreConfigurationTitle,
+    copy.exploreNoContextDescription,
+    copy.exploreNoContextTitle,
+    copy.exploreRetry,
+    copy.exploreRetryDescription,
+    copy.exploreUnavailable,
+    exploreConversation,
+    exploring,
+    preferences,
+  ]);
+
+  useEffect(() => {
+    if (!exploreNotice || exploreNotice.kind === 'configuration') return;
+    const timeout = window.setTimeout(() => setExploreNotice(null), 5_000);
+    return () => window.clearTimeout(timeout);
+  }, [exploreNotice]);
 
   useEffect(
     () =>
@@ -2325,9 +2455,61 @@ const AssistantView = ({
     }, 180);
   };
   const changeCollapsed = async (next: boolean) => {
-    if (!next) await closeMenu();
+    if (!next) {
+      await closeMenu();
+      if (session.connectionState === ConnectionState.Disconnected && !starting) void retry();
+    }
     setCollapsed(next);
     await window.desktop?.setCollapsed(next);
+  };
+  const closeCurrentConversation = useCallback(async () => {
+    if (closingConversation) return;
+    setClosingConversation(true);
+    setBrowserDialog(null);
+    exploreRequestVersionRef.current += 1;
+    setExploring(false);
+    setExploreNotice(null);
+    void window.desktop?.cancelExplore();
+    try {
+      if (preferences.voiceInputMode === 'push_to_talk') await finishPushToTalk(true);
+      else await microphone.toggle(false);
+      await performGuideRpc(guideVoiceRpc.suspendVoice).catch(() => undefined);
+      await endSession();
+    } catch (error) {
+      setControlError(error instanceof Error ? error.message : '结束当前对话失败');
+      return;
+    } finally {
+      setSourcesByMessage({});
+      setPendingSources(null);
+      setTextComposerOpen(false);
+      setTextDraft('');
+      setTextInputError('');
+      setUsedToolsInTurn(false);
+      setClosingConversation(false);
+    }
+    await changeCollapsed(true);
+  }, [
+    changeCollapsed,
+    closingConversation,
+    endSession,
+    finishPushToTalk,
+    microphone,
+    performGuideRpc,
+    preferences.voiceInputMode,
+  ]);
+  const requestCloseConversation = () => {
+    const hasActiveTurn =
+      exploring ||
+      microphone.enabled ||
+      voiceTransitioning ||
+      toolActivity === 'calling' ||
+      agent.state === 'thinking' ||
+      agent.state === 'speaking';
+    if (hasActiveTurn) {
+      setBrowserDialog('end-conversation');
+      return;
+    }
+    void closeCurrentConversation();
   };
   const openUtility = async (kind: UtilityDialog) => {
     await closeMenu();
@@ -2424,8 +2606,15 @@ const AssistantView = ({
                 savePreferences={savePreferences}
                 onClose={() => setBrowserDialog(null)}
               />
-            ) : (
+            ) : browserDialog === 'quit' ? (
               <QuitDialog onClose={() => setBrowserDialog(null)} />
+            ) : (
+              <EndConversationDialog
+                closing={closingConversation}
+                english={english}
+                onClose={() => setBrowserDialog(null)}
+                onConfirm={() => void closeCurrentConversation()}
+              />
             )}
           </div>
         ) : null}
@@ -2436,17 +2625,83 @@ const AssistantView = ({
   return (
     <main className="assistant-card">
       <header className="drag-bar">
-        <GuideExpression state={avatarExpression} />
-        <span className="name">{copy.name}</span>
-        <span
-          className={`status status--${session.connectionState} ${!voiceChannelConnected && !setupBlocked ? 'status--voice-disconnected' : ''}`}
-          title={errorMessage || undefined}
-        >
-          {visibleStatusLabel}
+        <span className="header-explore-control no-drag">
+          <button
+            type="button"
+            className={`header-icon-button header-explore-button ${exploring ? 'is-exploring' : ''} ${exploreNotice ? `has-${exploreNotice.kind}-notice` : ''}`}
+            aria-label={exploring ? copy.exploring : copy.explore}
+            disabled={exploring}
+            onClick={() => void requestExplore()}
+            title={exploring ? copy.exploring : copy.explore}
+          >
+            <CompassIcon className="explore-compass" size={19} aria-hidden="true" />
+          </button>
+          {exploreNotice ? (
+            <span className={`explore-notice explore-notice--${exploreNotice.kind}`} role="status">
+              <strong>{exploreNotice.title}</strong>
+              <small>{exploreNotice.description}</small>
+              <span className="explore-notice-actions">
+                {exploreNotice.kind === 'configuration' ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setExploreNotice(null);
+                      void openUtility('settings');
+                    }}
+                  >
+                    {copy.exploreSettings}
+                  </button>
+                ) : exploreNotice.kind === 'error' ? (
+                  <button type="button" onClick={() => void requestExplore()}>
+                    {copy.exploreRetry}
+                  </button>
+                ) : null}
+                <button
+                  type="button"
+                  className="explore-notice-dismiss"
+                  aria-label={english ? 'Dismiss explore notice' : '关闭探索提示'}
+                  onClick={() => setExploreNotice(null)}
+                  title={english ? 'Dismiss' : '关闭'}
+                >
+                  <XIcon size={12} weight="bold" aria-hidden="true" />
+                </button>
+              </span>
+            </span>
+          ) : null}
         </span>
-        <button className="text-button no-drag" onClick={() => void changeCollapsed(true)}>
-          {copy.collapse}
-        </button>
+        {exploring ? <span className="explore-progress" aria-hidden="true" /> : null}
+        <span
+          className={`header-avatar header-avatar--${avatarPresence}`}
+          data-expression={avatarExpression}
+          title={errorMessage || undefined}
+          aria-label={
+            avatarPresence === 'online' ? (english ? 'Xiaoxiao is online' : '晓晓在线') : undefined
+          }
+        >
+          <GuideExpression state={avatarExpression} />
+        </span>
+        <span className="header-actions no-drag">
+          <button
+            type="button"
+            className="header-icon-button"
+            aria-label={copy.collapse}
+            disabled={closingConversation}
+            onClick={() => void changeCollapsed(true)}
+            title={copy.collapse}
+          >
+            <MinusIcon size={17} weight="bold" aria-hidden="true" />
+          </button>
+          <button
+            type="button"
+            className="header-icon-button header-close-button"
+            aria-label={english ? 'End and close this conversation' : '结束并关闭当前对话'}
+            disabled={closingConversation}
+            onClick={requestCloseConversation}
+            title={english ? 'End and close this conversation' : '结束并关闭当前对话'}
+          >
+            <XIcon size={16} weight="bold" aria-hidden="true" />
+          </button>
+        </span>
       </header>
       {msfsStatus && msfsStatus !== 'ready' ? (
         <div className="msfs-readiness-note" role="status" data-msfs-status={msfsStatus}>
@@ -2512,29 +2767,41 @@ const AssistantView = ({
               </small>
             </div>
           ) : (
-            displayMessages.map((message) =>
-              message.role === 'user' ? (
-                <p key={message.id} className="bubble user">
-                  {message.text}
-                </p>
-              ) : (
-                <div key={message.id} className="guide-reply">
-                  <div className="bubble markdown-content">
-                    <MessageMarkdown onOpenLink={openSource}>{message.text}</MessageMarkdown>
+            <>
+              {displayMessages.map((message) =>
+                message.role === 'user' ? (
+                  <p key={message.id} className="bubble user">
+                    {message.text}
+                  </p>
+                ) : (
+                  <div key={message.id} className="guide-reply">
+                    <div className="bubble markdown-content">
+                      <MessageMarkdown onOpenLink={openSource}>{message.text}</MessageMarkdown>
+                    </div>
+                    {message.sourcePreview ? (
+                      <button
+                        className="source-preview-pill no-drag"
+                        onClick={() => void openSourcePreview(message.sourcePreview!)}
+                      >
+                        <BrowserIcon size={13} weight="duotone" aria-hidden="true" />
+                        <span>{copy.sourceCount(message.sourcePreview.sources.length)}</span>
+                        <CaretDownIcon size={11} weight="bold" aria-hidden="true" />
+                      </button>
+                    ) : null}
                   </div>
-                  {message.sourcePreview ? (
-                    <button
-                      className="source-preview-pill no-drag"
-                      onClick={() => void openSourcePreview(message.sourcePreview!)}
-                    >
-                      <BrowserIcon size={13} weight="duotone" aria-hidden="true" />
-                      <span>{copy.sourceCount(message.sourcePreview.sources.length)}</span>
-                      <CaretDownIcon size={11} weight="bold" aria-hidden="true" />
-                    </button>
-                  ) : null}
+                ),
+              )}
+              {assistantActivity ? (
+                <div className="assistant-activity" role="status" aria-live="polite">
+                  <CircleNotchIcon
+                    className="assistant-activity-icon"
+                    size={13}
+                    aria-hidden="true"
+                  />
+                  <span>{assistantActivity}</span>
                 </div>
-              ),
-            )
+              ) : null}
+            </>
           )}
         </section>
         {hasUnreadMessages ? (
@@ -2641,21 +2908,6 @@ const AssistantView = ({
             <CaretUpIcon size={12} weight="bold" aria-hidden="true" />
           )}
         </button>
-        <button
-          type="button"
-          className="console-text-button console-explore-button"
-          disabled={exploring}
-          onClick={() => void requestExplore()}
-          title={exploring ? copy.exploring : copy.explore}
-        >
-          {exploring ? (
-            <CircleNotchIcon className="source-spinner" size={15} aria-hidden="true" />
-          ) : (
-            <MagnifyingGlassIcon size={15} aria-hidden="true" />
-          )}
-          <span>{exploring ? copy.exploring : copy.explore}</span>
-        </button>
-
         <div
           className="voice-mode-control"
           onBlur={(event) => {
@@ -2818,10 +3070,15 @@ const AssistantView = ({
           )}
         </button>
       </footer>
-      {exploreError ? (
-        <small className="explore-error no-drag" role="alert">
-          {exploreError}
-        </small>
+      {browserDialog === 'end-conversation' ? (
+        <div className="browser-dialog-backdrop">
+          <EndConversationDialog
+            closing={closingConversation}
+            english={english}
+            onClose={() => setBrowserDialog(null)}
+            onConfirm={() => void closeCurrentConversation()}
+          />
+        </div>
       ) : null}
     </main>
   );
@@ -2839,8 +3096,12 @@ type SourceCopy = {
   errorRenderer: string;
   errorTimeout: string;
   explore: string;
+  exploreAdvice(firstTopic: string, secondTopic?: string): string;
+  exploreEncyclopedia: string;
+  exploreGuidance: string;
   exploreSuggestions: string;
   exploreSourcesUnavailable: string;
+  exploreVideo: string;
   loadedPage: string;
   loadingOriginalPage: string;
   loadingPage: string;
@@ -2879,8 +3140,15 @@ const getSourceCopy = (english: boolean): SourceCopy =>
         errorTimeout:
           'The page did not show a first view within 15 seconds. Try again or open it in your system browser.',
         explore: 'Explore',
+        exploreAdvice: (firstTopic, secondTopic) =>
+          secondTopic
+            ? `Start with ${firstTopic}, then use ${secondTopic} to broaden the view.`
+            : `Start with ${firstTopic} to build a clear picture.`,
+        exploreEncyclopedia: 'Encyclopedia',
+        exploreGuidance: 'Browsing suggestion',
         exploreSuggestions: 'Continue chatting',
         exploreSourcesUnavailable: 'Some selected sources are temporarily unavailable.',
+        exploreVideo: 'Video',
         loadedPage: 'Original page loaded',
         loadingOriginalPage: 'Loading original page',
         loadingPage: 'Loading page',
@@ -2914,8 +3182,15 @@ const getSourceCopy = (english: boolean): SourceCopy =>
         errorRenderer: '网页渲染进程意外退出，请重试。',
         errorTimeout: '网页在 15 秒内没有显示首屏，请重试或改用系统浏览器打开。',
         explore: '探索',
+        exploreAdvice: (firstTopic, secondTopic) =>
+          secondTopic
+            ? `建议先从「${firstTopic}」开始，再通过「${secondTopic}」扩展了解。`
+            : `建议先浏览「${firstTopic}」，建立整体认识。`,
+        exploreEncyclopedia: '百科',
+        exploreGuidance: '浏览建议',
         exploreSuggestions: '继续聊',
         exploreSourcesUnavailable: '部分已选来源暂时不可用。',
+        exploreVideo: '视频',
         desktopReading: '桌面网页',
         loadedPage: '原始网页已加载',
         loadingOriginalPage: '正在加载原始页面',
@@ -2998,6 +3273,10 @@ const Source = () => {
     state?.mode === 'preview' && state.preview.type === 'explore.result'
       ? state.preview.result
       : null;
+  const exploreCards = explorePreview?.topics.flatMap((topic) => topic.cards) ?? [];
+  const exploreAdvice = explorePreview
+    ? copy.exploreAdvice(explorePreview.topics[0]?.title ?? '', explorePreview.topics[1]?.title)
+    : null;
 
   return (
     <main className="source-shell">
@@ -3012,6 +3291,8 @@ const Source = () => {
           >
             <ArrowLeftIcon size={17} aria-hidden="true" />
           </button>
+        ) : explorePreview ? (
+          <CompassIcon size={17} color="#476eae" aria-hidden="true" />
         ) : (
           <MagnifyingGlassIcon size={17} color="#476eae" aria-hidden="true" />
         )}
@@ -3127,35 +3408,53 @@ const Source = () => {
           {state.preview.type === 'guide.sources' && state.preview.query ? (
             <p className="source-query">“{state.preview.query}”</p>
           ) : null}
+          {explorePreview ? (
+            <section className="explore-guidance" aria-label={copy.exploreGuidance}>
+              <span className="explore-guidance-title">
+                <SparkleIcon size={15} weight="fill" aria-hidden="true" />
+                <b>{copy.exploreGuidance}</b>
+              </span>
+              <p>{exploreAdvice}</p>
+              <div className="explore-suggestions">
+                <b>{copy.exploreSuggestions}</b>
+                {explorePreview.suggestedPrompts.map((prompt) => (
+                  <button
+                    key={prompt}
+                    type="button"
+                    onClick={() => window.desktop?.prefillExploreSuggestion(prompt)}
+                  >
+                    {prompt}
+                  </button>
+                ))}
+              </div>
+            </section>
+          ) : null}
           {explorePreview
-            ? explorePreview.topics.map((topic) => (
-                <section className="explore-topic" key={topic.id}>
-                  <h2>{topic.title}</h2>
-                  <p>{topic.reason}</p>
-                  {topic.cards.map((card) => (
-                    <button
-                      type="button"
-                      className="source-result no-drag"
-                      key={card.id}
-                      onClick={() => {
-                        rememberListPosition();
-                        void window.desktop?.selectSource(card.url);
-                      }}
-                    >
-                      <span className="source-result-meta">
-                        <span>{card.kind === 'video' ? '▶' : 'W'}</span>
-                        <b>{card.siteName}</b>
-                      </span>
-                      <span className="source-result-body">
-                        <span>
-                          <strong>{card.title}</strong>
-                          {card.summary ? <small>{card.summary}</small> : null}
-                        </span>
-                        {card.thumbnailUrl ? <img src={card.thumbnailUrl} alt="" /> : null}
-                      </span>
-                    </button>
-                  ))}
-                </section>
+            ? exploreCards.map((card) => (
+                <button
+                  type="button"
+                  className="source-result no-drag"
+                  key={card.id}
+                  onClick={() => {
+                    rememberListPosition();
+                    void window.desktop?.selectSource(card.url);
+                  }}
+                >
+                  <span className="source-result-meta">
+                    <span>{card.kind === 'video' ? '▶' : 'W'}</span>
+                    <b>{card.siteName}</b>
+                    <i className="explore-source-kind">
+                      {card.kind === 'video' ? copy.exploreVideo : copy.exploreEncyclopedia}
+                    </i>
+                  </span>
+                  <span className="source-result-body">
+                    <span>
+                      <strong>{card.title}</strong>
+                      {card.summary ? <small>{card.summary}</small> : null}
+                    </span>
+                    {card.thumbnailUrl ? <img src={card.thumbnailUrl} alt="" /> : null}
+                  </span>
+                </button>
               ))
             : previewSources.map((source) => (
                 <button
@@ -3199,20 +3498,6 @@ const Source = () => {
                   </span>
                 </button>
               ))}
-          {explorePreview ? (
-            <section className="explore-suggestions">
-              <b>{copy.exploreSuggestions}</b>
-              {explorePreview.suggestedPrompts.map((prompt) => (
-                <button
-                  key={prompt}
-                  type="button"
-                  onClick={() => window.desktop?.prefillExploreSuggestion(prompt)}
-                >
-                  {prompt}
-                </button>
-              ))}
-            </section>
-          ) : null}
           {explorePreview?.unavailableProviders.length ? (
             <p className="source-query">{copy.exploreSourcesUnavailable}</p>
           ) : null}
