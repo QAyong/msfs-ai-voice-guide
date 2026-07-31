@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { guideSourceSchema, guideSourcesMessageSchema } from './guide-events.js';
+import { exploreResultSchema } from './explore-contracts.js';
 import {
   SOURCE_PAGE_ZOOM_MAX_PERCENT,
   SOURCE_PAGE_ZOOM_MIN_PERCENT,
@@ -7,8 +8,33 @@ import {
 } from './source-page-zoom.js';
 import { isSourceReadingMode, type SourceReadingMode } from './source-reading-preferences.js';
 
+export const companionPreviewSchema = z.discriminatedUnion('type', [
+  guideSourcesMessageSchema.extend({ type: z.literal('guide.sources') }),
+  z.object({ type: z.literal('explore.result'), result: exploreResultSchema }),
+]);
+
+export type CompanionPreview = z.infer<typeof companionPreviewSchema>;
+
+export const companionPreviewSources = (preview: CompanionPreview) => {
+  if (preview.type === 'guide.sources') return preview.sources;
+  return preview.result.topics.flatMap((topic) =>
+    topic.cards.map((card, index) =>
+      guideSourceSchema.parse({
+        rank: index + 1,
+        title: card.title,
+        siteName: card.siteName,
+        url: card.url,
+        ...(card.summary ? { summary: card.summary } : {}),
+        ...(card.thumbnailUrl ? { thumbnailUrl: card.thumbnailUrl } : {}),
+        ...(card.publishTime ? { publishTime: card.publishTime } : {}),
+        openMode: 'in_app',
+      }),
+    ),
+  );
+};
+
 const sourceSelectionSchema = z.object({
-  preview: guideSourcesMessageSchema,
+  preview: companionPreviewSchema,
   source: guideSourceSchema,
   currentUrl: z
     .string()
@@ -24,7 +50,7 @@ const sourceSelectionSchema = z.object({
 });
 
 export const sourceWindowStateSchema = z.discriminatedUnion('mode', [
-  z.object({ mode: z.literal('preview'), preview: guideSourcesMessageSchema }),
+  z.object({ mode: z.literal('preview'), preview: companionPreviewSchema }),
   sourceSelectionSchema.extend({ mode: z.literal('loading') }),
   sourceSelectionSchema.extend({ mode: z.literal('ready') }),
   sourceSelectionSchema.extend({

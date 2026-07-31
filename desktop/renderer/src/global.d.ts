@@ -9,6 +9,7 @@ import type {
   DiagnosticToolEvent,
 } from '../../../shared/desktop-diagnostics.js';
 import type { GuideSourcesMessage } from '../../../shared/guide-events.js';
+import type { ExploreRequest, ExploreResponse } from '../../../shared/explore-contracts.js';
 import type { SourceWindowState } from '../../../shared/source-preview.js';
 import type {
   DesktopServiceSettings,
@@ -72,6 +73,10 @@ declare global {
       setAlwaysOnTop(enabled: boolean): Promise<void>;
       openSource(url: string): Promise<boolean>;
       openSourcePreview(preview: GuideSourcesMessage): Promise<boolean>;
+      requestExplore(request: ExploreRequest): Promise<ExploreResponse>;
+      cancelExplore(): Promise<boolean>;
+      prefillExploreSuggestion(text: string): void;
+      onExplorePrefillSuggestion(callback: (text: string) => void): () => void;
       getSourceState(): Promise<SourceWindowState | null>;
       onSourceState(callback: (state: SourceWindowState) => void): () => void;
       selectSource(url: string): Promise<boolean>;

@@ -1,0 +1,142 @@
+import type {
+  ExploreRequest,
+  ExploreResponse,
+  ExploreResult,
+} from '../../shared/explore-contracts.js';
+import type { ExploreService } from '../../src/explore/service.js';
+import type { MsfsExploreContext } from '../../src/msfs/explore-context.js';
+
+const movementThresholdMeters = 10_000;
+
+type LastSuccess = {
+  conversationFingerprint: string;
+  msfsFingerprint: string | null;
+  result: ExploreResult;
+};
+
+const compact = (value: string) => value.trim().replace(/\s+/gu, ' ').toLocaleLowerCase();
+
+export const conversationFingerprint = (request: ExploreRequest) =>
+  request.recentConversation
+    .map((message) => `${message.id}:${message.role}:${compact(message.text)}`)
+    .join('|');
+
+const distanceMeters = (
+  first: MsfsExploreContext['position'],
+  second: MsfsExploreContext['position'],
+) => {
+  if (!first || !second) return 0;
+  const radius = 6_371_000;
+  const radians = (degrees: number) => (degrees * Math.PI) / 180;
+  const latitude = radians(second.latitude - first.latitude);
+  const longitude = radians(second.longitude - first.longitude);
+  const a =
+    Math.sin(latitude / 2) ** 2 +
+    Math.cos(radians(first.latitude)) *
+      Math.cos(radians(second.latitude)) *
+      Math.sin(longitude / 2) ** 2;
+  return 2 * radius * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+};
+
+const humanPlace = (context: MsfsExploreContext) =>
+  [context.place?.country, context.place?.region, context.place?.city, context.place?.locality]
+    .filter((value): value is string => Boolean(value))
+    .map(compact)
+    .join('|');
+
+const routePlace = (context: MsfsExploreContext) =>
+  [context.route?.originIcao, context.route?.destinationIcao]
+    .filter((value): value is string => Boolean(value))
+    .map(compact)
+    .join('|');
+
+const msfsFingerprint = (context: MsfsExploreContext | undefined) =>
+  context ? `${humanPlace(context)}#${routePlace(context)}` : null;
+
+const hasSignificantMsfsChange = (
+  previous: MsfsExploreContext | undefined,
+  current: MsfsExploreContext | undefined,
+) => {
+  if (!previous || !current) return false;
+  if (humanPlace(previous) !== humanPlace(current) || routePlace(previous) !== routePlace(current))
+    return true;
+  return distanceMeters(previous.position, current.position) >= movementThresholdMeters;
+};
+
+export type ExploreControllerDependencies = {
+  createService(): Promise<ExploreService | null>;
+  getMsfsContext(signal: AbortSignal): Promise<MsfsExploreContext | undefined>;
+  present(result: ExploreResult): Promise<boolean>;
+};
+
+export class ExploreController {
+  private active: AbortController | null = null;
+  private last: (LastSuccess & { msfs: MsfsExploreContext | undefined }) | null = null;
+
+  constructor(private readonly dependencies: ExploreControllerDependencies) {}
+
+  cancel(): void {
+    this.active?.abort();
+  }
+
+  async execute(request: ExploreRequest): Promise<ExploreResponse> {
+    if (this.active) {
+      return { ok: false, code: 'busy', message: '探索正在进行中。' };
+    }
+    const controller = new AbortController();
+    this.active = controller;
+    try {
+      const msfs = await this.dependencies.getMsfsContext(controller.signal);
+      if (!request.recentConversation.length && !msfs) {
+        return { ok: false, code: 'no_context', message: '当前没有可用于探索的对话或飞行上下文。' };
+      }
+      const conversation = conversationFingerprint(request);
+      const shouldReuse =
+        this.last &&
+        conversation === this.last.conversationFingerprint &&
+        !hasSignificantMsfsChange(this.last.msfs, msfs);
+      if (shouldReuse) {
+        const previous = this.last;
+        if (!previous)
+          return { ok: false, code: 'planner_failed', message: '探索状态已失效，请重试。' };
+        await this.dependencies.present(previous.result);
+        return { ok: true, result: previous.result, reused: true };
+      }
+      const service = await this.dependencies.createService();
+      if (!service) {
+        return { ok: false, code: 'configuration', message: '探索服务尚未完成本地配置。' };
+      }
+      const result = await service.explore(
+        {
+          recentConversation: request.recentConversation.map(({ role, text }) => ({ role, text })),
+          ...(msfs ? { msfs } : {}),
+          preferences: request.preferences,
+          locale: request.locale,
+        },
+        controller.signal,
+      );
+      this.last = {
+        conversationFingerprint: conversation,
+        msfsFingerprint: msfsFingerprint(msfs),
+        msfs,
+        result,
+      };
+      await this.dependencies.present(result);
+      return { ok: true, result, reused: false };
+    } catch (error) {
+      if (controller.signal.aborted) {
+        return { ok: false, code: 'cancelled', message: '探索已取消。' };
+      }
+      return {
+        ok: false,
+        code: 'planner_failed',
+        message:
+          error instanceof Error && error.message.includes('Planner')
+            ? '本次无法生成探索主题。'
+            : '本次探索暂时不可用，请稍后重试。',
+      };
+    } finally {
+      if (this.active === controller) this.active = null;
+    }
+  }
+}

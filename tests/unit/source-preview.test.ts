@@ -95,4 +95,53 @@ describe('source preview window state', () => {
       }).success,
     ).toBe(false);
   });
+
+  it('keeps explore previews distinct from guide sources while allowing their cards to open safely', () => {
+    const explore = {
+      type: 'explore.result' as const,
+      result: {
+        schemaVersion: 1 as const,
+        generatedAt: '2026-07-30T00:00:00.000Z',
+        topics: [
+          {
+            id: 'one',
+            title: '塞纳河',
+            reason: '与当前对话有关。',
+            cards: [
+              {
+                id: 'wiki:seine',
+                kind: 'encyclopedia' as const,
+                topicId: 'one',
+                title: '塞纳河',
+                siteName: 'Wikipedia',
+                url: 'https://zh.wikipedia.org/wiki/%E5%A1%9E%E7%BA%B3%E6%B2%B3',
+              },
+            ],
+          },
+          { id: 'two', title: '巴黎', reason: '相关地点。', cards: [] },
+        ],
+        suggestedPrompts: ['为什么巴黎沿河发展？', '从空中怎么看塞纳河？', '附近还有什么地标？'],
+        unavailableProviders: [],
+      },
+    };
+    expect(sourceWindowStateSchema.safeParse({ mode: 'preview', preview: explore }).success).toBe(
+      true,
+    );
+    expect(
+      sourceWindowStateSchema.safeParse({
+        mode: 'ready',
+        preview: explore,
+        source: {
+          rank: 1,
+          title: '塞纳河',
+          siteName: 'Wikipedia',
+          url: 'https://zh.wikipedia.org/wiki/%E5%A1%9E%E7%BA%B3%E6%B2%B3',
+          openMode: 'in_app',
+        },
+        currentUrl: 'https://zh.wikipedia.org/wiki/%E5%A1%9E%E7%BA%B3%E6%B2%B3',
+        pageZoomPercent: 100,
+        readingMode: 'mobile',
+      }).success,
+    ).toBe(true);
+  });
 });
