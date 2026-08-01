@@ -2,7 +2,7 @@
 
 **日期：** 2026-07-29<br />
 **状态：** 已实现<br />
-**关联规格：** [Spec-004](spec-004-web-frontend-and-source-preview.md)、[Spec-009](spec-009-source-window-responsive-layout.md)、[Spec-010](spec-010-temporary-source-page-zoom.md)、[Spec-013](spec-013-about-transcript-resilience-and-source-preview-performance.md)
+**关联规格：** [Spec-004](spec-004-web-frontend-and-source-preview.md)、[Spec-009](spec-009-source-window-responsive-layout.md)、[Spec-010](spec-010-temporary-source-page-zoom.md)、[Spec-013](spec-013-about-transcript-resilience-and-source-preview-performance.md)、[Spec-016](spec-016-source-preview-lightweight-browser.md)
 
 ## 目标
 
@@ -12,20 +12,22 @@
 
 本规格借鉴 Vivaldi Web Panel（网页面板）的用户行为：窄栏优先移动版、必要时切换桌面版、缩放可保留。但不复制 Vivaldi 或 Microsoft Edge 的产品 UI 源码；实现继续复用项目已有的 Electron `WebContentsView`（网页内容视图）、原生窗口拉伸能力和安全加载链路。
 
+本规格只定义原网页的阅读模式、站点缩放和会话偏好。站内导航、网页历史、单标题栏和视频触发后的窗口内自动横屏由 [Spec-016](spec-016-source-preview-lightweight-browser.md) 统一定义，不改变本规格的站点偏好和安全边界。
+
 ## 1. 需求边界
 
 **包含：**
 
 - 保留来源浮窗的默认伴随定位、手动移动后的本次会话自由移动、四边/四角拉伸、关闭和聊天面板收起时同步关闭。
 - 保留 `WebContentsView` 与来源浮窗标题栏下真实可用区域等宽高；用户拉伸窗口时，网页继续获得真实 CSS 视口并自然响应式重排。
-- 对每个原网页来源站点提供“移动阅读”和“桌面网页”两种 User-Agent（用户代理）模式：首次访问站点时默认“移动阅读”。
+- 对每个原网页来源站点提供“移动阅读”和“桌面网页”两种 User-Agent（用户代理）模式：首次访问站点时默认“移动阅读”，哔哩哔哩域名默认“桌面网页”。
 - 在原网页的 `loading`（加载中）、`ready`（已显示）和 `error`（加载失败）状态显示两种模式的切换控件；搜索结果列表不显示。
 - 切换模式后以新的 User-Agent 受控重新加载当前安全 URL；不伪造触摸、设备像素比、屏幕尺寸或特定手机/平板设备。
 - 以规范化 `origin`（协议、主机和端口）为键，跨来源浮窗关闭和应用重启保存阅读模式与网页缩放百分比。
 - 使用命名的持久 Chromium `partition`（会话分区）承载所有来源网页；应用不得读取、导出或上传其中的 Cookie、登录凭据或验证数据。
 - 用户关闭来源浮窗、或收起聊天面板时，销毁当前安全网页文档以释放内存，但不得清理持久会话分区中的站点数据；重新打开时以相同会话受控导航。
 - 保留现有 50% 至 200%、每次 10% 的缩放范围、重置 100% 操作及边界禁用状态；用户调整后立即更新当前站点偏好。
-- 在重新打开同一站点时，于发起网络导航前恢复对应的 User-Agent 模式和缩放；新站点使用“移动阅读”和 100%。
+- 在重新打开同一站点时，于发起网络导航前恢复对应的 User-Agent 模式和缩放；新站点使用“移动阅读”和 100%，哔哩哔哩域名例外为“桌面网页”和 100%。
 - 保留现有来源加载首屏预热、HTTP(S) 校验、沙箱、权限拒绝、导航白名单、外部浏览器打开、超时、错误页和重试逻辑。
 
 **不包含：**
@@ -57,7 +59,7 @@
 
 ### 2.2 移动阅读与桌面网页
 
-- “移动阅读”是新站点的默认模式。主进程在开始 `loadURL()`（加载 URL）前，为当前 `WebContentsView` 设置移动 User-Agent；网站可据此返回移动页面或启用窄屏布局。
+- “移动阅读”是新站点的默认模式；哔哩哔哩域名例外，默认使用“桌面网页”。主进程在开始 `loadURL()`（加载 URL）前，为当前 `WebContentsView` 设置相应 User-Agent；网站可据此返回对应页面或启用窄屏布局。
 - “桌面网页”使用 Chromium 默认桌面 User-Agent，供移动页面缺少内容、站点错误识别、或用户希望查看桌面导航/表格时选择。
 - 用户点击模式切换后，界面明确告知正在重新加载。由于页面版本可能变化，不保证保留页面内表单输入、动态内容、媒体播放或滚动位置；来源 URL、站点会话和安全边界继续遵循现有逻辑。
 - 控件须具有中文无障碍名称、选中态、悬停提示和键盘焦点。模式文案表达“移动阅读”“桌面网页”，不得暗示模拟特定品牌设备。
@@ -83,7 +85,7 @@ type SourceReadingPreference = {
 
 1. 用户在搜索结果预览中选择 HTTP 或 HTTPS 来源。
 2. 主进程先验证 URL，再按该 URL 的规范化 `origin` 读取 `SourceReadingPreference`（来源阅读偏好）。
-3. 若不存在有效偏好，使用“移动阅读 + 100%”。
+3. 若不存在有效偏好，使用“移动阅读 + 100%”；哔哩哔哩域名使用“桌面网页 + 100%”。
 4. 主进程在导航前设置 User-Agent 和缩放，复用或创建现有安全配置的预热 `WebContentsView`。
 5. 来源浮窗显示加载状态；首个可见文档出现后显示网页。
 6. 用户可拉伸浮窗；网页只重排，不重新加载，也不重建 `WebContentsView`。

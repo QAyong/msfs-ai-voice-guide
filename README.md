@@ -14,6 +14,7 @@
 - [桌面真实语音闭环与启动诊断](docs/specs/spec-006-desktop-live-voice-and-readiness.md)
 - [桌面文字输入](docs/specs/spec-007-desktop-text-input.md)
 - [用户触发的探索模式](docs/specs/spec-015-user-triggered-explore-mode.md)
+- [来源预览面板轻量浏览器能力](docs/specs/spec-016-source-preview-lightweight-browser.md)
 - [原生 MSFS CLI 导游工具接入](docs/specs/spec-008-native-msfs-cli-guide-tools.md)
 - [MSFS CLI 发布物集成](docs/architecture/msfs-cli-release-integration.md)
 - [桌面安装包的本地 LiveKit 运行时](docs/specs/spec-011-packaged-local-livekit-runtime.md)
@@ -62,7 +63,7 @@ pnpm run verify
 - 自动启动/检查 Agent Worker、首次配置引导、脱敏故障提示、重试、音量/置顶/窗口状态保存。
 - 独立伴随来源浏览窗，通过隔离的 `WebContentsView` 加载经过校验的 HTTPS 页面，并始终跟随聊天面板定位。
 - 探索结果在伴随窗中以“浏览建议 → 接续问题 → 话题分组 → 行式来源卡”呈现；它与普通搜索来源共用站点、日期、摘要和可选缩略图的视觉层级。Planner 面向宽泛主题生成 3～5 个具体且不重复的词条，360 百科按规范化 URL 去重并优先解析真实词条。
-- 来源窗当前是经过隔离的网页预览与阅读容器；将其扩展为伴随式轻量浏览器（受管理标签页、站内跳转、窗口最大化视频模式）仍是待讨论方案，尚未实现。
+- 来源窗当前沿用隔离的网页预览与阅读容器；下一阶段按 [Spec-016](docs/specs/spec-016-source-preview-lightweight-browser.md) 扩展为单窗口、单标题栏的受控轻量浏览器，支持站内 HTTP(S) 跳转、网页历史和窗口内视频自动横屏，不引入多标签页或第三方播放器。
 
 可使用以下命令验证并打开桌面实现：
 

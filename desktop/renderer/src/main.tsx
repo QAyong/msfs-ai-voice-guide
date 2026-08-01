@@ -27,12 +27,16 @@ import { BookOpenIcon } from '@phosphor-icons/react/dist/csr/BookOpen';
 import { DesktopIcon } from '@phosphor-icons/react/dist/csr/Desktop';
 import { DeviceMobileIcon } from '@phosphor-icons/react/dist/csr/DeviceMobile';
 import { ArrowLeftIcon } from '@phosphor-icons/react/dist/csr/ArrowLeft';
+import { ArrowClockwiseIcon } from '@phosphor-icons/react/dist/csr/ArrowClockwise';
 import { ArrowSquareOutIcon } from '@phosphor-icons/react/dist/csr/ArrowSquareOut';
 import { CaretDownIcon } from '@phosphor-icons/react/dist/csr/CaretDown';
+import { CaretLeftIcon } from '@phosphor-icons/react/dist/csr/CaretLeft';
+import { CaretRightIcon } from '@phosphor-icons/react/dist/csr/CaretRight';
 import { CaretUpIcon } from '@phosphor-icons/react/dist/csr/CaretUp';
 import { CircleNotchIcon } from '@phosphor-icons/react/dist/csr/CircleNotch';
 import { CheckIcon } from '@phosphor-icons/react/dist/csr/Check';
 import { CompassIcon } from '@phosphor-icons/react/dist/csr/Compass';
+import { DotsThreeIcon } from '@phosphor-icons/react/dist/csr/DotsThree';
 import { EyeClosedIcon } from '@phosphor-icons/react/dist/csr/EyeClosed';
 import { EyeIcon } from '@phosphor-icons/react/dist/csr/Eye';
 import { GearSixIcon } from '@phosphor-icons/react/dist/csr/GearSix';
@@ -50,6 +54,7 @@ import { PowerIcon } from '@phosphor-icons/react/dist/csr/Power';
 import { PushPinIcon } from '@phosphor-icons/react/dist/csr/PushPin';
 import { SpeakerHighIcon } from '@phosphor-icons/react/dist/csr/SpeakerHigh';
 import { SparkleIcon } from '@phosphor-icons/react/dist/csr/Sparkle';
+import { StopIcon } from '@phosphor-icons/react/dist/csr/Stop';
 import { VideoCameraIcon } from '@phosphor-icons/react/dist/csr/VideoCamera';
 import { WarningCircleIcon } from '@phosphor-icons/react/dist/csr/WarningCircle';
 import { WaveformIcon } from '@phosphor-icons/react/dist/csr/Waveform';
@@ -84,7 +89,12 @@ import {
   type ExploreRequest,
 } from '../../../shared/explore-contracts.js';
 import { defaultExploreVideoPlatforms } from '../../../shared/explore-defaults.js';
-import { companionPreviewSources, type SourceWindowState } from '../../../shared/source-preview.js';
+import {
+  companionPreviewSources,
+  type SourceMoreMenuAction,
+  type SourceMoreMenuState,
+  type SourceWindowState,
+} from '../../../shared/source-preview.js';
 import { canZoomSourcePageIn, canZoomSourcePageOut } from '../../../shared/source-page-zoom.js';
 import {
   guideVoiceAttributes,
@@ -3106,6 +3116,8 @@ const AssistantView = ({
 
 type SourceCopy = {
   backToSources: string;
+  browserBack: string;
+  browserForward: string;
   close: string;
   closeWindow: string;
   currentZoom(percent: number): string;
@@ -3127,6 +3139,9 @@ type SourceCopy = {
   loadingOriginalPage: string;
   loadingPage: string;
   mobileReading: string;
+  minimize: string;
+  minimizeWindow: string;
+  more: string;
   openExternal: string;
   pageLoadFailed: string;
   pageZoom: string;
@@ -3139,6 +3154,8 @@ type SourceCopy = {
   sourcePage: string;
   sourceCount(count: number): string;
   sources: string;
+  reload: string;
+  stop: string;
   zoomIn: string;
   zoomOut: string;
 };
@@ -3147,6 +3164,8 @@ const getSourceCopy = (english: boolean): SourceCopy =>
   english
     ? {
         backToSources: 'Back to sources',
+        browserBack: 'Back',
+        browserForward: 'Forward',
         close: 'Close',
         closeWindow: 'Close source window',
         currentZoom: (percent) => `Current zoom ${percent}%. Click to reset to 100%.`,
@@ -3175,6 +3194,9 @@ const getSourceCopy = (english: boolean): SourceCopy =>
         loadingOriginalPage: 'Loading original page',
         loadingPage: 'Loading page',
         mobileReading: 'Mobile reading',
+        minimize: 'Minimize',
+        minimizeWindow: 'Minimize source window',
+        more: 'More source actions',
         openExternal: 'Open in system browser',
         pageLoadFailed: "Couldn't open this page",
         pageZoom: 'Page zoom',
@@ -3187,11 +3209,15 @@ const getSourceCopy = (english: boolean): SourceCopy =>
         sourcePage: 'Source page',
         sourceCount: (count) => `${count} source${count === 1 ? '' : 's'} available`,
         sources: 'Sources',
+        reload: 'Reload page',
+        stop: 'Stop loading',
         zoomIn: 'Zoom in',
         zoomOut: 'Zoom out',
       }
     : {
         backToSources: '返回搜索来源',
+        browserBack: '网页后退',
+        browserForward: '网页前进',
         close: '关闭',
         closeWindow: '关闭来源窗口',
         currentZoom: (percent) => `当前缩放 ${percent}% ，点击恢复 100%`,
@@ -3219,6 +3245,9 @@ const getSourceCopy = (english: boolean): SourceCopy =>
         loadingOriginalPage: '正在加载原始页面',
         loadingPage: '正在加载网页',
         mobileReading: '移动阅读',
+        minimize: '最小化',
+        minimizeWindow: '最小化来源窗口',
+        more: '更多网页操作',
         openExternal: '在系统浏览器打开',
         pageLoadFailed: '无法打开这个网页',
         pageZoom: '网页缩放',
@@ -3231,6 +3260,8 @@ const getSourceCopy = (english: boolean): SourceCopy =>
         sourcePage: '原始页面',
         sourceCount: (count) => `${count} 个可查看来源`,
         sources: '搜索来源',
+        reload: '刷新网页',
+        stop: '停止加载',
         zoomIn: '放大网页',
         zoomOut: '缩小网页',
       };
@@ -3278,6 +3309,14 @@ const Source = () => {
 
   const hostname =
     state && state.mode !== 'preview' ? new URL(state.currentUrl).hostname : undefined;
+  const navigation = state && state.mode !== 'preview' ? state.navigation : undefined;
+  const pageTitle =
+    state && state.mode !== 'preview'
+      ? navigation?.pageTitle || state.source.title || hostname
+      : undefined;
+  const canGoBack = state?.mode !== 'error' && navigation?.canGoBack === true;
+  const canGoForward = state?.mode !== 'error' && navigation?.canGoForward === true;
+  const pageIsLoading = state?.mode === 'loading' || navigation?.isLoading === true;
   const rememberListPosition = () => {
     previewScrollTopRef.current = listRef.current?.scrollTop ?? 0;
   };
@@ -3290,6 +3329,9 @@ const Source = () => {
   };
   const setReadingMode = (mode: 'mobile' | 'desktop') => {
     void window.desktop?.setSourceReadingMode(mode);
+  };
+  const navigateSource = (action: 'back' | 'forward' | 'reload' | 'stop') => {
+    void window.desktop?.navigateSource(action);
   };
   const previewSources = state?.mode === 'preview' ? companionPreviewSources(state.preview) : [];
   const explorePreview =
@@ -3325,7 +3367,7 @@ const Source = () => {
               ? explorePreview
                 ? copy.explore
                 : copy.sources
-              : (hostname ?? copy.sourceFallback)}
+              : (pageTitle ?? copy.sourceFallback)}
           </b>
           <small>
             {state?.mode === 'preview'
@@ -3334,11 +3376,50 @@ const Source = () => {
                 ? copy.loadingOriginalPage
                 : state?.mode === 'error'
                   ? copy.pageLoadFailed
-                  : copy.sourcePage}
+                  : (hostname ?? copy.sourcePage)}
           </small>
         </span>
         {state && state.mode !== 'preview' ? (
           <>
+            <div
+              className="source-browser-controls no-drag"
+              role="group"
+              aria-label={copy.sourcePage}
+            >
+              <button
+                type="button"
+                className="source-icon-button"
+                aria-label={copy.browserBack}
+                title={copy.browserBack}
+                disabled={!canGoBack}
+                onClick={() => navigateSource('back')}
+              >
+                <CaretLeftIcon size={15} weight="bold" aria-hidden="true" />
+              </button>
+              <button
+                type="button"
+                className="source-icon-button"
+                aria-label={copy.browserForward}
+                title={copy.browserForward}
+                disabled={!canGoForward}
+                onClick={() => navigateSource('forward')}
+              >
+                <CaretRightIcon size={15} weight="bold" aria-hidden="true" />
+              </button>
+              <button
+                type="button"
+                className="source-icon-button"
+                aria-label={pageIsLoading ? copy.stop : copy.reload}
+                title={pageIsLoading ? copy.stop : copy.reload}
+                onClick={() => navigateSource(pageIsLoading ? 'stop' : 'reload')}
+              >
+                {pageIsLoading ? (
+                  <StopIcon size={14} weight="fill" aria-hidden="true" />
+                ) : (
+                  <ArrowClockwiseIcon size={15} weight="bold" aria-hidden="true" />
+                )}
+              </button>
+            </div>
             <div
               className="source-reading-controls no-drag"
               role="group"
@@ -3398,23 +3479,53 @@ const Source = () => {
             </div>
             <button
               type="button"
-              className="source-icon-button no-drag"
+              className="source-icon-button source-external-button no-drag"
               aria-label={copy.openExternal}
               title={copy.openExternal}
               onClick={() => void window.desktop?.openCurrentSourceExternal()}
             >
               <ArrowSquareOutIcon size={16} aria-hidden="true" />
             </button>
+            <div className="source-more-wrap no-drag">
+              <button
+                type="button"
+                className="source-icon-button"
+                aria-label={copy.more}
+                title={copy.more}
+                aria-haspopup="menu"
+                onMouseDown={(event) => {
+                  event.preventDefault();
+                  void window.desktop?.showSourceMoreMenu();
+                }}
+                onClick={(event) => {
+                  if (event.detail === 0) void window.desktop?.showSourceMoreMenu();
+                }}
+              >
+                <DotsThreeIcon size={18} weight="bold" aria-hidden="true" />
+              </button>
+            </div>
           </>
         ) : null}
-        <button
-          className="source-icon-button no-drag"
-          aria-label={copy.closeWindow}
-          title={copy.close}
-          onClick={() => void window.desktop?.closeSource()}
-        >
-          <XIcon size={16} aria-hidden="true" />
-        </button>
+        <div className="source-window-actions no-drag">
+          <button
+            type="button"
+            className="source-icon-button"
+            aria-label={copy.minimizeWindow}
+            title={copy.minimize}
+            onClick={() => void window.desktop?.minimizeSource()}
+          >
+            <MinusIcon size={16} weight="bold" aria-hidden="true" />
+          </button>
+          <button
+            type="button"
+            className="source-icon-button"
+            aria-label={copy.closeWindow}
+            title={copy.close}
+            onClick={() => void window.desktop?.closeSource()}
+          >
+            <XIcon size={16} aria-hidden="true" />
+          </button>
+        </div>
       </header>
       {!state ? (
         <div className="source-status" role="status">
@@ -3589,6 +3700,103 @@ const Source = () => {
   );
 };
 
+const SourceMoreMenuRoute = () => {
+  const [state, setState] = useState<SourceMoreMenuState | null>(null);
+
+  useEffect(() => {
+    document.body.classList.add('source-more-menu-body');
+    void window.desktop?.getSourceMoreMenuState().then(setState);
+    const unsubscribe = window.desktop?.onSourceMoreMenuState(setState);
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') void window.desktop?.closeSourceMoreMenu();
+    };
+    document.addEventListener('keydown', closeOnEscape);
+    return () => {
+      document.body.classList.remove('source-more-menu-body');
+      document.removeEventListener('keydown', closeOnEscape);
+      unsubscribe?.();
+    };
+  }, []);
+
+  if (!state) return <main className="source-more-menu-root" />;
+  const copy = getSourceCopy(state.locale === 'en-US');
+  const perform = (action: SourceMoreMenuAction) =>
+    void window.desktop?.performSourceMoreMenuAction(action);
+
+  return (
+    <main className="source-more-menu-root">
+      <div className="source-more-menu" role="menu" aria-label={copy.more}>
+        <div className="source-more-menu-section">
+          <button
+            type="button"
+            className="source-more-menu-item"
+            role="menuitemradio"
+            aria-checked={state.readingMode === 'mobile'}
+            onClick={() => perform('mobile')}
+          >
+            <DeviceMobileIcon size={16} aria-hidden="true" />
+            <span>{copy.mobileReading}</span>
+            {state.readingMode === 'mobile' ? <CheckIcon size={15} aria-hidden="true" /> : null}
+          </button>
+          <button
+            type="button"
+            className="source-more-menu-item"
+            role="menuitemradio"
+            aria-checked={state.readingMode === 'desktop'}
+            onClick={() => perform('desktop')}
+          >
+            <DesktopIcon size={16} aria-hidden="true" />
+            <span>{copy.desktopReading}</span>
+            {state.readingMode === 'desktop' ? <CheckIcon size={15} aria-hidden="true" /> : null}
+          </button>
+        </div>
+        <div className="source-more-menu-section">
+          <button
+            type="button"
+            className="source-more-menu-item"
+            role="menuitem"
+            disabled={!state.canZoomOut}
+            onClick={() => perform('zoom-out')}
+          >
+            <MinusIcon size={16} weight="bold" aria-hidden="true" />
+            <span>{copy.zoomOut}</span>
+          </button>
+          <button
+            type="button"
+            className="source-more-menu-item"
+            role="menuitem"
+            onClick={() => perform('zoom-reset')}
+          >
+            <span className="source-more-menu-zoom">{state.pageZoomPercent}%</span>
+            <span>{copy.resetZoom}</span>
+          </button>
+          <button
+            type="button"
+            className="source-more-menu-item"
+            role="menuitem"
+            disabled={!state.canZoomIn}
+            onClick={() => perform('zoom-in')}
+          >
+            <PlusIcon size={16} weight="bold" aria-hidden="true" />
+            <span>{copy.zoomIn}</span>
+          </button>
+        </div>
+        <div className="source-more-menu-section">
+          <button
+            type="button"
+            className="source-more-menu-item"
+            role="menuitem"
+            onClick={() => perform('open-external')}
+          >
+            <ArrowSquareOutIcon size={16} aria-hidden="true" />
+            <span>{copy.openExternal}</span>
+          </button>
+        </div>
+      </div>
+    </main>
+  );
+};
+
 const SettingsRoute = () => {
   const { preferences, savePreferences } = usePreferences();
   return (
@@ -3612,6 +3820,8 @@ const route = location.hash;
 const content =
   route === '#source' ? (
     <Source />
+  ) : route === '#source-menu' ? (
+    <SourceMoreMenuRoute />
   ) : route === '#settings' ? (
     <SettingsRoute />
   ) : route === '#quit' ? (

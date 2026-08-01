@@ -29,7 +29,7 @@ const normaliseWebUrl = (value: string | undefined) => {
 
 export class WikipediaProvider implements EncyclopediaProvider {
   readonly id = 'wikipedia' as const;
-  private readonly gate = new RequestGate(1_000);
+  private readonly gate = new RequestGate(150);
 
   async find(
     candidate: EncyclopediaCandidate,

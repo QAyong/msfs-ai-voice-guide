@@ -82,7 +82,18 @@ declare global {
       selectSource(url: string): Promise<boolean>;
       backToSources(): Promise<boolean>;
       retrySource(): Promise<boolean>;
+      navigateSource(action: 'back' | 'forward' | 'reload' | 'stop'): Promise<boolean>;
+      showSourceMoreMenu(): Promise<boolean>;
+      getSourceMoreMenuState(): Promise<
+        import('../../../shared/source-preview.js').SourceMoreMenuState | null
+      >;
+      onSourceMoreMenuState(
+        callback: (state: import('../../../shared/source-preview.js').SourceMoreMenuState) => void,
+      ): () => void;
+      performSourceMoreMenuAction(action: unknown): Promise<boolean>;
+      closeSourceMoreMenu(): Promise<void>;
       openCurrentSourceExternal(): Promise<boolean>;
+      minimizeSource(): Promise<boolean>;
       closeSource(): Promise<void>;
       setSourcePageZoom(action: 'in' | 'out' | 'reset'): Promise<number | null>;
       setSourceReadingMode(mode: 'mobile' | 'desktop'): Promise<boolean>;

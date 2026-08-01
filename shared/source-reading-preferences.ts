@@ -10,6 +10,7 @@ export type SourceReadingMode = 'mobile' | 'desktop';
 export type SourceReadingPreference = {
   mode: SourceReadingMode;
   zoomPercent: number;
+  modeSelected?: true;
 };
 
 export type SourceReadingPreferences = Record<string, SourceReadingPreference>;
@@ -18,6 +19,14 @@ export const defaultSourceReadingPreference: SourceReadingPreference = {
   mode: 'mobile',
   zoomPercent: SOURCE_PAGE_ZOOM_DEFAULT_PERCENT,
 };
+
+const defaultBilibiliReadingPreference: SourceReadingPreference = {
+  mode: 'desktop',
+  zoomPercent: SOURCE_PAGE_ZOOM_DEFAULT_PERCENT,
+};
+
+const isBilibiliHostname = (hostname: string) =>
+  hostname === 'bilibili.com' || hostname.endsWith('.bilibili.com');
 
 export function sourceReadingOrigin(value: string): string | null {
   try {
@@ -48,7 +57,11 @@ export function normalizeSourceReadingPreference(value: unknown): SourceReadingP
   if (!isSourceReadingMode(candidate.mode) || !isSourceReadingZoomPercent(candidate.zoomPercent)) {
     return null;
   }
-  return { mode: candidate.mode, zoomPercent: candidate.zoomPercent };
+  return {
+    mode: candidate.mode,
+    zoomPercent: candidate.zoomPercent,
+    ...(candidate.modeSelected === true ? { modeSelected: true } : {}),
+  };
 }
 
 export function normalizeSourceReadingPreferences(value: unknown): SourceReadingPreferences {
@@ -68,7 +81,15 @@ export function sourceReadingPreferenceForUrl(
 ): SourceReadingPreference {
   const origin = sourceReadingOrigin(url);
   const preference = origin ? preferences?.[origin] : undefined;
-  return preference ? { ...preference } : { ...defaultSourceReadingPreference };
+  if (origin && isBilibiliHostname(new URL(origin).hostname)) {
+    if (preference?.modeSelected) return { ...preference };
+    return {
+      ...defaultBilibiliReadingPreference,
+      ...(preference ? { zoomPercent: preference.zoomPercent } : {}),
+    };
+  }
+  if (preference) return { ...preference };
+  return { ...defaultSourceReadingPreference };
 }
 
 export function updateSourceReadingPreference(
@@ -84,6 +105,9 @@ export function updateSourceReadingPreference(
     zoomPercent: isSourceReadingZoomPercent(update.zoomPercent)
       ? update.zoomPercent
       : current.zoomPercent,
+    ...(isSourceReadingMode(update.mode) || current.modeSelected
+      ? { modeSelected: true as const }
+      : {}),
   };
   return { ...preferences, [origin]: next };
 }

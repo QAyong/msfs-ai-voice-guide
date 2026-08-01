@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { sourceWindowStateSchema } from '../../shared/source-preview.js';
+import {
+  sourceMoreMenuActionSchema,
+  sourceMoreMenuStateSchema,
+  sourceWindowStateSchema,
+} from '../../shared/source-preview.js';
 
 const preview = {
   type: 'guide.sources' as const,
@@ -70,6 +74,40 @@ describe('source preview window state', () => {
         currentUrl: httpSource.url,
         pageZoomPercent: 110,
         readingMode: 'desktop',
+      }).success,
+    ).toBe(true);
+  });
+
+  it('carries browser navigation and video fullscreen metadata', () => {
+    expect(
+      sourceWindowStateSchema.safeParse({
+        mode: 'ready',
+        preview,
+        source: preview.sources[0]!,
+        currentUrl: preview.sources[0]!.url,
+        pageZoomPercent: 100,
+        readingMode: 'mobile',
+        navigation: {
+          pageTitle: '苏黎世湖 | Example',
+          canGoBack: true,
+          canGoForward: false,
+          isLoading: false,
+          isVideoFullscreen: true,
+        },
+      }).success,
+    ).toBe(true);
+  });
+
+  it('accepts the fixed source more-menu actions and state', () => {
+    expect(sourceMoreMenuActionSchema.safeParse('zoom-in').success).toBe(true);
+    expect(sourceMoreMenuActionSchema.safeParse('arbitrary-url').success).toBe(false);
+    expect(
+      sourceMoreMenuStateSchema.safeParse({
+        locale: 'zh-CN',
+        readingMode: 'mobile',
+        pageZoomPercent: 100,
+        canZoomOut: true,
+        canZoomIn: true,
       }).success,
     ).toBe(true);
   });
