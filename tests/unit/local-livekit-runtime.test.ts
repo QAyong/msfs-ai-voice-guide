@@ -4,6 +4,7 @@ import {
   createLocalLiveKitConfig,
   createLocalLiveKitConnection,
   getLocalLiveKitServerPath,
+  shouldAutoStartLocalLiveKit,
   type LocalLiveKitRuntimeState,
 } from '../../desktop/main/local-livekit-runtime.js';
 
@@ -16,6 +17,13 @@ const state: LocalLiveKitRuntimeState = {
 };
 
 describe('local LiveKit runtime', () => {
+  it('auto-starts by default and requires an explicit false value to stay external', () => {
+    expect(shouldAutoStartLocalLiveKit({})).toBe(true);
+    expect(shouldAutoStartLocalLiveKit({ MSFS_AUTO_START_LIVEKIT: 'true' })).toBe(true);
+    expect(shouldAutoStartLocalLiveKit({ MSFS_AUTO_START_LIVEKIT: 'false' })).toBe(false);
+    expect(shouldAutoStartLocalLiveKit({ MSFS_AUTO_START_LIVEKIT: '  OFF  ' })).toBe(false);
+  });
+
   it('creates a loopback-only LiveKit Server config with dedicated runtime credentials', () => {
     expect(createLocalLiveKitConfig(state)).toBe(`port: 37001
 rtc:

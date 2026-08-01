@@ -21,7 +21,7 @@ Windows 最终用户安装桌面应用后，直接打开应用即可开始本地
 
 ### 开发约定
 
-开发者从官方 Windows 发布物取得经版本、哈希和许可证核验的 `livekit-server.exe`，放入受 Git 忽略的 `resources/livekit/`，并以 `pnpm livekit:dev` 启动本机服务。该命令仅调用 `livekit-server.exe --dev`。开发 `.env` 使用官方开发模式的 `ws://127.0.0.1:7880`、`devkey` 与 `secret`。
+开发者从官方 Windows 发布物取得经版本、哈希和许可证核验的 `livekit-server.exe`，放入受 Git 忽略的 `resources/livekit/`。开发态桌面应用默认自动启动并管理本机服务；只有在 `.env` 中明确设置 `MSFS_AUTO_START_LIVEKIT=false` 时才连接外部或手动启动的 LiveKit。自动启动路径使用动态回环端口和运行时生成的凭据，不使用固定的 `devkey` / `secret`。
 
 `--dev` 只允许用于开发和测试，且只绑定回环地址；安装态必须按本规格生成私有配置和独立凭据。不得以 Docker、全局 LiveKit 安装或远程 LiveKit 服务替代该开发约定。
 

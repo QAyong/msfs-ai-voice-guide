@@ -6,6 +6,7 @@ import {
 import type { MsfsExploreContext } from '../msfs/explore-context.js';
 import { EncyclopediaService } from './encyclopedia/service.js';
 import type { ExplorePlanner } from './planner.js';
+import { isAbortError } from './provider-timeout.js';
 import { VideoService } from './video/service.js';
 
 export type ExploreServiceInput = {
@@ -26,14 +27,27 @@ export class ExploreService {
     if (!input.recentConversation?.length && !input.msfs) {
       throw new Error('Explore requires conversation or MSFS context');
     }
+    const startedAt = Date.now();
     const plan = await this.planner.plan(input, signal);
-    const encyclopedia = await this.encyclopedia.find(
-      input.preferences.encyclopedia,
-      plan,
-      input.locale,
-      signal,
-    );
-    const video = await this.video.find(input.preferences, plan, input.locale, signal);
+    console.info('[explore] planner completed', { elapsedMs: Date.now() - startedAt });
+    const providerStartedAt = Date.now();
+    const [encyclopedia, video] = await Promise.all([
+      this.encyclopedia
+        .find(input.preferences.encyclopedia, plan, input.locale, signal)
+        .catch((error: unknown) => {
+          if (signal?.aborted || isAbortError(error)) throw error;
+          return { cards: [], unavailable: true };
+        }),
+      this.video.find(input.preferences, plan, input.locale, signal).catch((error: unknown) => {
+        if (signal?.aborted || isAbortError(error)) throw error;
+        return { cards: [], unavailable: [...input.preferences.videoPlatforms] };
+      }),
+    ]);
+    console.info('[explore] source discovery completed', {
+      elapsedMs: Date.now() - providerStartedAt,
+      encyclopediaUnavailable: encyclopedia.unavailable,
+      unavailableVideoProviders: video.unavailable,
+    });
     const cardsByTopic = new Map(
       plan.topics.map((topic) => [topic.id, [] as ExploreResult['topics'][number]['cards']]),
     );

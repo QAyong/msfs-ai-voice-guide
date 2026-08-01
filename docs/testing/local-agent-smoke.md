@@ -1,30 +1,28 @@
 # 本地语音与文字 Agent 冒烟测试
 
-**最近一次通过：** 2026-07-19，Electron 中完成语音与文字两条真实链路：连续对话可自动检测轮次结束并经过豆包 STT、DeepSeek 与豆包 TTS；文字输入可通过 LiveKit `lk.chat` 进入同一 AgentSession，显示并播放回答，且回答中发送新文字可以触发打断。用户确认测试没有问题。本地 Worker 健康检查返回 HTTP 200。2026-07-16 已另行验证 `searchWeb` 的真实搜索链路。
+**最近一次通过：** 2026-08-01，开发态 Electron 默认自动启动本地 LiveKit：动态端口 6932、Agent 健康检查 HTTP 200。2026-07-19 已在 Electron 中完成语音与文字两条真实链路：连续对话可自动检测轮次结束并经过豆包 STT、DeepSeek 与豆包 TTS；文字输入可通过 LiveKit `lk.chat` 进入同一 AgentSession，显示并播放回答，且回答中发送新文字可以触发打断。用户确认测试没有问题。2026-07-16 已另行验证 `searchWeb` 的真实搜索链路。
 
 ## 前置条件
 
-- 已启动或已配置可访问的 LiveKit Server（实时音视频房间服务）。
+- `resources/livekit/livekit-server.exe` 已准备好；开发态桌面应用会默认自动启动本地 LiveKit，外部模式才需要预先配置可访问的 Server。
 - 已构建 Electron 桌面客户端；它会自动创建短期 Token、加入唯一房间、分派 Agent 并发布麦克风音频。
 - DeepSeek LLM、豆包流式 ASR 和豆包双向流式 TTS 均已开通，且音色已授权。
 - 如需验证外部信息工具，`.env` 中还需配置 `VOLCENGINE_SEARCH_API_KEY`。
 
-## 启动本机 LiveKit Server（不使用 Docker）
+## 本机 LiveKit Server（不使用 Docker）
 
-本项目的开发、测试和发行路径均不使用 Docker。开发者从 [LiveKit 官方 Windows 发布页](https://github.com/livekit/livekit/releases/latest)获取明确版本的 `livekit-server.exe`，核验上游版本、哈希与许可证后放入受 Git 忽略的 `resources/livekit/`。
+本项目的开发、测试和发行路径均不使用 Docker。开发者从 [LiveKit 官方 Windows 发布页](https://github.com/livekit/livekit/releases/latest)获取明确版本的 `livekit-server.exe`，核验上游版本、哈希与许可证后放入受 Git 忽略的 `resources/livekit/`。开发态桌面应用默认自动启动并管理本地 Server。
 
 ```powershell
-pnpm livekit:dev
+pnpm desktop:preview
 ```
 
-保持该 PowerShell 窗口运行；`--dev` 是 LiveKit 官方的开发模式，默认绑定 `127.0.0.1:7880`，并使用 `devkey` / `secret`。它不得用于安装态或正式发行。需要停止时，在该窗口按 `Ctrl+C`。
+应用会从 `resources/livekit/livekit-server.exe` 启动回环 Server，自动分配端口和本地凭据，并在退出时清理由自己启动的 Server。若需连接外部或手动启动的服务，必须在 `.env` 中明确设置 `MSFS_AUTO_START_LIVEKIT=false`，再填写对应的 LiveKit 连接配置。
 
-在本地 `.env`（环境变量文件）中使用 LiveKit 开发模式默认值：
+如需显式保留自动启动行为，可在本地 `.env`（环境变量文件）中写入：
 
 ```env
-LIVEKIT_URL=ws://127.0.0.1:7880
-LIVEKIT_API_KEY=devkey
-LIVEKIT_API_SECRET=secret
+MSFS_AUTO_START_LIVEKIT=true
 ```
 
 ## 步骤

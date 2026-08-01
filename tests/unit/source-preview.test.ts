@@ -119,6 +119,7 @@ describe('source preview window state', () => {
             ],
           },
           { id: 'two', title: '巴黎', reason: '相关地点。', cards: [] },
+          { id: 'three', title: '埃菲尔铁塔', reason: '代表性地标。', cards: [] },
         ],
         suggestedPrompts: ['为什么巴黎沿河发展？', '从空中怎么看塞纳河？', '附近还有什么地标？'],
         unavailableProviders: [],

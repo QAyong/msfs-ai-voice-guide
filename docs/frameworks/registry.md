@@ -1,6 +1,6 @@
 # 框架登记表
 
-**最后更新：** 2026-07-31
+**最后更新：** 2026-08-01
 
 | 框架或核心库                    | 实际版本 | 版本证据                                                                                                                                                                                          | 对应版本官方文档                                                                 | 项目用途                                                 |
 | ------------------------------- | -------: | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- | -------------------------------------------------------- |
@@ -17,14 +17,13 @@
 | `remark-gfm`                    |    4.0.1 | `package.json`、`pnpm-lock.yaml`                                                                                                                                                                  | [remark-gfm](https://github.com/remarkjs/remark-gfm)                             | 表格、任务列表、删除线等 GFM 扩展                        |
 | Zod                             |    4.4.3 | `package.json`、`pnpm-lock.yaml`                                                                                                                                                                  | [Zod documentation](https://zod.dev/)                                            | 配置、IPC 与来源消息边界校验                             |
 | `archiver`                      |    7.0.1 | `package.json`、`pnpm-lock.yaml`、`node_modules/archiver/package.json`                                                                                                                            | [Archiver API](https://www.archiverjs.com/docs/archiver/)                        | 以流方式生成诊断 ZIP，避免手写归档格式                   |
-| `youtubei.js`                   |   17.2.0 | `package.json`、`pnpm-lock.yaml`、`node_modules/youtubei.js/package.json`                                                                                                                         | [YouTube.js](https://github.com/LuanRT/YouTube.js)                               | 探索模式的 YouTube 公开视频发现；非官方 InnerTube 适配   |
 | `duck-duck-scrape`              |    2.2.7 | `package.json`、`pnpm-lock.yaml`、`node_modules/duck-duck-scrape/package.json`                                                                                                                    | [duck-duck-scrape](https://www.npmjs.com/package/duck-duck-scrape)               | 探索模式的可替换、免费网页发现；域名过滤与限流由项目负责 |
 | Mem0                            |   未安装 | `package.json` 与 `pnpm-lock.yaml` 中不存在 Mem0 依赖                                                                                                                                             | [Mem0 Node SDK](https://docs.mem0.ai/open-source/node-quickstart)                | Spec-005 的长期记忆候选实现，实施前必须固定版本          |
 
 ## 规划依赖说明
 
 - Mem0 目前只是已接受的未来技术方向，不是当前运行时依赖。
-- Explore 模式的 `youtubei.js`、`duck-duck-scrape` 与国内站内搜索页 Provider 已完成自动化验证和桌面构建验证；真实 LiveKit、MSFS 与目标网络下的端到端人工验收尚未完成。详见 [Spec-015](../specs/spec-015-user-triggered-explore-mode.md) 与 [Feature-015 Spike](compliance/feature-015-explore-content-provider-spike.md)。
+- Explore 模式当前接入 Wikipedia、百度百科、360 百科、YouTube 网页搜索和哔哩哔哩站内搜索页；3～5 个具体词条约束、360 百科真实 `/doc/` 解析与 URL 去重已完成自动化验证和桌面构建验证。真实 Electron 来源窗口、LiveKit、MSFS 与目标网络下的端到端人工验收尚未完成。详见 [Spec-015](../specs/spec-015-user-triggered-explore-mode.md) 与 [Feature-015 Spike](compliance/feature-015-explore-content-provider-spike.md)。
 - Mem0 官方 LiveKit 示例当前以 Python 为主；本项目是 TypeScript，因此实施时必须同时核对 Mem0 Node SDK 和已安装 LiveKit Agents 版本，不能直接复制 Python 示例。
 - 在实际安装 Mem0、Embedding 或存储依赖后，必须用锁文件中的精确版本更新本表。
 
@@ -35,4 +34,4 @@
 - 新增或升级核心框架时同步更新本表。
 - 无法找到对应版本文档时，记录所检查的本地源码或 TypeScript 类型定义。
 - LiveKit Server 是独立二进制发布物，不由 pnpm 锁文件管理；将它纳入安装包时必须登记精确版本、上游下载地址、SHA-256 与许可证，不能使用无版本的全局安装或 Docker `latest` 标签。
-- `youtubei.js` 与 `duck-duck-scrape` 均为 MIT；前者使用非官方 YouTube InnerTube 协议，后者依赖非官方 DuckDuckGo 行为。两者必须维持在 `src/explore/` 的可替换 Provider 边界，并在平台策略、可达性或打包行为变化时通过 [Feature-015 Spike](compliance/feature-015-explore-content-provider-spike.md) 复核。
+- `duck-duck-scrape` 为 MIT，但当前 YouTube 探索使用配置的网页搜索服务；平台 URL 过滤与可达性变化必须通过可替换 Provider 边界和 [Feature-015 Spike](compliance/feature-015-explore-content-provider-spike.md) 复核。
