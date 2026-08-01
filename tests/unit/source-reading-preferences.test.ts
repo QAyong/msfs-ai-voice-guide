@@ -15,7 +15,7 @@ describe('source reading preferences', () => {
       { mode: 'desktop', zoomPercent: 110 },
     );
     expect(preferences).toEqual({
-      'https://example.com': { mode: 'desktop', zoomPercent: 110 },
+      'https://example.com': { mode: 'desktop', zoomPercent: 110, modeSelected: true },
     });
     expect(sourceReadingOrigin('https://example.com/article?id=42')).toBe('https://example.com');
   });
@@ -31,10 +31,29 @@ describe('source reading preferences', () => {
     expect(sourceReadingPreferenceForUrl(updatedMode, 'https://example.com/other')).toEqual({
       mode: 'mobile',
       zoomPercent: 130,
+      modeSelected: true,
     });
     expect(sourceReadingPreferenceForUrl(updatedMode, 'https://other.example/article')).toEqual(
       defaultSourceReadingPreference,
     );
+  });
+
+  it('migrates legacy Bilibili mobile defaults while retaining explicit choices', () => {
+    expect(
+      sourceReadingPreferenceForUrl({}, 'https://www.bilibili.com/video/BV1xx411c7mD'),
+    ).toEqual({ mode: 'desktop', zoomPercent: 100 });
+    expect(
+      sourceReadingPreferenceForUrl(
+        { 'https://www.bilibili.com': { mode: 'mobile', zoomPercent: 120 } },
+        'https://www.bilibili.com/video/BV1xx411c7mD',
+      ),
+    ).toEqual({ mode: 'desktop', zoomPercent: 120 });
+    expect(
+      sourceReadingPreferenceForUrl(
+        { 'https://www.bilibili.com': { mode: 'mobile', zoomPercent: 120, modeSelected: true } },
+        'https://www.bilibili.com/video/BV1xx411c7mD',
+      ),
+    ).toEqual({ mode: 'mobile', zoomPercent: 120, modeSelected: true });
   });
 
   it('drops malformed, unsafe, and non-stepped persisted preferences', () => {

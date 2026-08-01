@@ -16,7 +16,12 @@ import type { AppConfig } from '../../src/config/schema.js';
 import { guideSourcesMessageSchema, type GuideSource } from '../../shared/guide-events.js';
 import {
   companionPreviewSources,
+  sourceMoreMenuActionSchema,
+  sourceMoreMenuStateSchema,
   type CompanionPreview,
+  type SourceMoreMenuAction,
+  type SourceMoreMenuState,
+  type SourceWindowNavigation,
   type SourceWindowState,
 } from '../../shared/source-preview.js';
 import {
@@ -102,9 +107,12 @@ import {
   workerFailureReadiness,
 } from './readiness.js';
 import { createDesktopSessionCredentials } from './session-token.js';
-import { getSourceViewBounds } from './source-view-bounds.js';
+import { getSourceViewBounds, SOURCE_TITLE_BAR_HEIGHT } from './source-view-bounds.js';
+import { getLandscapeSourceWindowBounds } from './source-window-fullscreen.js';
 import {
   SOURCE_PAGE_ZOOM_DEFAULT_PERCENT,
+  canZoomSourcePageIn,
+  canZoomSourcePageOut,
   clampSourcePageZoomPercent,
   resetSourcePageZoomPercent,
   sourcePageZoomFactorFromPercent,
@@ -138,6 +146,13 @@ import { DiagnosticLogger, writeDiagnosticArchive } from './diagnostics.js';
 import { withSourceAcceptLanguage } from './source-locale.js';
 import { ExploreController } from './explore-controller.js';
 
+const ignoreProcessOutputErrors = (stream: NodeJS.WriteStream) => {
+  stream.on('error', () => undefined);
+};
+
+ignoreProcessOutputErrors(process.stdout);
+ignoreProcessOutputErrors(process.stderr);
+
 const mainFilename = fileURLToPath(import.meta.url);
 const mainDir = dirname(mainFilename);
 
@@ -145,6 +160,7 @@ const assistantSize = { width: 320, height: 360 };
 const collapsedSize = { width: 64, height: 72 };
 const collapsedMenuSize = { width: 64, height: 174 };
 const sourceSize = { width: 440, height: 600 };
+const sourceMoreMenuSize = { width: 188, height: 234 };
 const settingsSize = { width: 620, height: 640 };
 const quitDialogSize = { width: 328, height: 224 };
 const sourceLoadTimeoutMs = 15_000;
@@ -159,6 +175,8 @@ type VisibleServiceCredentials = Record<ServiceCredentialKey, string>;
 
 let assistantWindow: BrowserWindow | null = null;
 let sourceWindow: BrowserWindow | null = null;
+let sourceMoreMenuWindow: BrowserWindow | null = null;
+let sourceMoreMenuPrewarm: Promise<BrowserWindow | null> | null = null;
 let sourceView: WebContentsView | null = null;
 let sourceViewAttached = false;
 let sourceViewLoad: ((source: GuideSource, initialUrl: string) => void) | null = null;
@@ -167,9 +185,21 @@ let selectedSource: GuideSource | null = null;
 let sourceWindowState: SourceWindowState | null = null;
 let sourceLoadTimer: NodeJS.Timeout | null = null;
 let sourceViewPrewarm: Promise<WebContentsView | null> | null = null;
+let sourceMoreMenuBlurTimer: NodeJS.Timeout | null = null;
 let sourcePageZoomPercent = SOURCE_PAGE_ZOOM_DEFAULT_PERCENT;
 let sourceReadingMode: SourceReadingMode = defaultSourceReadingPreference.mode;
 let sourceReadingPreferences: SourceReadingPreferences = {};
+const defaultSourceNavigationState: SourceWindowNavigation = {
+  pageTitle: '',
+  canGoBack: false,
+  canGoForward: false,
+  isLoading: false,
+  isVideoFullscreen: false,
+};
+let sourceNavigationState: SourceWindowNavigation = { ...defaultSourceNavigationState };
+let isSourceVideoFullscreen = false;
+let sourceVideoFullscreenRestoreBounds: Electron.Rectangle | null = null;
+let sourceWindowNormalBounds: Electron.Rectangle | null = null;
 let utilityWindow: BrowserWindow | null = null;
 let assistantCollapsed = false;
 let assistantMenuOpen = false;
@@ -636,6 +666,13 @@ const isSourceSender = (sender: Electron.WebContents) =>
     sender === sourceWindow.webContents,
   );
 
+const isSourceMoreMenuSender = (sender: Electron.WebContents) =>
+  Boolean(
+    isLiveWindow(sourceMoreMenuWindow) &&
+    !sourceMoreMenuWindow.webContents.isDestroyed() &&
+    sender === sourceMoreMenuWindow.webContents,
+  );
+
 const isSafeWebUrl = (value: string) => {
   try {
     const url = new URL(value);
@@ -849,9 +886,96 @@ const setSourcePosition = (x: number, y: number) => {
   }, 0);
 };
 
+const setSourceWindowBounds = (bounds: Electron.Rectangle) => {
+  if (!isLiveWindow(sourceWindow)) return;
+  const window = sourceWindow;
+  const currentBounds = window.getBounds();
+  if (
+    currentBounds.x === bounds.x &&
+    currentBounds.y === bounds.y &&
+    currentBounds.width === bounds.width &&
+    currentBounds.height === bounds.height
+  ) {
+    return;
+  }
+  isPositioningSource = true;
+  window.setBounds(bounds);
+  setTimeout(() => {
+    isPositioningSource = false;
+  }, 0);
+};
+
+const isSourceWindowDisplaySized = (bounds: Electron.Rectangle) => {
+  const display = screen.getDisplayMatching(bounds);
+  return bounds.width >= display.workArea.width - 2 && bounds.height >= display.workArea.height - 2;
+};
+
 const setSourceViewBounds = () => {
   if (!isLiveWindow(sourceWindow) || !sourceView || sourceView.webContents.isDestroyed()) return;
   sourceView.setBounds(getSourceViewBounds(sourceWindow.getContentSize()));
+};
+
+const canNavigateSourceHistory = (contents: Electron.WebContents, offset: -1 | 1) => {
+  const entries = contents.navigationHistory.getAllEntries();
+  const targetIndex = contents.navigationHistory.getActiveIndex() + offset;
+  const targetEntry = entries[targetIndex];
+  return Boolean(targetEntry && isSafeWebUrl(targetEntry.url));
+};
+
+const getSourceNavigationState = (view = sourceView): SourceWindowNavigation => {
+  const contents = view && !view.webContents.isDestroyed() ? view.webContents : null;
+  return {
+    pageTitle: contents?.getTitle() || selectedSource?.title || '',
+    canGoBack: contents
+      ? contents.navigationHistory.canGoBack() && canNavigateSourceHistory(contents, -1)
+      : false,
+    canGoForward: contents
+      ? contents.navigationHistory.canGoForward() && canNavigateSourceHistory(contents, 1)
+      : false,
+    isLoading: contents?.isLoading() ?? false,
+    isVideoFullscreen: isSourceVideoFullscreen,
+  };
+};
+
+const resetSourceNavigationState = () => {
+  sourceNavigationState = { ...defaultSourceNavigationState };
+};
+
+const publishSourceNavigationState = () => {
+  if (!sourceWindowState || sourceWindowState.mode === 'preview') return;
+  sourceNavigationState = getSourceNavigationState();
+  publishSourceWindowState({ ...sourceWindowState });
+};
+
+const leaveSourceVideoFullscreen = (publish = true) => {
+  const restoreBounds = sourceVideoFullscreenRestoreBounds;
+  if (!isSourceVideoFullscreen && !restoreBounds) return;
+  isSourceVideoFullscreen = false;
+  sourceVideoFullscreenRestoreBounds = null;
+  if (restoreBounds) setSourceWindowBounds(restoreBounds);
+  sourceNavigationState = {
+    ...getSourceNavigationState(),
+    isVideoFullscreen: false,
+  };
+  if (publish) publishSourceNavigationState();
+};
+
+const enterSourceVideoFullscreen = (view: WebContentsView) => {
+  if (!isLiveWindow(sourceWindow) || sourceView !== view || isSourceVideoFullscreen) return;
+  const currentBounds = sourceWindow.getBounds();
+  const restoreBounds =
+    sourceWindowNormalBounds && !isSourceWindowDisplaySized(sourceWindowNormalBounds)
+      ? sourceWindowNormalBounds
+      : currentBounds;
+  const display = screen.getDisplayMatching(restoreBounds);
+  sourceVideoFullscreenRestoreBounds = restoreBounds;
+  isSourceVideoFullscreen = true;
+  setSourceWindowBounds(getLandscapeSourceWindowBounds(restoreBounds, display.workArea));
+  sourceNavigationState = {
+    ...getSourceNavigationState(view),
+    isVideoFullscreen: true,
+  };
+  publishSourceNavigationState();
 };
 
 const resetSourcePageZoom = () => {
@@ -909,6 +1033,7 @@ const destroySourceView = () => {
   clearSourceLoadTimer();
   sourceViewLoad = null;
   sourceViewPrewarm = null;
+  leaveSourceVideoFullscreen(false);
   if (!sourceView) return;
   const view = sourceView;
   sourceView = null;
@@ -924,9 +1049,11 @@ const destroySourceView = () => {
 };
 
 const publishSourceWindowState = (state: SourceWindowState) => {
-  sourceWindowState = state;
+  const nextState =
+    state.mode === 'preview' ? state : { ...state, navigation: sourceNavigationState };
+  sourceWindowState = nextState;
   if (isLiveWindow(sourceWindow) && !sourceWindow.webContents.isDestroyed()) {
-    sourceWindow.webContents.send('source:state', state);
+    sourceWindow.webContents.send('source:state', nextState);
   }
 };
 
@@ -963,6 +1090,10 @@ const failSourceLoad = (
   statusCode?: number,
 ) => {
   if (!sourcePreview || !selectedSource || sourceView !== view) return;
+  sourceNavigationState = {
+    ...getSourceNavigationState(view),
+    isLoading: false,
+  };
   destroySourceView();
   publishSourceWindowState({
     mode: 'error',
@@ -1014,6 +1145,7 @@ const positionSourceNextToAssistant = () => {
   if (
     !isLiveWindow(assistantWindow) ||
     !isLiveWindow(sourceWindow) ||
+    isSourceVideoFullscreen ||
     !shouldFollowAssistantWindow(sourceWindowFollowMode)
   )
     return;
@@ -1026,6 +1158,15 @@ const positionSourceNextToAssistant = () => {
     display.workArea,
   );
   setSourcePosition(placement.x, placement.y);
+};
+
+const restoreSourceWindow = (focus: boolean) => {
+  if (!isLiveWindow(sourceWindow)) return false;
+  if (sourceWindow.isMinimized()) sourceWindow.restore();
+  positionSourceNextToAssistant();
+  sourceWindow.show();
+  if (focus) sourceWindow.focus();
+  return true;
 };
 
 const handleAssistantMove = () => {
@@ -1069,6 +1210,7 @@ const createSourceView = () => {
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,
+      disableHtmlFullscreenWindowResize: true,
       // Keep one named Chromium profile for all source pages. Its cookies and
       // user-completed verification state survive document recreation and restarts.
       partition: sourceSessionPartition,
@@ -1097,6 +1239,10 @@ const createSourceView = () => {
     clearSourceLoadTimer();
     attachSourceView(view);
     applySourcePageZoom();
+    sourceNavigationState = {
+      ...getSourceNavigationState(view),
+      isLoading: false,
+    };
     publishSourceWindowState({
       mode: 'ready',
       preview: sourcePreview,
@@ -1110,11 +1256,40 @@ const createSourceView = () => {
   sourceView = view;
   sourceViewAttached = false;
   view.webContents.setWindowOpenHandler((details) => {
-    if (isSafeWebUrl(details.url)) void shell.openExternal(details.url);
+    if (!isSafeWebUrl(details.url) || sourceView !== view || view.webContents.isDestroyed()) {
+      return { action: 'deny' };
+    }
+    queueMicrotask(() => {
+      if (sourceView !== view || view.webContents.isDestroyed()) return;
+      void view.webContents.loadURL(details.url).catch((error: unknown) => {
+        if (!navigation || sourceView !== view) return;
+        failSourceLoad(
+          view,
+          navigation.currentUrl,
+          'network',
+          error instanceof Error ? `网络加载失败：${error.message}` : '网络加载失败。',
+        );
+      });
+    });
     return { action: 'deny' };
   });
-  view.webContents.session.setPermissionRequestHandler((_webContents, _permission, callback) =>
-    callback(false),
+  view.webContents.on('enter-html-full-screen', () => enterSourceVideoFullscreen(view));
+  view.webContents.on('leave-html-full-screen', () => leaveSourceVideoFullscreen());
+  const isAllowedSourceFullscreenRequest = (
+    webContents: Electron.WebContents | null,
+    requestingUrl: string,
+  ) => webContents === view.webContents && sourceView === view && isSafeWebUrl(requestingUrl);
+  view.webContents.session.setPermissionCheckHandler(
+    (webContents, permission, requestingOrigin, details) =>
+      permission === 'fullscreen' &&
+      isAllowedSourceFullscreenRequest(webContents, details.requestingUrl ?? requestingOrigin),
+  );
+  view.webContents.session.setPermissionRequestHandler(
+    (webContents, permission, callback, details) =>
+      callback(
+        permission === 'fullscreen' &&
+          isAllowedSourceFullscreenRequest(webContents, details.requestingUrl),
+      ),
   );
   view.webContents.session.webRequest.onBeforeSendHeaders((details, callback) => {
     callback({ requestHeaders: withSourceAcceptLanguage(details.requestHeaders, guideLocale) });
@@ -1161,6 +1336,11 @@ const createSourceView = () => {
     delete navigation.responseStatusCode;
     navigation.visible = false;
     detachSourceView(view);
+    sourceNavigationState = {
+      ...getSourceNavigationState(view),
+      pageTitle: navigation.source.title,
+      isLoading: true,
+    };
     publishSourceWindowState({
       mode: 'loading',
       preview: sourcePreview!,
@@ -1170,6 +1350,44 @@ const createSourceView = () => {
       readingMode: sourceReadingMode,
     });
     startSourceLoadTimer(view, targetUrl);
+  });
+  view.webContents.on('did-navigate', (_event, targetUrl) => {
+    if (!navigation || sourceView !== view) return;
+    navigation.currentUrl = targetUrl;
+    sourceNavigationState = getSourceNavigationState(view);
+    if (sourceWindowState && sourceWindowState.mode !== 'preview') {
+      publishSourceWindowState({
+        ...sourceWindowState,
+        currentUrl: targetUrl,
+      });
+    }
+  });
+  view.webContents.on('did-navigate-in-page', (_event, targetUrl, isMainFrame) => {
+    if (!navigation || !isMainFrame || sourceView !== view) return;
+    navigation.currentUrl = targetUrl;
+    sourceNavigationState = getSourceNavigationState(view);
+    if (sourceWindowState && sourceWindowState.mode !== 'preview') {
+      publishSourceWindowState({
+        ...sourceWindowState,
+        currentUrl: targetUrl,
+      });
+    }
+  });
+  view.webContents.on('page-title-updated', (_event, title) => {
+    if (!navigation || sourceView !== view) return;
+    sourceNavigationState = {
+      ...getSourceNavigationState(view),
+      pageTitle: title,
+    };
+    publishSourceNavigationState();
+  });
+  view.webContents.on('did-stop-loading', () => {
+    if (!navigation || sourceView !== view) return;
+    sourceNavigationState = {
+      ...getSourceNavigationState(view),
+      isLoading: false,
+    };
+    publishSourceNavigationState();
   });
   view.webContents.on('dom-ready', showFirstVisibleDocument);
   view.webContents.on('did-finish-load', showFirstVisibleDocument);
@@ -1201,6 +1419,11 @@ const createSourceView = () => {
   sourceViewLoad = (source, initialUrl) => {
     navigation = { currentUrl: initialUrl, source, visible: false };
     detachSourceView(view);
+    sourceNavigationState = {
+      ...getSourceNavigationState(view),
+      pageTitle: source.title,
+      isLoading: true,
+    };
     publishSourceWindowState({
       mode: 'loading',
       preview: sourcePreview!,
@@ -1257,6 +1480,186 @@ const showRemoteSource = async (source: GuideSource, options: SourceLoadOptions 
   applySourcePageZoom();
   sourceViewLoad(source, initialUrl);
   return true;
+};
+
+const currentSourceUrl = () =>
+  sourceWindowState && sourceWindowState.mode !== 'preview'
+    ? sourceWindowState.currentUrl
+    : selectedSource?.url;
+
+const setSourceReadingMode = async (mode: SourceReadingMode) => {
+  if (!selectedSource || mode === sourceReadingMode) return Boolean(selectedSource);
+  const currentUrl = currentSourceUrl();
+  if (!currentUrl || !isSafeWebUrl(currentUrl)) return false;
+  sourceReadingMode = mode;
+  persistSourceReadingPreference({ mode });
+  return showRemoteSource(selectedSource, { url: currentUrl, readingMode: mode });
+};
+
+const setSourcePageZoom = (action: 'in' | 'out' | 'reset') => {
+  if (!sourceWindowState || sourceWindowState.mode === 'preview') return null;
+  if (action === 'reset') return setSourcePageZoomPercent(resetSourcePageZoomPercent());
+  const direction: SourcePageZoomDirection = action;
+  return setSourcePageZoomPercent(stepSourcePageZoomPercent(sourcePageZoomPercent, direction));
+};
+
+const openCurrentSourceExternal = async () => {
+  const currentUrl = currentSourceUrl();
+  if (!currentUrl || !isSafeWebUrl(currentUrl)) return false;
+  await shell.openExternal(currentUrl);
+  return true;
+};
+
+const clearSourceMoreMenuBlurTimer = () => {
+  if (!sourceMoreMenuBlurTimer) return;
+  clearTimeout(sourceMoreMenuBlurTimer);
+  sourceMoreMenuBlurTimer = null;
+};
+
+const hideSourceMoreMenu = () => {
+  clearSourceMoreMenuBlurTimer();
+  if (isLiveWindow(sourceMoreMenuWindow) && sourceMoreMenuWindow.isVisible()) {
+    sourceMoreMenuWindow.hide();
+  }
+};
+
+const hideSourceMoreMenuAfterBlur = () => {
+  clearSourceMoreMenuBlurTimer();
+  sourceMoreMenuBlurTimer = setTimeout(() => {
+    sourceMoreMenuBlurTimer = null;
+    hideSourceMoreMenu();
+  }, 100);
+};
+
+const destroySourceMoreMenu = () => {
+  clearSourceMoreMenuBlurTimer();
+  sourceMoreMenuPrewarm = null;
+  if (isLiveWindow(sourceMoreMenuWindow)) sourceMoreMenuWindow.destroy();
+  sourceMoreMenuWindow = null;
+};
+
+const positionSourceMoreMenu = () => {
+  if (!isLiveWindow(sourceWindow) || !isLiveWindow(sourceMoreMenuWindow)) return;
+  const sourceBounds = sourceWindow.getBounds();
+  const display = screen.getDisplayMatching(sourceBounds);
+  const workArea = display.workArea;
+  const x = Math.max(
+    workArea.x + 8,
+    Math.min(
+      sourceBounds.x + sourceBounds.width - sourceMoreMenuSize.width - 6,
+      workArea.x + workArea.width - sourceMoreMenuSize.width - 8,
+    ),
+  );
+  const y = Math.max(
+    workArea.y + 8,
+    Math.min(
+      sourceBounds.y + SOURCE_TITLE_BAR_HEIGHT - 2,
+      workArea.y + workArea.height - sourceMoreMenuSize.height - 8,
+    ),
+  );
+  sourceMoreMenuWindow.setBounds({ x, y, ...sourceMoreMenuSize });
+};
+
+const getSourceMoreMenuState = (): SourceMoreMenuState | null => {
+  if (!sourceWindowState || sourceWindowState.mode === 'preview') return null;
+  return sourceMoreMenuStateSchema.parse({
+    locale: guideLocale,
+    readingMode: sourceReadingMode,
+    pageZoomPercent: sourcePageZoomPercent,
+    canZoomOut: canZoomSourcePageOut(sourcePageZoomPercent),
+    canZoomIn: canZoomSourcePageIn(sourcePageZoomPercent),
+  });
+};
+
+const publishSourceMoreMenuState = (state: SourceMoreMenuState) => {
+  if (!isLiveWindow(sourceMoreMenuWindow) || sourceMoreMenuWindow.webContents.isDestroyed()) {
+    return;
+  }
+  sourceMoreMenuWindow.webContents.send('source-more-menu:state', state);
+};
+
+const ensureSourceMoreMenuWindow = async (): Promise<BrowserWindow | null> => {
+  if (isLiveWindow(sourceMoreMenuWindow)) return sourceMoreMenuWindow;
+  if (sourceMoreMenuPrewarm) return sourceMoreMenuPrewarm;
+  const parentWindow = sourceWindow;
+  if (!isLiveWindow(parentWindow)) return null;
+  const prewarm = (async () => {
+    const window = new BrowserWindow({
+      parent: parentWindow,
+      width: sourceMoreMenuSize.width,
+      height: sourceMoreMenuSize.height,
+      frame: false,
+      transparent: true,
+      resizable: false,
+      alwaysOnTop: true,
+      skipTaskbar: true,
+      show: false,
+      backgroundColor: '#00000000',
+      webPreferences: {
+        preload: join(mainDir, '../preload/index.cjs'),
+        contextIsolation: true,
+        nodeIntegration: false,
+        sandbox: true,
+      },
+    });
+    sourceMoreMenuWindow = window;
+    window.setAlwaysOnTop(true, 'floating');
+    attachDevelopmentDiagnostics(window);
+    window.on('blur', hideSourceMoreMenuAfterBlur);
+    window.on('closed', () => {
+      sourceMoreMenuWindow = releaseWindowReference(sourceMoreMenuWindow, window);
+    });
+    try {
+      await loadRenderer(window, 'source-menu');
+      return sourceWindow === parentWindow && isLiveWindow(window) ? window : null;
+    } catch (error) {
+      console.error('Failed to prewarm source more menu', error);
+      if (!window.isDestroyed()) window.destroy();
+      sourceMoreMenuWindow = releaseWindowReference(sourceMoreMenuWindow, window);
+      return null;
+    }
+  })();
+  sourceMoreMenuPrewarm = prewarm;
+  try {
+    return await prewarm;
+  } finally {
+    if (sourceMoreMenuPrewarm === prewarm) sourceMoreMenuPrewarm = null;
+  }
+};
+
+const showSourceMoreMenu = async () => {
+  clearSourceMoreMenuBlurTimer();
+  const state = getSourceMoreMenuState();
+  if (!isLiveWindow(sourceWindow) || !state) return false;
+  const window = await ensureSourceMoreMenuWindow();
+  if (!window || sourceMoreMenuWindow !== window || !isLiveWindow(sourceWindow)) return false;
+  if (window.isVisible()) {
+    hideSourceMoreMenu();
+    return true;
+  }
+  positionSourceMoreMenu();
+  publishSourceMoreMenuState(state);
+  window.show();
+  window.focus();
+  return true;
+};
+
+const performSourceMoreMenuAction = async (action: SourceMoreMenuAction) => {
+  let succeeded: boolean;
+  if (action === 'mobile' || action === 'desktop') {
+    succeeded = await setSourceReadingMode(action);
+  } else if (action === 'zoom-out') {
+    succeeded = setSourcePageZoom('out') !== null;
+  } else if (action === 'zoom-reset') {
+    succeeded = setSourcePageZoom('reset') !== null;
+  } else if (action === 'zoom-in') {
+    succeeded = setSourcePageZoom('in') !== null;
+  } else {
+    succeeded = await openCurrentSourceExternal();
+  }
+  hideSourceMoreMenu();
+  if (isLiveWindow(sourceWindow)) sourceWindow.focus();
+  return succeeded;
 };
 
 const createAssistantWindow = async () => {
@@ -1352,16 +1755,29 @@ const createSourceWindow = async () => {
     },
   });
   sourceWindow = window;
+  sourceWindowNormalBounds = window.getBounds();
   sourceWindowFollowMode = startSourceWindowSession();
   window.setAlwaysOnTop(true, 'floating');
   attachDevelopmentDiagnostics(window);
+  window.on('enter-html-full-screen', () => {
+    if (sourceView) enterSourceVideoFullscreen(sourceView);
+  });
+  window.on('leave-html-full-screen', () => leaveSourceVideoFullscreen());
   window.on('resize', () => {
     if (sourceWindow !== window || !isLiveWindow(window)) return;
     setSourceViewBounds();
-    schedulePersistWindowState();
+    positionSourceMoreMenu();
+    if (!isSourceVideoFullscreen && !isSourceWindowDisplaySized(window.getBounds())) {
+      sourceWindowNormalBounds = window.getBounds();
+      schedulePersistWindowState();
+    }
   });
   window.on('moved', () => {
     if (sourceWindow !== window || !isLiveWindow(window)) return;
+    positionSourceMoreMenu();
+    if (isSourceVideoFullscreen) return;
+    if (!isSourceWindowDisplaySized(window.getBounds()))
+      sourceWindowNormalBounds = window.getBounds();
     sourceWindowFollowMode = updateSourceWindowFollowMode(
       sourceWindowFollowMode,
       isPositioningSource,
@@ -1369,17 +1785,23 @@ const createSourceWindow = async () => {
   });
   const releaseSourceWindow = () => {
     if (sourceWindow !== window) return;
+    destroySourceMoreMenu();
+    leaveSourceVideoFullscreen(false);
     destroySourceView();
     sourceWindow = releaseWindowReference(sourceWindow, window);
     sourcePreview = null;
     selectedSource = null;
     sourceWindowState = null;
+    resetSourceNavigationState();
+    sourceWindowNormalBounds = null;
     resetSourceReadingPreference();
     sourceWindowFollowMode = startSourceWindowSession();
   };
   window.on('close', releaseSourceWindow);
   window.on('closed', releaseSourceWindow);
+  window.on('hide', hideSourceMoreMenu);
   await loadRenderer(window, 'source');
+  void ensureSourceMoreMenuWindow();
   void ensurePrewarmedSourceView();
 };
 
@@ -1758,9 +2180,7 @@ ipcMain.handle('source:open', async (event, url: string) => {
   sourcePreview = preview;
   selectedSource = preview.sources[0] ?? null;
   if (!isLiveWindow(sourceWindow)) await createSourceWindow();
-  if (!isLiveWindow(sourceWindow)) return false;
-  positionSourceNextToAssistant();
-  sourceWindow.show();
+  if (!restoreSourceWindow(false)) return false;
   return selectedSource ? showRemoteSource(selectedSource) : false;
 });
 
@@ -1768,20 +2188,27 @@ const openCompanionPreview = async (preview: CompanionPreview) => {
   sourcePreview = preview;
   selectedSource = null;
   destroySourceView();
+  resetSourceNavigationState();
   resetSourceReadingPreference();
   publishSourceWindowState({ mode: 'preview', preview });
   if (!isLiveWindow(sourceWindow)) await createSourceWindow();
-  if (!isLiveWindow(sourceWindow)) return false;
-  positionSourceNextToAssistant();
-  sourceWindow.show();
-  sourceWindow.focus();
+  if (!restoreSourceWindow(true)) return false;
   publishSourceWindowState({ mode: 'preview', preview });
   void ensurePrewarmedSourceView();
   return true;
 };
 
-const openExplorePreview = async (result: ExploreResult) =>
-  openCompanionPreview({ type: 'explore.result', result });
+const openExplorePreview = async (result: ExploreResult) => {
+  if (
+    isLiveWindow(sourceWindow) &&
+    !sourceWindow.isVisible() &&
+    sourcePreview?.type === 'explore.result' &&
+    sourcePreview.result === result
+  ) {
+    return restoreSourceWindow(true);
+  }
+  return openCompanionPreview({ type: 'explore.result', result });
+};
 
 ipcMain.handle('source:open-preview', async (event, value: unknown) => {
   if (!isLiveWindow(assistantWindow) || !isAssistantSender(event.sender)) return false;
@@ -1831,6 +2258,7 @@ ipcMain.handle('source:back', (event) => {
   if (!isSourceSender(event.sender) || !sourcePreview) return false;
   destroySourceView();
   selectedSource = null;
+  resetSourceNavigationState();
   resetSourceReadingPreference();
   publishSourceWindowState({ mode: 'preview', preview: sourcePreview });
   void ensurePrewarmedSourceView();
@@ -1846,45 +2274,85 @@ ipcMain.handle('source:retry', (event) => {
   return showRemoteSource(selectedSource, { url: retryUrl });
 });
 
-ipcMain.handle('source:set-page-zoom', (event, action: 'in' | 'out' | 'reset') => {
-  if (!isSourceSender(event.sender) || !sourceWindowState || sourceWindowState.mode === 'preview') {
-    return null;
-  }
-  if (action === 'reset') {
-    return setSourcePageZoomPercent(resetSourcePageZoomPercent());
-  }
-  if (action !== 'in' && action !== 'out') return null;
-  const direction: SourcePageZoomDirection = action;
-  return setSourcePageZoomPercent(stepSourcePageZoomPercent(sourcePageZoomPercent, direction));
-});
-
-ipcMain.handle('source:set-reading-mode', async (event, mode: unknown) => {
+ipcMain.handle('source:navigate', (event, action: unknown) => {
   if (
     !isSourceSender(event.sender) ||
-    !selectedSource ||
-    (mode !== 'mobile' && mode !== 'desktop')
+    !sourceView ||
+    sourceView.webContents.isDestroyed() ||
+    !sourceWindowState ||
+    sourceWindowState.mode === 'preview'
   ) {
     return false;
   }
-  if (mode === sourceReadingMode) return true;
-  const currentUrl =
-    sourceWindowState && sourceWindowState.mode !== 'preview'
-      ? sourceWindowState.currentUrl
-      : selectedSource.url;
-  if (!isSafeWebUrl(currentUrl)) return false;
-  sourceReadingMode = mode;
-  persistSourceReadingPreference({ mode });
-  return showRemoteSource(selectedSource, { url: currentUrl, readingMode: mode });
+  const contents = sourceView.webContents;
+  if (action === 'back') {
+    if (!contents.navigationHistory.canGoBack() || !canNavigateSourceHistory(contents, -1)) {
+      return false;
+    }
+    contents.navigationHistory.goBack();
+  } else if (action === 'forward') {
+    if (!contents.navigationHistory.canGoForward() || !canNavigateSourceHistory(contents, 1)) {
+      return false;
+    }
+    contents.navigationHistory.goForward();
+  } else if (action === 'reload') {
+    contents.reload();
+  } else if (action === 'stop') {
+    contents.stop();
+    sourceNavigationState = {
+      ...getSourceNavigationState(),
+      isLoading: false,
+    };
+    publishSourceNavigationState();
+  } else {
+    return false;
+  }
+  if (action !== 'stop') publishSourceNavigationState();
+  return true;
+});
+
+ipcMain.handle('source:set-page-zoom', (event, action: unknown) => {
+  if (
+    !isSourceSender(event.sender) ||
+    (action !== 'in' && action !== 'out' && action !== 'reset')
+  ) {
+    return null;
+  }
+  return setSourcePageZoom(action);
+});
+
+ipcMain.handle('source:show-more-menu', (event) =>
+  isSourceSender(event.sender) ? showSourceMoreMenu() : false,
+);
+
+ipcMain.handle('source-more-menu:get-state', (event) =>
+  isSourceMoreMenuSender(event.sender) ? getSourceMoreMenuState() : null,
+);
+
+ipcMain.handle('source-more-menu:perform', async (event, action: unknown) => {
+  if (!isSourceMoreMenuSender(event.sender)) return false;
+  const parsed = sourceMoreMenuActionSchema.safeParse(action);
+  return parsed.success ? performSourceMoreMenuAction(parsed.data) : false;
+});
+
+ipcMain.handle('source-more-menu:close', (event) => {
+  if (!isSourceMoreMenuSender(event.sender)) return;
+  hideSourceMoreMenu();
+});
+
+ipcMain.handle('source:set-reading-mode', async (event, mode: unknown) => {
+  if (!isSourceSender(event.sender) || (mode !== 'mobile' && mode !== 'desktop')) return false;
+  return setSourceReadingMode(mode);
 });
 
 ipcMain.handle('source:open-current-external', async (event) => {
-  if (!isSourceSender(event.sender) || !selectedSource) return false;
-  const currentUrl =
-    sourceWindowState && sourceWindowState.mode !== 'preview'
-      ? sourceWindowState.currentUrl
-      : selectedSource.url;
-  if (!isSafeWebUrl(currentUrl)) return false;
-  await shell.openExternal(currentUrl);
+  if (!isSourceSender(event.sender)) return false;
+  return openCurrentSourceExternal();
+});
+
+ipcMain.handle('source:minimize', (event) => {
+  if (!isSourceSender(event.sender) || !isLiveWindow(sourceWindow)) return false;
+  sourceWindow.hide();
   return true;
 });
 

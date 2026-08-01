@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { ExploreController } from '../../desktop/main/explore-controller.js';
 import type { ExploreService } from '../../src/explore/service.js';
 
@@ -47,6 +47,21 @@ describe('ExploreController', () => {
     await expect(controller.execute(request)).resolves.toMatchObject({ ok: true, reused: true });
     expect(calls).toBe(1);
     expect(presented).toHaveLength(2);
+  });
+
+  it('does not turn successful exploration into a failure when console output is unavailable', async () => {
+    const consoleInfo = vi.spyOn(console, 'info').mockImplementation(() => {
+      throw new Error('EPIPE: broken pipe');
+    });
+    const controller = new ExploreController({
+      createService: async () => ({ explore: async () => result }) as unknown as ExploreService,
+      getMsfsContext: async () => undefined,
+      present: async () => true,
+    });
+
+    await expect(controller.execute(request)).resolves.toMatchObject({ ok: true });
+    expect(consoleInfo).not.toHaveBeenCalled();
+    consoleInfo.mockRestore();
   });
 
   it('does not require MSFS when submitted conversation is available', async () => {

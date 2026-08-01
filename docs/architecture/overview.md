@@ -95,14 +95,14 @@ graph TD
 
 职责划分：
 
-| 桌面模块                            | 职责                                                          | 安全边界                                                             |
-| ----------------------------------- | ------------------------------------------------------------- | -------------------------------------------------------------------- |
-| Electron Main Process（主进程）     | 窗口编排、短期 Token、配置诊断、Worker 生命周期和状态持久化   | 校验 IPC 与 URL；API Secret 不进入 Renderer                          |
-| Assistant BrowserWindow（助手窗口） | Room 连接、聊天气泡、麦克风发布、回答播放、实时状态与来源卡片 | 只加载应用本地可信 UI；只持有短期参与者 Token                        |
-| Agent Utility Process               | 启动/停止 LiveKit Worker，并隔离其进程池                      | 不阻塞 Electron 主进程；错误通过脱敏 Readiness DTO 返回              |
-| Source BrowserWindow（来源窗口）    | 域名、关闭、拉伸及默认伴随助手窗口                            | 本地窗口框架与第三方网页内容分离；手动移动后本次打开期间保持自由位置 |
-| WebContentsView（隔离网页视图）     | 加载用户选择的 HTTPS 百科或其他源页面                         | 禁用 Node 集成；开启上下文隔离与沙箱；拒绝权限和任意新窗口           |
-| Node AI Agent                       | LiveKit、LLM、STT、TTS 和 `searchWeb` 工具编排                | 不依赖桌面 Renderer；继续复用现有配置与搜索边界                      |
+| 桌面模块                            | 职责                                                                     | 安全边界                                                             |
+| ----------------------------------- | ------------------------------------------------------------------------ | -------------------------------------------------------------------- |
+| Electron Main Process（主进程）     | 窗口编排、短期 Token、配置诊断、Worker 生命周期和状态持久化              | 校验 IPC 与 URL；API Secret 不进入 Renderer                          |
+| Assistant BrowserWindow（助手窗口） | Room 连接、聊天气泡、麦克风发布、回答播放、实时状态与来源卡片            | 只加载应用本地可信 UI；只持有短期参与者 Token                        |
+| Agent Utility Process               | 启动/停止 LiveKit Worker，并隔离其进程池                                 | 不阻塞 Electron 主进程；错误通过脱敏 Readiness DTO 返回              |
+| Source BrowserWindow（来源窗口）    | 单标题栏导航、域名、关闭、拉伸、站内跳转、视频自动横屏及默认伴随助手窗口 | 本地窗口框架与第三方网页内容分离；手动移动后本次打开期间保持自由位置 |
+| WebContentsView（隔离网页视图）     | 加载用户选择的 HTTPS 百科、视频或其他源页面，并保留 Chromium 网页历史    | 禁用 Node 集成；开启上下文隔离与沙箱；拒绝权限和未经策略允许的新窗口 |
+| Node AI Agent                       | LiveKit、LLM、STT、TTS 和 `searchWeb` 工具编排                           | 不依赖桌面 Renderer；继续复用现有配置与搜索边界                      |
 
 MSFS 数据由 Agent 中的 `src/msfs/` 适配层调用随应用分发的 `msfs.exe` / `msfsd.exe`，并且只通过真实 MSFS 2024 的 SimConnect 获取。桌面 Renderer 不直接运行 CLI；模拟器不可用时，Agent 返回脱敏不可用状态而不生成位置、航路或天气数据。
 
@@ -125,7 +125,7 @@ sequenceDiagram
     Source-->>User: 显示原始网页
 ```
 
-远程页面不能共享助手窗口的 Preload 或 IPC。正式实现使用当前 Electron 推荐的 `WebContentsView`，不使用已弃用的 `BrowserView`，也不把 `<webview>` 作为首选方案。来源网页使用真实内容区的响应式视口、默认 100% 缩放；详细交互、安全检查和验收条件见 [Spec-004](../specs/spec-004-web-frontend-and-source-preview.md) 与 [Spec-009](../specs/spec-009-source-window-responsive-layout.md)。
+远程页面不能共享助手窗口的 Preload 或 IPC。正式实现使用当前 Electron 推荐的 `WebContentsView`，不使用已弃用的 `BrowserView`，也不把 `<webview>` 作为首选方案。来源网页使用真实内容区的响应式视口、默认 100% 缩放；轻量浏览器的单标题栏、官方网页历史、站内 HTTP(S) 导航和视频窗口内自动横屏见 [Spec-016](../specs/spec-016-source-preview-lightweight-browser.md)，基础来源预览与响应式布局见 [Spec-004](../specs/spec-004-web-frontend-and-source-preview.md)、[Spec-009](../specs/spec-009-source-window-responsive-layout.md) 和 [Spec-014](../specs/spec-014-source-window-adaptive-reading-and-site-preferences.md)。
 
 ## 模块职责与依赖方向
 

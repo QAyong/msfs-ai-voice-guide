@@ -105,7 +105,6 @@ export class ExploreController {
     }
     const controller = new AbortController();
     this.active = controller;
-    const startedAt = Date.now();
     try {
       const conversation = conversationFingerprint(request);
       const msfsPromise = this.dependencies.getMsfsContext(controller.signal);
@@ -116,9 +115,6 @@ export class ExploreController {
       ) {
         this.refreshCachedMsfsContext(conversation, msfsPromise);
         await this.dependencies.present(this.last.result);
-        console.info('[explore] cache presentation completed', {
-          elapsedMs: Date.now() - startedAt,
-        });
         return { ok: true, result: this.last.result, reused: true };
       }
 
@@ -148,10 +144,6 @@ export class ExploreController {
         result,
       };
       await this.dependencies.present(result);
-      console.info('[explore] result presentation completed', {
-        elapsedMs: Date.now() - startedAt,
-        usedMsfsContext: Boolean(msfs),
-      });
       return { ok: true, result, reused: false };
     } catch (error) {
       if (controller.signal.aborted) {

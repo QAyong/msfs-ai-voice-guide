@@ -47,6 +47,15 @@ const sourceSelectionSchema = z.object({
     .max(SOURCE_PAGE_ZOOM_MAX_PERCENT)
     .refine((value) => value % SOURCE_PAGE_ZOOM_STEP_PERCENT === 0),
   readingMode: z.custom<SourceReadingMode>(isSourceReadingMode),
+  navigation: z
+    .object({
+      pageTitle: z.string(),
+      canGoBack: z.boolean(),
+      canGoForward: z.boolean(),
+      isLoading: z.boolean(),
+      isVideoFullscreen: z.boolean(),
+    })
+    .optional(),
 });
 
 export const sourceWindowStateSchema = z.discriminatedUnion('mode', [
@@ -62,3 +71,32 @@ export const sourceWindowStateSchema = z.discriminatedUnion('mode', [
 ]);
 
 export type SourceWindowState = z.infer<typeof sourceWindowStateSchema>;
+export type SourceWindowNavigation = NonNullable<
+  Extract<SourceWindowState, { mode: 'loading' }>['navigation']
+>;
+
+export const sourceMoreMenuActionSchema = z.enum([
+  'mobile',
+  'desktop',
+  'zoom-out',
+  'zoom-reset',
+  'zoom-in',
+  'open-external',
+]);
+
+export type SourceMoreMenuAction = z.infer<typeof sourceMoreMenuActionSchema>;
+
+export const sourceMoreMenuStateSchema = z.object({
+  locale: z.enum(['zh-CN', 'en-US']),
+  readingMode: z.custom<SourceReadingMode>(isSourceReadingMode),
+  pageZoomPercent: z
+    .number()
+    .int()
+    .min(SOURCE_PAGE_ZOOM_MIN_PERCENT)
+    .max(SOURCE_PAGE_ZOOM_MAX_PERCENT)
+    .refine((value) => value % SOURCE_PAGE_ZOOM_STEP_PERCENT === 0),
+  canZoomOut: z.boolean(),
+  canZoomIn: z.boolean(),
+});
+
+export type SourceMoreMenuState = z.infer<typeof sourceMoreMenuStateSchema>;

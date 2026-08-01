@@ -7,6 +7,7 @@ import {
   diagnosticConversationRecordSchema,
   diagnosticToolEventSchema,
 } from '../../shared/desktop-diagnostics.js';
+import { sourceMoreMenuActionSchema } from '../../shared/source-preview.js';
 import type {
   DiagnosticConversationRecord,
   DiagnosticExportResult,
@@ -150,7 +151,32 @@ contextBridge.exposeInMainWorld('desktop', {
   selectSource: (url: string) => ipcRenderer.invoke('source:select', url),
   backToSources: () => ipcRenderer.invoke('source:back'),
   retrySource: () => ipcRenderer.invoke('source:retry'),
+  navigateSource: (action: 'back' | 'forward' | 'reload' | 'stop') =>
+    ipcRenderer.invoke('source:navigate', action) as Promise<boolean>,
+  showSourceMoreMenu: () => ipcRenderer.invoke('source:show-more-menu') as Promise<boolean>,
+  getSourceMoreMenuState: () =>
+    ipcRenderer.invoke('source-more-menu:get-state') as Promise<
+      import('../../shared/source-preview.js').SourceMoreMenuState | null
+    >,
+  onSourceMoreMenuState: (
+    callback: (state: import('../../shared/source-preview.js').SourceMoreMenuState) => void,
+  ) => {
+    const listener = (
+      _event: Electron.IpcRendererEvent,
+      state: import('../../shared/source-preview.js').SourceMoreMenuState,
+    ) => callback(state);
+    ipcRenderer.on('source-more-menu:state', listener);
+    return () => ipcRenderer.removeListener('source-more-menu:state', listener);
+  },
+  performSourceMoreMenuAction: (action: unknown) => {
+    const parsed = sourceMoreMenuActionSchema.safeParse(action);
+    return parsed.success
+      ? (ipcRenderer.invoke('source-more-menu:perform', parsed.data) as Promise<boolean>)
+      : Promise.resolve(false);
+  },
+  closeSourceMoreMenu: () => ipcRenderer.invoke('source-more-menu:close'),
   openCurrentSourceExternal: () => ipcRenderer.invoke('source:open-current-external'),
+  minimizeSource: () => ipcRenderer.invoke('source:minimize') as Promise<boolean>,
   closeSource: () => ipcRenderer.invoke('source:close'),
   setSourcePageZoom: (action: 'in' | 'out' | 'reset') =>
     ipcRenderer.invoke('source:set-page-zoom', action) as Promise<number | null>,

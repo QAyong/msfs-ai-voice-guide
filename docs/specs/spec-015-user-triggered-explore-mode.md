@@ -1,16 +1,16 @@
 # Spec-015：用户触发的探索模式
 
 **日期：** 2026-07-30<br />
-**最后更新：** 2026-08-01<br />
+**最后更新：** 2026-08-02<br />
 **状态：** 已实现；人工未验收<br />
 **前置决策：** [ADR-006](../adr/adr-006-search-access-boundary.md)、[ADR-008](../adr/adr-008-native-msfs-cli-agent-boundary.md)、[ADR-010](../adr/adr-010-secure-desktop-settings-global-ptt-and-diagnostics.md)<br />
-**关联规格：** [Spec-007](spec-007-desktop-text-input.md)、[Spec-008](spec-008-native-msfs-cli-guide-tools.md)、[Spec-012](spec-012-desktop-settings-localization-global-ptt-and-diagnostics.md)、[Spec-014](spec-014-source-window-adaptive-reading-and-site-preferences.md)
+**关联规格：** [Spec-007](spec-007-desktop-text-input.md)、[Spec-008](spec-008-native-msfs-cli-guide-tools.md)、[Spec-012](spec-012-desktop-settings-localization-global-ptt-and-diagnostics.md)、[Spec-014](spec-014-source-window-adaptive-reading-and-site-preferences.md)、[Spec-016](spec-016-source-preview-lightweight-browser.md)
 
 ## 目标
 
 增加一项由用户主动发起的“探索”能力。用户在聊天面板点击“探索”后，应用以最近已提交的对话为主要线索，并在可用时以当前 MSFS 人文地理与航路信息增强，规划 3～5 个值得继续了解的具体词条；宽泛主题优先规划 5 个，聚焦问题规划 3～4 个。随后从用户已选择的百科与视频平台取得**真实**网页资源，展示为可浏览卡片，并提供 3 条可回填至文字输入框的接续问题。
 
-## 当前实现状态（2026-08-01）
+## 当前实现状态（2026-08-02）
 
 - Explore Planner、百科/视频 Provider 编排、3～5 个具体词条约束和探索结果契约已接入。
 - Planner 会拒绝重复的 `encyclopediaQuery`、topic id 和重复语义的词条；360 百科服务会按规范化 URL 去重，并在可用时把搜索结果解析为真实 `/doc/` 词条，解析不到时才保留搜索页兜底。
@@ -18,7 +18,7 @@
 - 抖音百科、抖音视频和 TikTok 不在当前可选平台中，不作为已支持的探索 Provider 对外承诺。
 - Electron 主进程启动时的路径变量命名冲突已修复，避免打包注入的 `__dirname` 与源码重复声明。
 - 对话驱动探索不等待 MSFS：Planner 立即使用对话开始，MSFS 在后台刷新同会话缓存；相同对话直接恢复上一份结果。百科与视频发现并行执行，Wikipedia、百度百科、360 百科、YouTube 和哔哩哔哩均有独立来源超时，超时只标记该来源不可用，不阻塞其它结果。
-- 自动化验证已通过：`pnpm test`（149 passed、8 skipped）、桌面 TypeScript 检查、目标文件 ESLint 与 Prettier。上述结果不等同于人工验收；真实 Electron 窗口、目标网络和真实 LiveKit/MSFS 场景仍待人工确认。
+- 自动化验证已通过：`pnpm test`（165 passed、8 skipped）、桌面 TypeScript 检查、目标文件 ESLint 与 Prettier。上述结果不等同于人工验收；真实 Electron 窗口、目标网络和真实 LiveKit/MSFS 场景仍待人工确认。
 
 探索模式是“发现与规划”，不是第二个导游 Agent，也不是现有 `searchWeb` 回答来源的另一种外观。它不得替换、写入或阻塞 LiveKit `AgentSession`，也不得让模型编造网页、视频或元数据。
 
@@ -223,7 +223,7 @@ flowchart TD
   F --> D["Assistant Renderer textDraft"]
 ```
 
-`ExploreService` 不导入 Electron、LiveKit、`BrowserWindow` 或 Renderer 代码。Main 创建整次请求的 `AbortController`，同一桌面会话同时最多运行一个请求；按钮执行期间禁用。对话存在时 Planner 不等待 MSFS；Planner 后百科与视频并行。当前来源时限为 Wikipedia 4 秒、百度百科 2.5 秒、360 百科 3 秒、YouTube 4 秒、哔哩哔哩 1.5 秒；超时返回部分结果。目标是首个可用结果 2～4 秒、完整结果不因单来源超过 8 秒。关闭探索窗口不影响 LiveKit 会话；用户取消或开始新的探索时中止未完成的网页请求。
+`ExploreService` 不导入 Electron、LiveKit、`BrowserWindow` 或 Renderer 代码。Main 创建整次请求的 `AbortController`，同一桌面会话同时最多运行一个请求；按钮执行期间禁用。对话存在时 Planner 不等待 MSFS；Planner 后百科与视频并行。当前来源时限为 Wikipedia 4 秒、百度百科 2.5 秒、360 百科 3 秒、YouTube 4 秒、哔哩哔哩 1.5 秒；Wikipedia 的公开 API 请求按短间隔串行，确保一个 3～5 词条批次可在该总时限内完成。超时返回部分结果。目标是首个可用结果 2～4 秒、完整结果不因单来源超过 8 秒。关闭探索窗口不影响 LiveKit 会话；用户取消或开始新的探索时中止未完成的网页请求。
 
 ## 7. Provider 约束与分阶段范围
 
@@ -268,11 +268,11 @@ Explore Preview
 
 探索预览不得因为用户关闭来源窗而删除上次 `ExploreResult`；同会话的再次点击仍可恢复它。助手窗口收起时继续按现有生命周期关闭来源窗和销毁远程 `WebContentsView`。
 
-### 8.3 待讨论：伴随式轻量浏览器
+### 8.3 伴随式轻量浏览器
 
-当前来源窗只是“可信预览列表 + 单页 `WebContentsView`”，并非完整浏览器。后续可讨论将它扩展为伴随式轻量浏览器：受管理标签页、在应用内处理安全 HTTP(S) 新窗口跳转、后退/前进/刷新/地址栏、桌面与移动阅读模式、站点持久 Cookie、播放恢复与崩溃恢复。
+探索卡片打开后的网页能力统一遵循 [Spec-016：来源预览面板轻量浏览器能力](spec-016-source-preview-lightweight-browser.md)：来源窗继续是独立的 `Source BrowserWindow`，使用同一个隔离 `WebContentsView` 和单标题栏；安全 HTTP(S) 站内跳转留在来源窗内，网页后退/前进使用 Electron 官方导航历史，返回来源列表与网页后退保持独立。
 
-视频“全屏”只考虑**窗口最大化播放**：来源窗占满当前显示器工作区、保留任务栏和显式退出控制；不调用操作系统原生全屏，也不复用 Edge Profile、侧栏或权限。该方案尚未立项或实现，仍需单独完成安全模型、交互原型、B 站/YouTube 实机兼容性和回归测试评审。
+视频触发标准 HTML 全屏后，来源窗自动调整为横向视频比例，视频填充当前来源窗口的网页工作区；不创建第二个窗口、不调用系统级全屏、不占满显示器。退出后恢复进入前的来源窗尺寸和位置。多标签页、地址栏、书签和第三方播放器仍不属于探索模式第一版范围。
 
 ## 9. 失败、隐私、安全与合规
 
