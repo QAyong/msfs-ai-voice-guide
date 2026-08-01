@@ -29,6 +29,13 @@ export type LocalLiveKitRuntimeOptions = {
   runtimeDirectory: string;
 };
 
+const falseValues = new Set(['0', 'false', 'no', 'off']);
+
+export function shouldAutoStartLocalLiveKit(environment: NodeJS.ProcessEnv = process.env): boolean {
+  const value = environment.MSFS_AUTO_START_LIVEKIT?.trim().toLowerCase();
+  return value === undefined || !falseValues.has(value);
+}
+
 export function getLocalLiveKitServerPath(options: {
   isPackaged: boolean;
   resourcesPath: string;

@@ -23,6 +23,7 @@ import {
 } from '@livekit/components-react';
 import { ConnectionState, serializers, TokenSource, Track } from 'livekit-client';
 import { BrowserIcon } from '@phosphor-icons/react/dist/csr/Browser';
+import { BookOpenIcon } from '@phosphor-icons/react/dist/csr/BookOpen';
 import { DesktopIcon } from '@phosphor-icons/react/dist/csr/Desktop';
 import { DeviceMobileIcon } from '@phosphor-icons/react/dist/csr/DeviceMobile';
 import { ArrowLeftIcon } from '@phosphor-icons/react/dist/csr/ArrowLeft';
@@ -49,6 +50,7 @@ import { PowerIcon } from '@phosphor-icons/react/dist/csr/Power';
 import { PushPinIcon } from '@phosphor-icons/react/dist/csr/PushPin';
 import { SpeakerHighIcon } from '@phosphor-icons/react/dist/csr/SpeakerHigh';
 import { SparkleIcon } from '@phosphor-icons/react/dist/csr/Sparkle';
+import { VideoCameraIcon } from '@phosphor-icons/react/dist/csr/VideoCamera';
 import { WarningCircleIcon } from '@phosphor-icons/react/dist/csr/WarningCircle';
 import { WaveformIcon } from '@phosphor-icons/react/dist/csr/Waveform';
 import { XIcon } from '@phosphor-icons/react/dist/csr/X';
@@ -78,8 +80,10 @@ import {
 } from '../../../shared/guide-events.js';
 import {
   explorePreferencesSchema,
+  type ExploreVideoPlatform,
   type ExploreRequest,
 } from '../../../shared/explore-contracts.js';
+import { defaultExploreVideoPlatforms } from '../../../shared/explore-defaults.js';
 import { companionPreviewSources, type SourceWindowState } from '../../../shared/source-preview.js';
 import { canZoomSourcePageIn, canZoomSourcePageOut } from '../../../shared/source-page-zoom.js';
 import {
@@ -268,8 +272,8 @@ type Preferences = {
   alwaysOnTop: boolean;
   agentVolume: number;
   openSourcesInApp: boolean;
-  exploreEncyclopedia: 'wikipedia' | 'baidu_baike' | 'douyin_baike';
-  exploreVideoPlatforms: Array<'youtube' | 'tiktok' | 'douyin'>;
+  exploreEncyclopedia: 'wikipedia' | 'baidu_baike' | '360_baike';
+  exploreVideoPlatforms: ExploreVideoPlatform[];
   interfaceMotion: boolean;
   voiceInputMode: VoiceInputMode;
   globalPushToTalkKey: string;
@@ -281,7 +285,7 @@ const defaultPreferences: Preferences = {
   agentVolume: 0.85,
   openSourcesInApp: true,
   exploreEncyclopedia: 'wikipedia',
-  exploreVideoPlatforms: ['youtube'],
+  exploreVideoPlatforms: defaultExploreVideoPlatforms('zh-CN'),
   interfaceMotion: true,
   voiceInputMode: 'push_to_talk',
   globalPushToTalkKey: 'AltLeft',
@@ -291,11 +295,18 @@ const readPreferences = (): Preferences => {
   try {
     const saved = localStorage.getItem(preferenceStorageKey);
     if (!saved) return defaultPreferences;
-    const parsed = { ...defaultPreferences, ...JSON.parse(saved) } as Preferences;
+    const raw = JSON.parse(saved) as Record<string, unknown>;
+    const parsed = { ...defaultPreferences, ...raw } as Preferences;
+    const locale: SupportedLocale = raw.locale === 'en-US' ? 'en-US' : 'zh-CN';
+    const savedVideoPlatforms = Array.isArray(raw.exploreVideoPlatforms)
+      ? raw.exploreVideoPlatforms.filter(
+          (value): value is ExploreVideoPlatform => value === 'youtube' || value === 'bilibili',
+        )
+      : [];
     return {
       ...parsed,
       agentVolume: Math.min(1, Math.max(0, Number(parsed.agentVolume) || 0)),
-      locale: parsed.locale === 'en-US' ? 'en-US' : 'zh-CN',
+      locale,
       voiceInputMode: isVoiceInputMode(parsed.voiceInputMode)
         ? parsed.voiceInputMode
         : defaultPreferences.voiceInputMode,
@@ -303,16 +314,13 @@ const readPreferences = (): Preferences => {
         ? parsed.globalPushToTalkKey
         : defaultPreferences.globalPushToTalkKey,
       exploreEncyclopedia:
-        parsed.exploreEncyclopedia === 'baidu_baike' ||
-        parsed.exploreEncyclopedia === 'douyin_baike'
-          ? parsed.exploreEncyclopedia
-          : defaultPreferences.exploreEncyclopedia,
-      exploreVideoPlatforms: Array.isArray(parsed.exploreVideoPlatforms)
-        ? parsed.exploreVideoPlatforms.filter(
-            (value): value is Preferences['exploreVideoPlatforms'][number] =>
-              value === 'youtube' || value === 'tiktok' || value === 'douyin',
-          )
-        : defaultPreferences.exploreVideoPlatforms,
+        raw.exploreEncyclopedia === 'baidu_baike'
+          ? 'baidu_baike'
+          : raw.exploreEncyclopedia === '360_baike' || raw.exploreEncyclopedia === 'douyin_baike'
+            ? '360_baike'
+            : defaultPreferences.exploreEncyclopedia,
+      exploreVideoPlatforms:
+        savedVideoPlatforms.length > 0 ? savedVideoPlatforms : defaultExploreVideoPlatforms(locale),
     };
   } catch {
     return defaultPreferences;
@@ -659,8 +667,22 @@ const SettingsDialog = ({ onClose, preferences, savePreferences }: SettingsDialo
       );
       return;
     }
-    savePreferences(draft);
-    const result = await window.desktop?.saveLocale(draft.locale);
+    const localeChanged = draft.locale !== preferences.locale;
+    const previousDefaultPlatforms = defaultExploreVideoPlatforms(preferences.locale);
+    const keptPreviousDefaultPlatforms =
+      draft.exploreVideoPlatforms.length === previousDefaultPlatforms.length &&
+      draft.exploreVideoPlatforms.every(
+        (platform, index) => platform === previousDefaultPlatforms[index],
+      );
+    const nextPreferences =
+      localeChanged && keptPreviousDefaultPlatforms
+        ? {
+            ...draft,
+            exploreVideoPlatforms: defaultExploreVideoPlatforms(draft.locale),
+          }
+        : draft;
+    savePreferences(nextPreferences);
+    const result = await window.desktop?.saveLocale(nextPreferences.locale);
     if (result && !result.ok) {
       savePreferences(preferences);
       setNotice(result.readiness.message);
@@ -958,9 +980,7 @@ const SettingsDialog = ({ onClose, preferences, savePreferences }: SettingsDialo
                 >
                   <option value="wikipedia">Wikipedia</option>
                   <option value="baidu_baike">{english ? 'Baidu Baike' : '百度百科'}</option>
-                  <option value="douyin_baike">
-                    {english ? 'Douyin Baike' : '抖音百科 / 快懂百科'}
-                  </option>
+                  <option value="360_baike">{english ? '360 Baike' : '360百科'}</option>
                 </select>
               </label>
               <div
@@ -969,7 +989,7 @@ const SettingsDialog = ({ onClose, preferences, savePreferences }: SettingsDialo
                 aria-label={english ? 'Video platforms' : '视频来源'}
               >
                 <span>{english ? 'Video platforms' : '视频来源'}</span>
-                {(['youtube', 'tiktok', 'douyin'] as const).map((platform) => (
+                {(['youtube', 'bilibili'] as const).map((platform) => (
                   <label key={platform}>
                     <input
                       type="checkbox"
@@ -983,7 +1003,7 @@ const SettingsDialog = ({ onClose, preferences, savePreferences }: SettingsDialo
                         )
                       }
                     />
-                    {platform === 'youtube' ? 'YouTube' : platform === 'tiktok' ? 'TikTok' : '抖音'}
+                    {platform === 'youtube' ? 'YouTube' : english ? 'Bilibili' : '哔哩哔哩'}
                   </label>
                 ))}
               </div>
@@ -3097,6 +3117,7 @@ type SourceCopy = {
   errorTimeout: string;
   explore: string;
   exploreAdvice(firstTopic: string, secondTopic?: string): string;
+  exploreResultCount(count: number): string;
   exploreEncyclopedia: string;
   exploreGuidance: string;
   exploreSuggestions: string;
@@ -3144,6 +3165,7 @@ const getSourceCopy = (english: boolean): SourceCopy =>
           secondTopic
             ? `Start with ${firstTopic}, then use ${secondTopic} to broaden the view.`
             : `Start with ${firstTopic} to build a clear picture.`,
+        exploreResultCount: (count) => `${count} sources selected for your route`,
         exploreEncyclopedia: 'Encyclopedia',
         exploreGuidance: 'Browsing suggestion',
         exploreSuggestions: 'Continue chatting',
@@ -3186,6 +3208,7 @@ const getSourceCopy = (english: boolean): SourceCopy =>
           secondTopic
             ? `建议先从「${firstTopic}」开始，再通过「${secondTopic}」扩展了解。`
             : `建议先浏览「${firstTopic}」，建立整体认识。`,
+        exploreResultCount: (count) => `已为你的探索路线整理 ${count} 个来源`,
         exploreEncyclopedia: '百科',
         exploreGuidance: '浏览建议',
         exploreSuggestions: '继续聊',
@@ -3406,14 +3429,17 @@ const Source = () => {
           aria-label={copy.sourceList}
         >
           {state.preview.type === 'guide.sources' && state.preview.query ? (
-            <p className="source-query">“{state.preview.query}”</p>
+            <p className="source-query source-query--context">“{state.preview.query}”</p>
           ) : null}
           {explorePreview ? (
-            <section className="explore-guidance" aria-label={copy.exploreGuidance}>
-              <span className="explore-guidance-title">
-                <SparkleIcon size={15} weight="fill" aria-hidden="true" />
-                <b>{copy.exploreGuidance}</b>
-              </span>
+            <section className="explore-route" aria-label={copy.exploreGuidance}>
+              <div className="explore-route-heading">
+                <span className="explore-guidance-title">
+                  <SparkleIcon size={15} weight="fill" aria-hidden="true" />
+                  <b>{copy.exploreGuidance}</b>
+                </span>
+                <small>{copy.exploreResultCount(exploreCards.length)}</small>
+              </div>
               <p>{exploreAdvice}</p>
               <div className="explore-suggestions">
                 <b>{copy.exploreSuggestions}</b>
@@ -3430,31 +3456,59 @@ const Source = () => {
             </section>
           ) : null}
           {explorePreview
-            ? exploreCards.map((card) => (
-                <button
-                  type="button"
-                  className="source-result no-drag"
-                  key={card.id}
-                  onClick={() => {
-                    rememberListPosition();
-                    void window.desktop?.selectSource(card.url);
-                  }}
-                >
-                  <span className="source-result-meta">
-                    <span>{card.kind === 'video' ? '▶' : 'W'}</span>
-                    <b>{card.siteName}</b>
-                    <i className="explore-source-kind">
-                      {card.kind === 'video' ? copy.exploreVideo : copy.exploreEncyclopedia}
-                    </i>
-                  </span>
-                  <span className="source-result-body">
-                    <span>
-                      <strong>{card.title}</strong>
-                      {card.summary ? <small>{card.summary}</small> : null}
-                    </span>
-                    {card.thumbnailUrl ? <img src={card.thumbnailUrl} alt="" /> : null}
-                  </span>
-                </button>
+            ? explorePreview.topics.map((topic) => (
+                <section className="explore-topic-group" key={topic.id} aria-label={topic.title}>
+                  <div className="explore-topic-heading">
+                    <b>{topic.title}</b>
+                    <small>{topic.reason}</small>
+                  </div>
+                  {topic.cards.map((card) => (
+                    <button
+                      type="button"
+                      className="source-result source-result--explore no-drag"
+                      key={card.id}
+                      onClick={() => {
+                        rememberListPosition();
+                        void window.desktop?.selectSource(card.url);
+                      }}
+                    >
+                      <span className="source-result-meta">
+                        <span
+                          className={`source-result-type source-result-type--${card.kind}`}
+                          aria-hidden="true"
+                        >
+                          {card.kind === 'video' ? (
+                            <VideoCameraIcon size={11} weight="fill" />
+                          ) : (
+                            <BookOpenIcon size={11} weight="fill" />
+                          )}
+                        </span>
+                        <b>{card.siteName}</b>
+                        {card.publishTime ? <time>{card.publishTime.slice(0, 10)}</time> : null}
+                        <i className="explore-source-kind">
+                          {card.sourceType === 'search_page'
+                            ? card.kind === 'video'
+                              ? english
+                                ? 'Platform search'
+                                : '站内搜索'
+                              : english
+                                ? 'Search page'
+                                : '搜索页'
+                            : card.kind === 'video'
+                              ? copy.exploreVideo
+                              : copy.exploreEncyclopedia}
+                        </i>
+                      </span>
+                      <span className="source-result-body">
+                        <span>
+                          <strong>{card.title}</strong>
+                          {card.summary ? <small>{card.summary}</small> : null}
+                        </span>
+                        {card.thumbnailUrl ? <img src={card.thumbnailUrl} alt="" /> : null}
+                      </span>
+                    </button>
+                  ))}
+                </section>
               ))
             : previewSources.map((source) => (
                 <button

@@ -32,12 +32,12 @@ import { ExploreService } from '../../src/explore/service.js';
 import { EncyclopediaService } from '../../src/explore/encyclopedia/service.js';
 import { WikipediaProvider } from '../../src/explore/encyclopedia/wikipedia.js';
 import { BaiduBaikeSearchPageProvider } from '../../src/explore/encyclopedia/baidu-baike.js';
-import { DouyinBaikeSearchPageProvider } from '../../src/explore/encyclopedia/douyin-baike.js';
-import { DuckDuckGoDiscoveryProvider } from '../../src/explore/discovery/duckduckgo.js';
+import { Qihoo360BaikeSearchPageProvider } from '../../src/explore/encyclopedia/qihoo-360-baike.js';
 import { VideoService } from '../../src/explore/video/service.js';
-import { DouyinSearchPageProvider } from '../../src/explore/video/douyin-search-page.js';
+import { BilibiliSearchPageProvider } from '../../src/explore/video/bilibili.js';
 import { YouTubeProvider } from '../../src/explore/video/youtube.js';
-import { WebDiscoveryVideoProvider } from '../../src/explore/video/web-discovery.js';
+import type { VideoProvider } from '../../src/explore/video/provider.js';
+import { SearchService } from '../../src/search/service.js';
 import { DeepSeekExplorePlanner } from '../../src/providers/llm/deepseek-explore.js';
 import type {
   DesktopReadiness,
@@ -94,6 +94,7 @@ import {
   LocalLiveKitRuntime,
   applyLocalLiveKitEnvironment,
   getLocalLiveKitServerPath,
+  shouldAutoStartLocalLiveKit,
 } from './local-livekit-runtime.js';
 import {
   checkDesktopConfiguration,
@@ -137,8 +138,8 @@ import { DiagnosticLogger, writeDiagnosticArchive } from './diagnostics.js';
 import { withSourceAcceptLanguage } from './source-locale.js';
 import { ExploreController } from './explore-controller.js';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
+const mainFilename = fileURLToPath(import.meta.url);
+const mainDir = dirname(mainFilename);
 
 const assistantSize = { width: 320, height: 360 };
 const collapsedSize = { width: 64, height: 72 };
@@ -244,7 +245,7 @@ const getWindowStatePath = () => join(app.getPath('userData'), 'window-state.jso
 const getGuideLocalePath = () => join(app.getPath('userData'), 'guide-locale.json');
 const getServiceSettingsPath = () => join(app.getPath('userData'), 'service-settings.json');
 const getServiceCredentialsPath = () => join(app.getPath('userData'), 'service-credentials.bin');
-const getAgentProcessPath = () => join(__dirname, 'agent-process.js');
+const getAgentProcessPath = () => join(mainDir, 'agent-process.js');
 const getPackagedResourcesPath = () =>
   (process as NodeJS.Process & { resourcesPath?: string }).resourcesPath ??
   join(process.cwd(), 'out');
@@ -445,7 +446,7 @@ const startConfiguredAgent = async (
   { config: AppConfig; readiness: DesktopReadiness } | { readiness: DesktopReadiness }
 > => {
   const environment = await getEffectiveServiceEnvironment();
-  if (app.isPackaged) {
+  if (shouldAutoStartLocalLiveKit(environment)) {
     try {
       const localConnection = await localLiveKitRuntime.ensureStarted({
         executablePath: getLocalLiveKitExecutablePath(),
@@ -512,7 +513,7 @@ const prepareServiceTransition = async (
     request.credentials,
   );
   const environment = await getEffectiveServiceEnvironment(request.services, credentials);
-  if (app.isPackaged) {
+  if (shouldAutoStartLocalLiveKit(environment)) {
     try {
       const localConnection = await localLiveKitRuntime.ensureStarted({
         executablePath: getLocalLiveKitExecutablePath(),
@@ -611,7 +612,7 @@ const loadRenderer = async (window: BrowserWindow, hash: string) => {
     await window.loadURL(`${process.env.ELECTRON_RENDERER_URL}#${hash}`);
     return;
   }
-  await window.loadFile(join(__dirname, '../renderer/index.html'), { hash });
+  await window.loadFile(join(mainDir, '../renderer/index.html'), { hash });
 };
 
 const isAssistantSender = (sender: Electron.WebContents) =>
@@ -648,24 +649,27 @@ const createExploreService = async (): Promise<ExploreService | null> => {
   const environment = await getEffectiveServiceEnvironment();
   const configuration = checkDesktopConfiguration(environment);
   if (!configuration.ok) return null;
-  const discovery = new DuckDuckGoDiscoveryProvider();
   return new ExploreService(
     new DeepSeekExplorePlanner(configuration.config.llm),
     new EncyclopediaService([
       new WikipediaProvider(),
       new BaiduBaikeSearchPageProvider(),
-      new DouyinBaikeSearchPageProvider(),
+      new Qihoo360BaikeSearchPageProvider(),
     ]),
     new VideoService([
-      new YouTubeProvider(),
-      new WebDiscoveryVideoProvider(discovery, {
-        id: 'tiktok',
-        siteName: 'TikTok',
-        domains: ['tiktok.com'],
-        enrichWithTikTokOEmbed: true,
-      }),
-      new DouyinSearchPageProvider(),
-    ]),
+      ...(configuration.config.search.apiKey
+        ? [
+            new YouTubeProvider(
+              new SearchService({
+                apiKey: configuration.config.search.apiKey,
+                endpoint: configuration.config.search.endpoint,
+                timeoutMs: configuration.config.search.timeoutMs,
+              }),
+            ),
+          ]
+        : []),
+      new BilibiliSearchPageProvider(),
+    ] satisfies VideoProvider[]),
   );
 };
 
@@ -801,7 +805,7 @@ const openUtilityWindow = async (kind: UtilityKind): Promise<boolean> => {
     show: false,
     backgroundColor: '#00000000',
     webPreferences: {
-      preload: join(__dirname, '../preload/index.cjs'),
+      preload: join(mainDir, '../preload/index.cjs'),
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
@@ -1278,7 +1282,7 @@ const createAssistantWindow = async () => {
     resizable: true,
     alwaysOnTop: true,
     webPreferences: {
-      preload: join(__dirname, '../preload/index.cjs'),
+      preload: join(mainDir, '../preload/index.cjs'),
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
@@ -1341,7 +1345,7 @@ const createSourceWindow = async () => {
     alwaysOnTop: true,
     show: false,
     webPreferences: {
-      preload: join(__dirname, '../preload/index.cjs'),
+      preload: join(mainDir, '../preload/index.cjs'),
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,

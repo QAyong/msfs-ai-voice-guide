@@ -79,29 +79,55 @@ export class ExploreController {
     this.active?.abort();
   }
 
+  private refreshCachedMsfsContext(
+    conversation: string,
+    contextPromise: Promise<MsfsExploreContext | undefined>,
+  ): void {
+    void contextPromise
+      .then((msfs) => {
+        if (!this.last || this.last.conversationFingerprint !== conversation) return;
+        if (hasSignificantMsfsChange(this.last.msfs, msfs)) {
+          this.last = null;
+          return;
+        }
+        this.last = {
+          ...this.last,
+          msfs,
+          msfsFingerprint: msfsFingerprint(msfs),
+        };
+      })
+      .catch(() => undefined);
+  }
+
   async execute(request: ExploreRequest): Promise<ExploreResponse> {
     if (this.active) {
       return { ok: false, code: 'busy', message: '探索正在进行中。' };
     }
     const controller = new AbortController();
     this.active = controller;
+    const startedAt = Date.now();
     try {
-      const msfs = await this.dependencies.getMsfsContext(controller.signal);
+      const conversation = conversationFingerprint(request);
+      const msfsPromise = this.dependencies.getMsfsContext(controller.signal);
+
+      if (
+        request.recentConversation.length &&
+        this.last?.conversationFingerprint === conversation
+      ) {
+        this.refreshCachedMsfsContext(conversation, msfsPromise);
+        await this.dependencies.present(this.last.result);
+        console.info('[explore] cache presentation completed', {
+          elapsedMs: Date.now() - startedAt,
+        });
+        return { ok: true, result: this.last.result, reused: true };
+      }
+
+      const msfs = request.recentConversation.length ? undefined : await msfsPromise;
       if (!request.recentConversation.length && !msfs) {
         return { ok: false, code: 'no_context', message: '当前没有可用于探索的对话或飞行上下文。' };
       }
-      const conversation = conversationFingerprint(request);
-      const shouldReuse =
-        this.last &&
-        conversation === this.last.conversationFingerprint &&
-        !hasSignificantMsfsChange(this.last.msfs, msfs);
-      if (shouldReuse) {
-        const previous = this.last;
-        if (!previous)
-          return { ok: false, code: 'planner_failed', message: '探索状态已失效，请重试。' };
-        await this.dependencies.present(previous.result);
-        return { ok: true, result: previous.result, reused: true };
-      }
+      if (request.recentConversation.length)
+        this.refreshCachedMsfsContext(conversation, msfsPromise);
       const service = await this.dependencies.createService();
       if (!service) {
         return { ok: false, code: 'configuration', message: '探索服务尚未完成本地配置。' };
@@ -122,6 +148,10 @@ export class ExploreController {
         result,
       };
       await this.dependencies.present(result);
+      console.info('[explore] result presentation completed', {
+        elapsedMs: Date.now() - startedAt,
+        usedMsfsContext: Boolean(msfs),
+      });
       return { ok: true, result, reused: false };
     } catch (error) {
       if (controller.signal.aborted) {

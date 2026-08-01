@@ -61,7 +61,8 @@ pnpm run verify
 - AI 回答中的真实搜索来源卡片和搜索结果入口。
 - 自动启动/检查 Agent Worker、首次配置引导、脱敏故障提示、重试、音量/置顶/窗口状态保存。
 - 独立伴随来源浏览窗，通过隔离的 `WebContentsView` 加载经过校验的 HTTPS 页面，并始终跟随聊天面板定位。
-- 探索结果在伴随窗顶部显示浏览建议与“继续聊”问题，百科与视频来源在下方以单一列表呈现；来源的全局排序和跨 Provider 语义去重仍待后续重构。
+- 探索结果在伴随窗中以“浏览建议 → 接续问题 → 话题分组 → 行式来源卡”呈现；它与普通搜索来源共用站点、日期、摘要和可选缩略图的视觉层级。Planner 面向宽泛主题生成 3～5 个具体且不重复的词条，360 百科按规范化 URL 去重并优先解析真实词条。
+- 来源窗当前是经过隔离的网页预览与阅读容器；将其扩展为伴随式轻量浏览器（受管理标签页、站内跳转、窗口最大化视频模式）仍是待讨论方案，尚未实现。
 
 可使用以下命令验证并打开桌面实现：
 
@@ -84,10 +85,11 @@ pnpm search:smoke
 ## 本地运行
 
 1. 从 [LiveKit 官方 Windows 发布页](https://github.com/livekit/livekit/releases/latest)下载并验证 `livekit-server.exe`，放入受 Git 忽略的 `resources/livekit/`。开发态不使用 Docker。
-2. 在独立 PowerShell 窗口运行 `pnpm livekit:dev`；保持该窗口运行。它调用 `resources/livekit/livekit-server.exe --dev`，默认只绑定 `127.0.0.1:7880`，并使用 `devkey` / `secret`。
-3. 在 `.env` 中填写 `ws://127.0.0.1:7880`、`devkey`、`secret`、DeepSeek Key 与豆包语音凭据。
-4. 使用 `pnpm agent:check` 检查配置（不会输出密钥，也不会发起远程请求）。
-5. 执行 `pnpm build`，再执行 `pnpm desktop:preview`。桌面应用会自动启动 Agent Worker、创建独立房间并分派 `msfs-voice-guide`。
-6. 在桌面窗口按住说话并松开，或切换“连续对话”后直接讲话；系统会在轮次结束后自动回答，无需另外启动 Worker、生成 Token 或打开 LiveKit Meet。
+2. 开发态启动桌面应用后，Electron 默认自动启动并管理本地 LiveKit；它会使用回环地址、动态端口和本地运行时凭据，不需要单独运行 `pnpm livekit:dev`。
+3. 如需明确改用外部或手动启动的 LiveKit，才在 `.env` 中设置 `MSFS_AUTO_START_LIVEKIT=false`，并填写对应的 `LIVEKIT_URL`、`LIVEKIT_API_KEY` 和 `LIVEKIT_API_SECRET`。保留 `true` 或省略该开关则自动启动本地 LiveKit。
+4. 在 `.env` 中填写 DeepSeek Key 与豆包语音凭据。
+5. 使用 `pnpm agent:check` 检查配置（不会输出密钥，也不会发起远程请求）。
+6. 执行 `pnpm build`，再执行 `pnpm desktop:preview`。桌面应用会自动启动 LiveKit 和 Agent Worker、创建独立房间并分派 `msfs-voice-guide`。
+7. 在桌面窗口按住说话并松开，或切换“连续对话”后直接讲话；系统会在轮次结束后自动回答，无需另外启动 Worker、生成 Token 或打开 LiveKit Meet。
 
 Agent Worker 仍依赖可访问的本机 LiveKit Server；服务未启动、凭据错误或麦克风被拒绝时，桌面应用会显示可重试的脱敏提示。完整步骤见[本地冒烟测试](docs/testing/local-agent-smoke.md)。

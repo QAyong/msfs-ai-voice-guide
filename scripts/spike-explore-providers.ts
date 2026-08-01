@@ -1,10 +1,9 @@
-import { DuckDuckGoDiscoveryProvider } from '../src/explore/discovery/duckduckgo.js';
 import { BaiduBaikeSearchPageProvider } from '../src/explore/encyclopedia/baidu-baike.js';
-import { DouyinBaikeSearchPageProvider } from '../src/explore/encyclopedia/douyin-baike.js';
+import { Qihoo360BaikeSearchPageProvider } from '../src/explore/encyclopedia/qihoo-360-baike.js';
 import { WikipediaProvider } from '../src/explore/encyclopedia/wikipedia.js';
-import { DouyinSearchPageProvider } from '../src/explore/video/douyin-search-page.js';
+import { BilibiliSearchPageProvider } from '../src/explore/video/bilibili.js';
 import { YouTubeProvider } from '../src/explore/video/youtube.js';
-import { WebDiscoveryVideoProvider } from '../src/explore/video/web-discovery.js';
+import { SearchService } from '../src/search/service.js';
 
 const timeout = async <T>(operation: (signal: AbortSignal) => Promise<T>, timeoutMs = 15_000) => {
   const controller = new AbortController();
@@ -16,24 +15,33 @@ const timeout = async <T>(operation: (signal: AbortSignal) => Promise<T>, timeou
   }
 };
 
-const discovery = new DuckDuckGoDiscoveryProvider();
 const topic = { topicId: 'eiffel-tower', query: '埃菲尔铁塔', alternateNames: ['Eiffel Tower'] };
 const videoTopic = { topicId: 'eiffel-tower', query: 'Eiffel Tower Paris travel guide' };
+const youtubeProvider = process.env.VOLCENGINE_SEARCH_API_KEY?.trim()
+  ? new YouTubeProvider(
+      new SearchService({
+        apiKey: process.env.VOLCENGINE_SEARCH_API_KEY.trim(),
+        endpoint:
+          process.env.VOLCENGINE_SEARCH_CUSTOM_ENDPOINT ??
+          'https://open.feedcoopapi.com/search_api/web_search',
+        timeoutMs: Number(process.env.VOLCENGINE_SEARCH_TIMEOUT_MS ?? 10_000),
+      }),
+    )
+  : null;
 
 const probes = {
   wikipedia: () => new WikipediaProvider().find(topic, 'zh-CN'),
   baiduBaike: () => new BaiduBaikeSearchPageProvider().find(topic, 'zh-CN'),
-  douyinBaike: () => new DouyinBaikeSearchPageProvider().find(topic, 'zh-CN'),
-  youtube: () => new YouTubeProvider().find(videoTopic, 'en-US'),
-  tiktok: () =>
-    new WebDiscoveryVideoProvider(discovery, {
-      id: 'tiktok',
-      siteName: 'TikTok',
-      domains: ['tiktok.com'],
-      enrichWithTikTokOEmbed: true,
-    }).find(videoTopic, 'en-US'),
-  douyin: () =>
-    new DouyinSearchPageProvider().find({ ...videoTopic, query: '埃菲尔铁塔 巴黎 旅行' }, 'zh-CN'),
+  qihoo360Baike: () => new Qihoo360BaikeSearchPageProvider().find(topic, 'zh-CN'),
+  youtube: () =>
+    youtubeProvider
+      ? youtubeProvider.find(videoTopic, 'en-US')
+      : Promise.reject(new Error('Missing VOLCENGINE_SEARCH_API_KEY')),
+  bilibili: () =>
+    new BilibiliSearchPageProvider().find(
+      { ...videoTopic, query: '埃菲尔铁塔 巴黎 旅行' },
+      'zh-CN',
+    ),
 };
 
 const results = [];

@@ -96,11 +96,12 @@ export class SearchService {
     this.#fetch = fetchImplementation;
   }
 
-  async search(input: SearchInput): Promise<SearchResult> {
+  async search(input: SearchInput, signal?: AbortSignal): Promise<SearchResult> {
     const { query, site } = searchInputSchema.parse(input);
     let response: Response;
 
     try {
+      const timeoutSignal = AbortSignal.timeout(this.#config.timeoutMs);
       response = await this.#fetch(this.#config.endpoint, {
         method: 'POST',
         headers: {
@@ -118,7 +119,7 @@ export class SearchService {
           },
           ContentFormats: 'markdown',
         }),
-        signal: AbortSignal.timeout(this.#config.timeoutMs),
+        signal: signal ? AbortSignal.any([signal, timeoutSignal]) : timeoutSignal,
       });
     } catch (error) {
       return failure(

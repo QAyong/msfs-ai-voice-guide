@@ -12,11 +12,12 @@ const safeWebUrlSchema = z
   }, '必须是 HTTP(S) URL');
 
 export const explorePreferencesSchema = z.object({
-  encyclopedia: z.enum(['wikipedia', 'baidu_baike', 'douyin_baike']),
-  videoPlatforms: z.array(z.enum(['youtube', 'tiktok', 'douyin'])).max(3),
+  encyclopedia: z.enum(['wikipedia', 'baidu_baike', '360_baike']),
+  videoPlatforms: z.array(z.enum(['youtube', 'bilibili'])).max(2),
 });
 
 export type ExplorePreferences = z.infer<typeof explorePreferencesSchema>;
+export type ExploreVideoPlatform = ExplorePreferences['videoPlatforms'][number];
 
 export const exploreConversationMessageSchema = z.object({
   id: z.string().trim().min(1).max(256),
@@ -39,6 +40,7 @@ export const exploreCardSchema = z.object({
   title: z.string().trim().min(1).max(240),
   siteName: z.string().trim().min(1).max(100),
   url: safeWebUrlSchema,
+  sourceType: z.enum(['direct', 'search_page']).optional(),
   summary: z.string().trim().min(1).max(360).optional(),
   thumbnailUrl: safeWebUrlSchema.optional(),
   author: z.string().trim().min(1).max(120).optional(),
@@ -59,7 +61,7 @@ export type ExploreTopic = z.infer<typeof exploreTopicSchema>;
 export const exploreResultSchema = z.object({
   schemaVersion: z.literal(1),
   generatedAt: z.string().datetime(),
-  topics: z.array(exploreTopicSchema).min(2).max(3),
+  topics: z.array(exploreTopicSchema).min(3).max(5),
   suggestedPrompts: z.array(z.string().trim().min(2).max(160)).length(3),
   unavailableProviders: z.array(z.string().trim().min(1).max(80)).max(6).default([]),
 });

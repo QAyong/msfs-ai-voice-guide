@@ -38,6 +38,7 @@ export const createSearchPageCard = (
     topicId: candidate.topicId,
     title: query,
     siteName: options.siteName,
+    sourceType: 'search_page',
     url: url.toString(),
   });
   return card.success ? card.data : null;

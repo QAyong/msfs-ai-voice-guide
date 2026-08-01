@@ -9,7 +9,10 @@ for (const line of envText.split(/\r?\n/)) {
   if (idx <= 0) continue;
   const key = trimmed.slice(0, idx).trim();
   let value = trimmed.slice(idx + 1).trim();
-  if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
+  if (
+    (value.startsWith('"') && value.endsWith('"')) ||
+    (value.startsWith("'") && value.endsWith("'"))
+  ) {
     value = value.slice(1, -1);
   }
   if (!(key in process.env)) process.env[key] = value;
@@ -19,12 +22,13 @@ const { ExploreService } = await import('../src/explore/service.ts');
 const { EncyclopediaService } = await import('../src/explore/encyclopedia/service.ts');
 const { WikipediaProvider } = await import('../src/explore/encyclopedia/wikipedia.ts');
 const { BaiduBaikeSearchPageProvider } = await import('../src/explore/encyclopedia/baidu-baike.ts');
-const { DouyinBaikeSearchPageProvider } = await import('../src/explore/encyclopedia/douyin-baike.ts');
+const { Qihoo360BaikeSearchPageProvider } =
+  await import('../src/explore/encyclopedia/qihoo-360-baike.ts');
 const { VideoService } = await import('../src/explore/video/service.ts');
+const { BilibiliSearchPageProvider } = await import('../src/explore/video/bilibili.ts');
 const { YouTubeProvider } = await import('../src/explore/video/youtube.ts');
-const { DouyinSearchPageProvider } = await import('../src/explore/video/douyin-search-page.ts');
-const { WebDiscoveryVideoProvider } = await import('../src/explore/video/web-discovery.ts');
-const { DuckDuckGoDiscoveryProvider } = await import('../src/explore/discovery/duckduckgo.ts');
+const { SearchService } = await import('../src/search/service.ts');
+const { loadSearchConfig } = await import('../src/config/schema.ts');
 const { DeepSeekExplorePlanner } = await import('../src/providers/llm/deepseek-explore.ts');
 
 const apiKey = process.env.DEEPSEEK_API_KEY;
@@ -35,23 +39,16 @@ if (!apiKey) {
   process.exit(1);
 }
 
-const discovery = new DuckDuckGoDiscoveryProvider();
 const service = new ExploreService(
   new DeepSeekExplorePlanner({ apiKey, baseUrl, model }),
   new EncyclopediaService([
     new WikipediaProvider(),
     new BaiduBaikeSearchPageProvider(),
-    new DouyinBaikeSearchPageProvider(),
+    new Qihoo360BaikeSearchPageProvider(),
   ]),
   new VideoService([
-    new YouTubeProvider(),
-    new DouyinSearchPageProvider(),
-    new WebDiscoveryVideoProvider(discovery, {
-      id: 'tiktok',
-      siteName: 'TikTok',
-      domains: ['tiktok.com'],
-      enrichWithTikTokOEmbed: true,
-    }),
+    new YouTubeProvider(new SearchService(loadSearchConfig())),
+    new BilibiliSearchPageProvider(),
   ]),
 );
 
@@ -59,12 +56,15 @@ const conversation = [
   { role: 'user', text: '我们现在飞到长沙附近了，帮我介绍一下这座城市。' },
   { role: 'assistant', text: '长沙是湖南省会，湘江穿城而过，岳麓山、橘子洲都是很有代表性的地标。' },
   { role: 'user', text: '我想多了解长沙的历史文化、著名景点和本地美食。' },
-  { role: 'assistant', text: '可以重点看看岳麓书院、橘子洲头、太平街，还有臭豆腐、糖油粑粑这些本地味道。' },
+  {
+    role: 'assistant',
+    text: '可以重点看看岳麓书院、橘子洲头、太平街，还有臭豆腐、糖油粑粑这些本地味道。',
+  },
 ];
 
 const preferencesVariants = [
   { name: 'default-wikipedia-youtube', encyclopedia: 'wikipedia', videoPlatforms: ['youtube'] },
-  { name: 'baidu-douyin', encyclopedia: 'baidu_baike', videoPlatforms: ['douyin', 'youtube'] },
+  { name: 'baidu-360', encyclopedia: 'baidu_baike', videoPlatforms: ['bilibili'] },
 ];
 
 for (const pref of preferencesVariants) {
@@ -80,25 +80,31 @@ for (const pref of preferencesVariants) {
       locale: 'zh-CN',
     });
     const elapsedMs = Date.now() - started;
-    console.log(JSON.stringify({
-      elapsedMs,
-      topicCount: result.topics.length,
-      suggestedPrompts: result.suggestedPrompts,
-      unavailableProviders: result.unavailableProviders,
-      topics: result.topics.map((topic) => ({
-        id: topic.id,
-        title: topic.title,
-        reason: topic.reason,
-        cards: topic.cards.map((card) => ({
-          kind: card.kind,
-          title: card.title,
-          siteName: card.siteName,
-          url: card.url,
-          author: card.author,
-          summary: card.summary,
-        })),
-      })),
-    }, null, 2));
+    console.log(
+      JSON.stringify(
+        {
+          elapsedMs,
+          topicCount: result.topics.length,
+          suggestedPrompts: result.suggestedPrompts,
+          unavailableProviders: result.unavailableProviders,
+          topics: result.topics.map((topic) => ({
+            id: topic.id,
+            title: topic.title,
+            reason: topic.reason,
+            cards: topic.cards.map((card) => ({
+              kind: card.kind,
+              title: card.title,
+              siteName: card.siteName,
+              url: card.url,
+              author: card.author,
+              summary: card.summary,
+            })),
+          })),
+        },
+        null,
+        2,
+      ),
+    );
   } catch (error) {
     console.error(`FAILED ${pref.name} after ${Date.now() - started}ms`);
     console.error(error);

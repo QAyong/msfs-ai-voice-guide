@@ -7,7 +7,7 @@ export type EncyclopediaCandidate = {
 };
 
 export interface EncyclopediaProvider {
-  readonly id: 'wikipedia' | 'baidu_baike' | 'douyin_baike';
+  readonly id: 'wikipedia' | 'baidu_baike' | '360_baike';
   find(
     candidate: EncyclopediaCandidate,
     locale: 'zh-CN' | 'en-US',

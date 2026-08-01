@@ -14,6 +14,7 @@ const result = {
   topics: [
     { id: 'one', title: '巴黎', reason: '对话主题。', cards: [] },
     { id: 'two', title: '塞纳河', reason: '相关地标。', cards: [] },
+    { id: 'three', title: '埃菲尔铁塔', reason: '代表性地标。', cards: [] },
   ],
   suggestedPrompts: ['巴黎为什么建在这里？', '塞纳河如何影响巴黎？', '从空中怎么看巴黎？'],
   unavailableProviders: [],
@@ -55,5 +56,24 @@ describe('ExploreController', () => {
       present: async () => true,
     });
     await expect(controller.execute(request)).resolves.toMatchObject({ ok: true });
+  });
+
+  it('starts a conversation-led exploration without waiting for a slow MSFS read', async () => {
+    let receivedInput: unknown;
+    const controller = new ExploreController({
+      createService: async () =>
+        ({
+          explore: async (input: unknown) => {
+            receivedInput = input;
+            return result;
+          },
+        }) as unknown as ExploreService,
+      getMsfsContext: async () => new Promise<never>(() => undefined),
+      present: async () => true,
+    });
+
+    await expect(controller.execute(request)).resolves.toMatchObject({ ok: true, reused: false });
+    expect(receivedInput).toMatchObject({ recentConversation: [{ text: '介绍一下巴黎。' }] });
+    expect(receivedInput).not.toHaveProperty('msfs');
   });
 });

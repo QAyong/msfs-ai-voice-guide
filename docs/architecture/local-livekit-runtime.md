@@ -1,9 +1,9 @@
 # 本地 LiveKit 运行时架构
 
-**最后更新：** 2026-07-25
-**状态：** 设计已接受，待实现
+**最后更新：** 2026-08-01
+**状态：** 开发态本地运行时已实现并通过启动/健康检查；安装包与干净环境验收待完成
 
-本文描述最终 Windows 安装包内的单机实时运行方式。它是 ADR-009 与 Spec-011 的架构说明，不表示当前项目已具备安装包或内置 LiveKit Server。
+本文描述 Windows 安装包内的单机实时运行方式。开发态已经由 Electron 默认启动 `resources/livekit/livekit-server.exe`，使用动态回环端口和运行时生成凭据；安装包携带、干净环境验收与正式安装器仍待完成。
 
 ## 边界
 
@@ -52,9 +52,9 @@ sequenceDiagram
 
 | 事项           | 开发态                                                     | 安装态                                         |
 | -------------- | ---------------------------------------------------------- | ---------------------------------------------- |
-| LiveKit Server | 从 `resources/livekit/livekit-server.exe` 手动运行 `--dev` | 应用携带固定版本二进制，由主进程以私有配置启动 |
-| API Key/Secret | `.env` 中的开发值                                          | 首次初始化生成的每实例值，Renderer 不可读取    |
-| 地址           | 可连接开发者指定的本机或测试地址                           | 仅 `127.0.0.1`，不可回退公网                   |
+| LiveKit Server | Electron 默认从 `resources/livekit/livekit-server.exe` 自动启动并管理；仅 `MSFS_AUTO_START_LIVEKIT=false` 时使用外部服务 | 应用携带固定版本二进制，由主进程以私有配置启动 |
+| API Key/Secret | 自动生成本地运行时凭据；外部模式才使用 `.env` 中的连接配置 | 首次初始化生成的每实例值，Renderer 不可读取 |
+| 地址           | 自动启动时仅绑定回环地址并动态分配端口；外部模式遵循 `.env` | 仅 `127.0.0.1`，不可回退公网                   |
 | Agent Worker   | `tsx` / 本地源码调试                                       | 随应用构建资源运行，由主进程管理               |
 | 日志           | 开发者终端                                                 | 用户数据目录中的脱敏诊断日志                   |
 
@@ -81,9 +81,8 @@ sequenceDiagram
 
 ## 实施顺序
 
-1. 固定并审查 Windows LiveKit Server 发行版本、许可证与 SHA-256 来源。
-2. 实现本地资源暂存、manifest 校验和安装包携带规则。
-3. 实现主进程 `LocalLiveKitRuntime`、回环配置生成、探活、日志与清理。
-4. 将现有 `AgentRuntime`、Readiness 与 Session Token 装配改为区分开发态/安装态连接来源。
-5. 加入端口占用、退出清理、凭据不泄漏和 Token/dispatch 的自动化测试。
-6. 在无开发依赖的干净 Windows 环境和真实 MSFS 2024 场景完成验收。
+1. 已完成：固定并审查 Windows LiveKit Server 开发态发行版本、许可证与 SHA-256 来源。
+2. 已完成：开发资源暂存、运行时状态、主进程 `LocalLiveKitRuntime`、回环配置生成、探活、日志与清理。
+3. 已完成：开发态默认自动启动；只有 `MSFS_AUTO_START_LIVEKIT=false` 才改用外部/手动服务。
+4. 进行中：安装包携带规则、端口占用、退出清理、凭据不泄漏和 Token/dispatch 的自动化测试补强。
+5. 待完成：在无开发依赖的干净 Windows 环境和真实 MSFS 2024 场景完成验收。
