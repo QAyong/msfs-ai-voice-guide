@@ -61,6 +61,8 @@ pnpm run verify
 - 由主进程签发的短期最小权限 Token；API Secret 和模型密钥不会进入 Renderer。
 - AI 回答中的真实搜索来源卡片和搜索结果入口。
 - 自动启动/检查 Agent Worker、首次配置引导、脱敏故障提示、重试、音量/置顶/窗口状态保存。
+- 设置中心支持中英文项目语言、DeepSeek/STT/TTS/搜索服务配置、按项目语言过滤的本地豆包 TTS 音色、音色试听和自定义 speaker ID；保存服务配置后会重启 Agent 并重新连接 LiveKit。
+- TTS 本地样例来自 `resources/tts/confirmed-voices/`；中文默认 Vivi，英文默认 Dacey，Stokie 可选，旧 Tim 配置会自动迁移且不会出现在新列表中。
 - 独立伴随来源浏览窗，通过隔离的 `WebContentsView` 加载经过校验的 HTTPS 页面，并始终跟随聊天面板定位。
 - 探索结果在伴随窗中以“浏览建议 → 接续问题 → 话题分组 → 行式来源卡”呈现；它与普通搜索来源共用站点、日期、摘要和可选缩略图的视觉层级，主题描述保留紧凑行式布局并使用浅色填充突出显示。Planner 面向宽泛主题生成 3～5 个具体且不重复的词条，百科来源按规范化 URL 去重并优先解析真实词条。
 - 来源窗当前沿用隔离的网页预览与阅读容器；下一阶段按 [Spec-016](docs/specs/spec-016-source-preview-lightweight-browser.md) 扩展为单窗口、单标题栏的受控轻量浏览器，支持站内 HTTP(S) 跳转、网页历史和窗口内视频自动横屏，不引入多标签页或第三方播放器。
@@ -92,5 +94,7 @@ pnpm search:smoke
 5. 使用 `pnpm agent:check` 检查配置（不会输出密钥，也不会发起远程请求）。
 6. 执行 `pnpm build`，再执行 `pnpm desktop:preview`。桌面应用会自动启动 LiveKit 和 Agent Worker、创建独立房间并分派 `msfs-voice-guide`。
 7. 在桌面窗口按住说话并松开，或切换“连续对话”后直接讲话；系统会在轮次结束后自动回答，无需另外启动 Worker、生成 Token 或打开 LiveKit Meet。
+
+`pnpm desktop:build` 也会构建 Windows 全局按住说话原生模块，并暂存 `out/tts`、`out/livekit` 和 `out/msfs` 资源；其中 TTS staging 会先清理 `out/tts`，删除本地 TTS 样例后应重新构建，避免旧音色继续留在输出目录。
 
 Agent Worker 仍依赖可访问的本机 LiveKit Server；服务未启动、凭据错误或麦克风被拒绝时，桌面应用会显示可重试的脱敏提示。完整步骤见[本地冒烟测试](docs/testing/local-agent-smoke.md)。

@@ -14,14 +14,15 @@ import type {
   DiagnosticToolEvent,
 } from '../../shared/desktop-diagnostics.js';
 import {
+  desktopSettingsSaveRequestSchema,
   serviceCheckRequestSchema,
-  serviceSettingsSaveRequestSchema,
 } from '../../shared/desktop-settings.js';
 import type {
+  DesktopSettingsSaveRequest,
   DesktopServiceSettings,
+  DesktopTtsVoiceSample,
   ServiceCheckRequest,
   ServiceCheckResult,
-  ServiceSettingsSaveRequest,
 } from '../../shared/desktop-settings.js';
 import { globalPushToTalkConfigurationSchema } from '../../shared/global-push-to-talk.js';
 import type {
@@ -44,7 +45,6 @@ contextBridge.exposeInMainWorld('desktop', {
       ? ipcRenderer.invoke('about:open-link', parsed.data)
       : Promise.resolve(false);
   },
-  saveLocale: (locale: 'en-US' | 'zh-CN') => ipcRenderer.invoke('settings:save-locale', locale),
   getGlobalPushToTalkStatus: (): Promise<GlobalPushToTalkStatus> =>
     ipcRenderer.invoke('voice:get-global-ptt-status'),
   configureGlobalPushToTalk: (configuration: GlobalPushToTalkConfiguration) => {
@@ -81,15 +81,17 @@ contextBridge.exposeInMainWorld('desktop', {
     ipcRenderer.invoke('settings:get-visible-local-credentials'),
   getServiceSettings: (): Promise<DesktopServiceSettings> =>
     ipcRenderer.invoke('settings:get-service-settings'),
-  saveServiceSettings: (request: ServiceSettingsSaveRequest) => {
-    const parsed = serviceSettingsSaveRequestSchema.safeParse(request);
+  getTtsVoiceSamples: (): Promise<DesktopTtsVoiceSample[]> =>
+    ipcRenderer.invoke('settings:get-tts-voice-samples'),
+  saveSettings: (request: DesktopSettingsSaveRequest) => {
+    const parsed = desktopSettingsSaveRequestSchema.safeParse(request);
     if (!parsed.success) {
       return Promise.resolve({
         ok: false as const,
-        readiness: { status: 'error' as const, message: '服务配置格式无效。', issues: [] },
+        readiness: { status: 'error' as const, message: '设置格式无效。', issues: [] },
       });
     }
-    return ipcRenderer.invoke('settings:save-service-settings', parsed.data);
+    return ipcRenderer.invoke('settings:save-settings', parsed.data);
   },
   testService: (request: ServiceCheckRequest): Promise<ServiceCheckResult> => {
     const parsed = serviceCheckRequestSchema.safeParse(request);
@@ -101,24 +103,6 @@ contextBridge.exposeInMainWorld('desktop', {
       });
     }
     return ipcRenderer.invoke('settings:test-service', parsed.data);
-  },
-  onServiceReconnectNeeded: (callback: (transitionId: string) => void) => {
-    const listener = (_event: Electron.IpcRendererEvent, transitionId: string) =>
-      callback(transitionId);
-    ipcRenderer.on('settings:service-reconnect-needed', listener);
-    return () => ipcRenderer.removeListener('settings:service-reconnect-needed', listener);
-  },
-  completeServiceReconnect: (transitionId: string) =>
-    ipcRenderer.invoke('settings:complete-service-reconnect', transitionId),
-  rollbackServiceReconnect: (transitionId: string) =>
-    ipcRenderer.invoke('settings:rollback-service-reconnect', transitionId),
-  onServiceTransitionResult: (callback: (result: { ok: boolean; message: string }) => void) => {
-    const listener = (
-      _event: Electron.IpcRendererEvent,
-      result: { ok: boolean; message: string },
-    ) => callback(result);
-    ipcRenderer.on('settings:service-transition-result', listener);
-    return () => ipcRenderer.removeListener('settings:service-transition-result', listener);
   },
   openQuitDialog: () => ipcRenderer.invoke('app:open-quit-dialog'),
   closeUtilityWindow: () => ipcRenderer.invoke('utility:close'),

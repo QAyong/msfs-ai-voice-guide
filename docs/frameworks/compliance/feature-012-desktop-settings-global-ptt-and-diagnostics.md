@@ -8,8 +8,11 @@
 
 - `desktop/main/index.ts`、`desktop/preload/index.ts` 和 `desktop/renderer/src/main.tsx` 已提供可信 Utility Window、上下文隔离和白名单 IPC；服务设置不能退回 Renderer `localStorage`。
 - `src/config/schema.ts` 是最终配置 Zod 边界；`src/providers/registry.ts` 仍是 LLM/STT/TTS 的唯一创建入口；`src/search/` 保持网页搜索边界。
+- `shared/desktop-settings.ts` 统一维护支持语言、默认 TTS speaker、内置音色语言对齐和桌面设置保存 Schema；旧 Tim speaker 只作为兼容迁移输入，不作为可选音色。
+- `resources/tts/confirmed-voices/` 是桌面试听样例的唯一资源目录；`desktop/main/index.ts` 通过白名单 IPC 返回本地音频数据，Renderer 只按项目语言过滤和播放。
+- `scripts/stage-tts-voice-samples.mjs` 在构建时先清空 `out/tts` 再复制样例，确保删除或替换的音色不会从旧构建目录残留到安装资源。
 - `shared/voice-control.ts` 与 `src/agent/guide-agent.ts` 已定义 `manual`、`startTurn`、`endTurn`、`cancelTurn` 和同一 LiveKit Session 的规则。全局键盘/鼠标侧键模块只能驱动这些既有动作。
-- `desktop/main/agent-runtime.ts` 已拥有 Worker 生命周期和 stdout/stderr 接收点，适合接入结构化日志、脱敏和候选 Worker 切换。
+- `desktop/main/agent-runtime.ts` 已拥有 Worker 生命周期和 stdout/stderr 接收点，适合接入结构化日志、脱敏、重启和失败回滚。
 
 ## 官方能力与采用方式
 
@@ -26,6 +29,19 @@
 1. 已用 `node-gyp` 编译 Windows x64 N-API 模块，并验证模块可加载、注册 `F8` 钩子及停止释放；`desktop:build` 会构建并暂存模块。
 2. 已验证 Zod 键位边界及重复 press/release、禁用时取消活跃轮次的状态机单元测试。
 3. 设置使用键盘/鼠标设备点选器：键盘提供 `Left Alt`、`F8` 和自定义录入；鼠标提供位于左侧拇指位的 `X1`（后退）及 `X2`（前进）。
+4. 已验证设置页的 TTS 样例读取、按项目语言过滤、Dacey/Stokie 英文音色、自定义 speaker ID 和本地试听按钮；Tim 不再出现在样例目录或可选列表中。
+5. 已验证统一 `settings:save-settings` 保存链路会重启 Agent Worker、通知 Renderer 重连，并在失败时恢复有效配置；保存按钮提供保存中、成功和失败可重试状态。
+6. 已验证 `desktop:build` 会清理并重新暂存 `out/tts`，构建输出不会保留已删除的 Tim 样例。
+
+## 桌面 TTS 音色配置
+
+桌面设置的 TTS 音色不是独立 Provider 注册表。运行时仍由 `src/providers/tts/volcengine.ts` 使用 `speaker` 建立豆包双向流式 TTS；桌面层只负责安全编辑、语言对齐、本地试听和保存重连。
+
+- 中文默认 `zh_female_vv_uranus_bigtts`（Vivi）。
+- 英文默认 `en_female_dacey_uranus_bigtts`（Dacey），`en_female_stokie_uranus_bigtts`（Stokie）可选。
+- 自定义 speaker ID 原样保留，不因语言切换被覆盖。
+- 已下线的 `en_male_tim_uranus_bigtts` 只在读取旧配置时参与迁移：英文迁移到 Dacey，中文迁移到 Vivi。
+- 音频样例只来自 `resources/tts/confirmed-voices/`；构建 staging 负责清理旧输出，避免资源目录与 `out/tts` 不一致。
 
 ## 待完成核验
 

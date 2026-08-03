@@ -62,13 +62,15 @@ import { XIcon } from '@phosphor-icons/react/dist/csr/X';
 import type { DesktopReadiness } from '../../../shared/desktop-contracts.js';
 import type { AboutInfo, AboutLinkId, AboutSupportChannel } from '../../../shared/about-info.js';
 import {
+  alignTtsSpeakerToLocale,
   defaultDesktopServiceSettings,
+  desktopSettingsSaveRequestSchema,
   serviceCheckRequestSchema,
-  serviceSettingsSaveRequestSchema,
+  type DesktopTtsVoiceSample,
   type DesktopServiceSettings,
   type ServiceCheckResult,
   type ServiceCheckTarget,
-  type ServiceSettingsSaveRequest,
+  type DesktopSettingsSaveRequest,
 } from '../../../shared/desktop-settings.js';
 import {
   globalPushToTalkKeyLabel,
@@ -370,6 +372,8 @@ const usePreferences = () => {
 
 type ServiceSettings = DesktopServiceSettings;
 
+const customTtsVoiceValue = '__custom__';
+
 type ServiceCredentials = {
   deepseekApiKey: string;
   sttAppId: string;
@@ -384,6 +388,7 @@ type ServiceCredentialStatus = {
   error?: string;
 };
 type ServiceTestState = { checking: boolean; result?: ServiceCheckResult };
+type SaveState = 'idle' | 'saving' | 'success' | 'error';
 
 const defaultServiceSettings: ServiceSettings = defaultDesktopServiceSettings;
 
@@ -578,7 +583,7 @@ const SettingsDialog = ({ onClose, preferences, savePreferences }: SettingsDialo
   const [services, setServices] = useState<ServiceSettings>(defaultServiceSettings);
   const [credentials, setCredentials] = useState<ServiceCredentials>(defaultServiceCredentials);
   const [credentialUpdates, setCredentialUpdates] = useState<
-    ServiceSettingsSaveRequest['credentials']
+    DesktopSettingsSaveRequest['credentials']
   >({});
   const [credentialStatus, setCredentialStatus] = useState<ServiceCredentialStatus>(
     defaultServiceCredentialStatus,
@@ -586,8 +591,12 @@ const SettingsDialog = ({ onClose, preferences, savePreferences }: SettingsDialo
   const [serviceTests, setServiceTests] = useState<
     Partial<Record<ServiceCheckTarget, ServiceTestState>>
   >({});
+  const [ttsVoiceSamples, setTtsVoiceSamples] = useState<DesktopTtsVoiceSample[]>([]);
+  const [ttsVoiceSamplesLoading, setTtsVoiceSamplesLoading] = useState(true);
+  const [playingTtsVoiceSpeaker, setPlayingTtsVoiceSpeaker] = useState<string | null>(null);
   const [voiceCredentialsLinked, setVoiceCredentialsLinked] = useState(true);
   const [notice, setNotice] = useState('');
+  const [saveState, setSaveState] = useState<SaveState>('idle');
   const [diagnosticNotice, setDiagnosticNotice] = useState('');
   const [diagnosticReadiness, setDiagnosticReadiness] = useState<DesktopReadiness | null>(null);
   const [diagnosticExporting, setDiagnosticExporting] = useState(false);
@@ -600,6 +609,8 @@ const SettingsDialog = ({ onClose, preferences, savePreferences }: SettingsDialo
   const [pushToTalkDevice, setPushToTalkDevice] = useState<PushToTalkInputDevice>(() =>
     preferences.globalPushToTalkKey.startsWith('Mouse') ? 'mouse' : 'keyboard',
   );
+  const ttsPreviewAudioRef = useRef<HTMLAudioElement | null>(null);
+  const saveStateResetTimerRef = useRef<number | null>(null);
   const settingsContentRef = useRef<HTMLElement | null>(null);
   const english = preferences.locale === 'en-US';
   const copy = english
@@ -612,6 +623,10 @@ const SettingsDialog = ({ onClose, preferences, savePreferences }: SettingsDialo
         save: 'Save',
         saveReconnect: 'Save and reconnect',
         saved: 'Preferences saved.',
+        saving: 'Saving...',
+        saveSuccess: 'Saved',
+        saveApplied: 'Saved and applied',
+        saveFailed: 'Save failed',
       }
     : {
         title: '偏好设置',
@@ -622,6 +637,10 @@ const SettingsDialog = ({ onClose, preferences, savePreferences }: SettingsDialo
         save: '保存',
         saveReconnect: '保存并重新连接',
         saved: '设置已保存。',
+        saving: '保存中...',
+        saveSuccess: '保存成功',
+        saveApplied: '已保存并生效',
+        saveFailed: '保存失败',
       };
   const updateDraft = <Key extends keyof Preferences>(key: Key, value: Preferences[Key]) =>
     setDraft((current) => ({ ...current, [key]: value }));
@@ -645,16 +664,64 @@ const SettingsDialog = ({ onClose, preferences, savePreferences }: SettingsDialo
       active = false;
     };
   }, []);
+  useEffect(() => {
+    let active = true;
+    setTtsVoiceSamplesLoading(true);
+    void window.desktop?.getTtsVoiceSamples().then((samples) => {
+      if (!active) return;
+      setTtsVoiceSamples(samples);
+      setTtsVoiceSamplesLoading(false);
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
+  const stopTtsVoicePreview = useCallback(() => {
+    const audio = ttsPreviewAudioRef.current;
+    if (audio) {
+      audio.pause();
+      audio.currentTime = 0;
+    }
+    ttsPreviewAudioRef.current = null;
+    setPlayingTtsVoiceSpeaker(null);
+  }, []);
+  const playTtsVoicePreview = useCallback(
+    (sample: DesktopTtsVoiceSample) => {
+      if (playingTtsVoiceSpeaker === sample.speaker) {
+        stopTtsVoicePreview();
+        return;
+      }
+      stopTtsVoicePreview();
+      const audio = new Audio(sample.dataUrl);
+      ttsPreviewAudioRef.current = audio;
+      setPlayingTtsVoiceSpeaker(sample.speaker);
+      audio.onended = () => {
+        if (ttsPreviewAudioRef.current !== audio) return;
+        ttsPreviewAudioRef.current = null;
+        setPlayingTtsVoiceSpeaker(null);
+      };
+      audio.onerror = () => {
+        if (ttsPreviewAudioRef.current !== audio) return;
+        ttsPreviewAudioRef.current = null;
+        setPlayingTtsVoiceSpeaker(null);
+        setNotice(english ? 'Unable to play this voice sample.' : '无法播放这个音色样例。');
+      };
+      void audio.play().catch(() => {
+        if (ttsPreviewAudioRef.current !== audio) return;
+        ttsPreviewAudioRef.current = null;
+        setPlayingTtsVoiceSpeaker(null);
+        setNotice(english ? 'Unable to play this voice sample.' : '无法播放这个音色样例。');
+      });
+    },
+    [english, playingTtsVoiceSpeaker, stopTtsVoicePreview],
+  );
+  useEffect(() => stopTtsVoicePreview, [stopTtsVoicePreview]);
   useEffect(
-    () =>
-      window.desktop?.onServiceTransitionResult((result) => {
-        setNotice(result.message);
-        if (!result.ok) return;
-        setCredentialUpdates({});
-        void window.desktop?.getServiceCredentialStatus().then((status) => {
-          if (status) setCredentialStatus(status as ServiceCredentialStatus);
-        });
-      }),
+    () => () => {
+      if (saveStateResetTimerRef.current !== null) {
+        window.clearTimeout(saveStateResetTimerRef.current);
+      }
+    },
     [],
   );
   useEffect(() => {
@@ -666,14 +733,58 @@ const SettingsDialog = ({ onClose, preferences, savePreferences }: SettingsDialo
       active = false;
     };
   }, []);
-  const saveGeneral = async () => {
+  const updateDraftLocale = (locale: SupportedLocale) => {
+    updateDraft('locale', locale);
+    setServices((current) => ({
+      ...current,
+      tts: {
+        ...current.tts,
+        speaker: alignTtsSpeakerToLocale(current.tts.speaker, locale),
+      },
+    }));
+  };
+  const saveAllSettings = async (nextPreferences: Preferences): Promise<boolean> => {
+    const nextServices: ServiceSettings = {
+      ...services,
+      tts: {
+        ...services.tts,
+        speaker: alignTtsSpeakerToLocale(services.tts.speaker, nextPreferences.locale),
+      },
+    };
+    const parsed = desktopSettingsSaveRequestSchema.safeParse({
+      locale: nextPreferences.locale,
+      services: nextServices,
+      credentials: credentialUpdates,
+    });
+    if (!parsed.success) {
+      setNotice(
+        english ? 'Check the service endpoint and numeric values.' : '请检查服务地址和数值。',
+      );
+      return false;
+    }
+    if (!window.desktop) {
+      savePreferences(nextPreferences);
+      setServices(nextServices);
+      return true;
+    }
+    const result = await window.desktop.saveSettings(parsed.data);
+    if (!result.ok) {
+      setNotice(result.readiness.message);
+      return false;
+    }
+    savePreferences(nextPreferences);
+    setServices(nextServices);
+    setCredentialUpdates({});
+    return true;
+  };
+  const saveGeneral = async (): Promise<boolean> => {
     if (!isGlobalPushToTalkKey(draft.globalPushToTalkKey)) {
       setNotice(
         english
           ? 'Choose one supported global push-to-talk key.'
           : '请选择一个支持的全局按住说话键。',
       );
-      return;
+      return false;
     }
     const localeChanged = draft.locale !== preferences.locale;
     const previousDefaultPlatforms = defaultExploreVideoPlatforms(preferences.locale);
@@ -689,42 +800,38 @@ const SettingsDialog = ({ onClose, preferences, savePreferences }: SettingsDialo
             exploreVideoPlatforms: defaultExploreVideoPlatforms(draft.locale),
           }
         : draft;
-    savePreferences(nextPreferences);
-    const result = await window.desktop?.saveLocale(nextPreferences.locale);
-    if (result && !result.ok) {
-      savePreferences(preferences);
-      setNotice(result.readiness.message);
-      return;
+    if (!localeChanged) {
+      savePreferences(nextPreferences);
+      return true;
     }
-    setNotice('saved');
+    return saveAllSettings(nextPreferences);
   };
-  const saveServices = async () => {
-    if (window.desktop) {
-      const parsed = serviceSettingsSaveRequestSchema.safeParse({
-        services,
-        credentials: credentialUpdates,
-      });
-      if (!parsed.success) {
-        setNotice(
-          english ? 'Check the service endpoint and numeric values.' : '请检查服务地址和数值。',
-        );
+  const saveServices = async (): Promise<boolean> => {
+    return saveAllSettings(draft);
+  };
+  const handleSave = async () => {
+    if (saveState === 'saving' || saveState === 'success') return;
+    if (saveStateResetTimerRef.current !== null) {
+      window.clearTimeout(saveStateResetTimerRef.current);
+      saveStateResetTimerRef.current = null;
+    }
+    setSaveState('saving');
+    setNotice('');
+    try {
+      const succeeded = activeTab === 'general' ? await saveGeneral() : await saveServices();
+      if (!succeeded) {
+        setSaveState('error');
         return;
       }
-      const result = await window.desktop.saveServiceSettings(parsed.data);
-      setNotice(
-        !result.ok
-          ? result.readiness.message
-          : english
-            ? 'Candidate service is ready. Reconnecting the guide…'
-            : '候选服务已就绪，正在重新连接导游…',
-      );
-      return;
+      setSaveState('success');
+      saveStateResetTimerRef.current = window.setTimeout(() => {
+        saveStateResetTimerRef.current = null;
+        setSaveState('idle');
+      }, 1_500);
+    } catch {
+      setNotice(english ? 'Unable to save settings. Try again.' : '设置保存失败，请重试。');
+      setSaveState('error');
     }
-    setNotice(
-      english
-        ? 'Non-secret service fields saved. Credentials require the desktop app to be encrypted.'
-        : '非敏感服务参数已保存。凭据需要在桌面应用中加密保存。',
-    );
   };
   const exportDiagnostics = async () => {
     if (!window.desktop) return;
@@ -831,6 +938,12 @@ const SettingsDialog = ({ onClose, preferences, savePreferences }: SettingsDialo
     (credentialStatus.configured.sttAppId || credentials.sttAppId) &&
     (credentialStatus.configured.sttAccessToken || credentials.sttAccessToken);
   const searchConfigured = credentialStatus.configured.searchApiKey || credentials.searchApiKey;
+  const ttsVoiceOptions = ttsVoiceSamples.filter((voice) => voice.locale === draft.locale);
+  const selectedTtsVoiceSample = ttsVoiceOptions.find(
+    (voice) => voice.speaker === services.tts.speaker,
+  );
+  const isKnownTtsVoice = selectedTtsVoiceSample !== undefined;
+  const ttsVoiceSelectValue = isKnownTtsVoice ? services.tts.speaker : customTtsVoiceValue;
 
   return (
     <main className="utility-card settings-dialog" role="dialog" aria-modal="true">
@@ -906,10 +1019,10 @@ const SettingsDialog = ({ onClose, preferences, savePreferences }: SettingsDialo
                 </small>
               </div>
               <label className="settings-select-row">
-                <span>{english ? 'Display language' : '显示语言'}</span>
+                <span>{english ? 'Project language' : '项目语言'}</span>
                 <select
                   value={draft.locale}
-                  onChange={(event) => updateDraft('locale', event.target.value as SupportedLocale)}
+                  onChange={(event) => updateDraftLocale(event.target.value as SupportedLocale)}
                 >
                   <option value="zh-CN">简体中文</option>
                   <option value="en-US">English</option>
@@ -1271,16 +1384,92 @@ const SettingsDialog = ({ onClose, preferences, savePreferences }: SettingsDialo
                     />
                   </div>
                 )}
-                <ServiceField
-                  label={english ? 'TTS speaker' : '豆包 TTS 音色'}
-                  value={services.tts.speaker}
-                  onChange={(value) =>
-                    setServices((current) => ({
-                      ...current,
-                      tts: { ...current.tts, speaker: value },
-                    }))
-                  }
-                />
+                <div className="tts-voice-picker">
+                  <div className="tts-voice-picker-row">
+                    <TtsVoiceSelectField
+                      label={english ? 'TTS voice' : '豆包 TTS 音色'}
+                      value={ttsVoiceSelectValue}
+                      voices={ttsVoiceOptions}
+                      customLabel={english ? 'Custom speaker ID' : '自定义 speaker ID'}
+                      customValue={customTtsVoiceValue}
+                      onChange={(value) =>
+                        setServices((current) => ({
+                          ...current,
+                          tts: {
+                            ...current.tts,
+                            speaker: value === customTtsVoiceValue ? '' : value,
+                          },
+                        }))
+                      }
+                    />
+                    <button
+                      type="button"
+                      className="tts-voice-preview-button no-drag"
+                      disabled={!selectedTtsVoiceSample}
+                      aria-label={
+                        playingTtsVoiceSpeaker === selectedTtsVoiceSample?.speaker
+                          ? english
+                            ? 'Stop voice preview'
+                            : '停止试听'
+                          : english
+                            ? 'Play voice preview'
+                            : '播放音色试听'
+                      }
+                      title={
+                        playingTtsVoiceSpeaker === selectedTtsVoiceSample?.speaker
+                          ? english
+                            ? 'Stop voice preview'
+                            : '停止试听'
+                          : english
+                            ? 'Play voice preview'
+                            : '播放音色试听'
+                      }
+                      onClick={() =>
+                        selectedTtsVoiceSample && playTtsVoicePreview(selectedTtsVoiceSample)
+                      }
+                    >
+                      {playingTtsVoiceSpeaker === selectedTtsVoiceSample?.speaker ? (
+                        <StopIcon size={14} weight="bold" aria-hidden="true" />
+                      ) : (
+                        <SpeakerHighIcon size={14} weight="bold" aria-hidden="true" />
+                      )}
+                      <span>
+                        {playingTtsVoiceSpeaker === selectedTtsVoiceSample?.speaker
+                          ? english
+                            ? 'Stop'
+                            : '停止'
+                          : english
+                            ? 'Preview'
+                            : '试听'}
+                      </span>
+                    </button>
+                  </div>
+                  <small className="tts-voice-picker-note">
+                    {ttsVoiceSamplesLoading
+                      ? english
+                        ? 'Loading voice samples from the Confirmed Voices folder…'
+                        : '正在读取“确认音色”文件夹…'
+                      : ttsVoiceOptions.length === 0
+                        ? english
+                          ? 'No voice sample matches the project language. Use a custom speaker ID below.'
+                          : '没有匹配项目语言的音色样例，请在下方填写自定义 speaker ID。'
+                        : english
+                          ? `${ttsVoiceOptions.length} local voice sample${ttsVoiceOptions.length === 1 ? '' : 's'} available.`
+                          : `已读取 ${ttsVoiceOptions.length} 个本地音色样例。`}
+                  </small>
+                </div>
+                {!isKnownTtsVoice ? (
+                  <ServiceField
+                    label={english ? 'Custom speaker ID' : '自定义 speaker ID'}
+                    value={services.tts.speaker}
+                    onChange={(value) =>
+                      setServices((current) => ({
+                        ...current,
+                        tts: { ...current.tts, speaker: value },
+                      }))
+                    }
+                  />
+                ) : null}
                 <details className="service-advanced no-drag">
                   <summary>{english ? 'TTS advanced settings' : 'TTS 高级设置'}</summary>
                   <ServiceField
@@ -1372,7 +1561,11 @@ const SettingsDialog = ({ onClose, preferences, savePreferences }: SettingsDialo
       {activeTab === 'about' ? null : (
         <footer className="settings-footer">
           <span role="status">
-            {(notice === 'saved' ? copy.saved : notice) ||
+            {(saveState === 'success'
+              ? copy.saved
+              : saveState === 'error' && !notice
+                ? copy.saveFailed
+                : notice) ||
               (activeTab === 'general'
                 ? english
                   ? 'Changes are saved when you press Save.'
@@ -1383,10 +1576,31 @@ const SettingsDialog = ({ onClose, preferences, savePreferences }: SettingsDialo
           </span>
           <button
             type="button"
-            className="done-button no-drag"
-            onClick={activeTab === 'general' ? saveGeneral : saveServices}
+            className={`done-button no-drag done-button--${saveState}`}
+            aria-busy={saveState === 'saving'}
+            disabled={saveState === 'saving' || saveState === 'success'}
+            onClick={() => void handleSave()}
           >
-            {activeTab === 'general' ? copy.save : copy.saveReconnect}
+            {saveState === 'saving' ? (
+              <CircleNotchIcon className="done-button-spinner" size={14} aria-hidden="true" />
+            ) : saveState === 'success' ? (
+              <CheckIcon size={14} weight="bold" aria-hidden="true" />
+            ) : saveState === 'error' ? (
+              <WarningCircleIcon size={14} weight="bold" aria-hidden="true" />
+            ) : null}
+            <span>
+              {saveState === 'saving'
+                ? copy.saving
+                : saveState === 'success'
+                  ? activeTab === 'general'
+                    ? copy.saveSuccess
+                    : copy.saveApplied
+                  : saveState === 'error'
+                    ? copy.saveFailed
+                    : activeTab === 'general'
+                      ? copy.save
+                      : copy.saveReconnect}
+            </span>
           </button>
         </footer>
       )}
@@ -1530,6 +1744,99 @@ const ServiceField = ({
         ) : null}
       </span>
     </label>
+  );
+};
+
+const TtsVoiceSelectField = ({
+  customLabel,
+  customValue,
+  label,
+  onChange,
+  value,
+  voices,
+}: {
+  customLabel: string;
+  customValue: string;
+  label: string;
+  onChange(value: string): void;
+  value: string;
+  voices: ReadonlyArray<DesktopTtsVoiceSample>;
+}) => {
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement | null>(null);
+  const selectedVoice = voices.find((voice) => voice.speaker === value);
+
+  useEffect(() => {
+    if (!open) return;
+    const handlePointerDown = (event: PointerEvent) => {
+      if (rootRef.current?.contains(event.target as Node)) return;
+      setOpen(false);
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setOpen(false);
+    };
+    document.addEventListener('pointerdown', handlePointerDown);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDown);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [open]);
+
+  const chooseVoice = (speaker: string) => {
+    onChange(speaker);
+    setOpen(false);
+  };
+
+  return (
+    <div className="service-field tts-voice-select-field" ref={rootRef}>
+      <span>{label}</span>
+      <div className="tts-voice-select-control">
+        <button
+          type="button"
+          className="tts-voice-select-trigger no-drag"
+          aria-expanded={open}
+          aria-haspopup="listbox"
+          onClick={() => setOpen((current) => !current)}
+        >
+          <span>{selectedVoice?.name ?? customLabel}</span>
+          <CaretDownIcon size={14} weight="bold" aria-hidden="true" />
+        </button>
+        {open ? (
+          <div className="tts-voice-select-menu" role="listbox" aria-label={label}>
+            {voices.map((voice) => (
+              <button
+                key={voice.speaker}
+                type="button"
+                className="tts-voice-select-option no-drag"
+                role="option"
+                aria-selected={voice.speaker === value}
+                onClick={() => chooseVoice(voice.speaker)}
+              >
+                <span>
+                  <strong>{voice.name}</strong>
+                  <small>{voice.speaker}</small>
+                </span>
+                {voice.speaker === value ? <CheckIcon size={14} weight="bold" /> : null}
+              </button>
+            ))}
+            <button
+              type="button"
+              className="tts-voice-select-option no-drag"
+              role="option"
+              aria-selected={value === customValue}
+              onClick={() => chooseVoice(customValue)}
+            >
+              <span>
+                <strong>{customLabel}</strong>
+                <small>手动填写 speaker ID</small>
+              </span>
+              {value === customValue ? <CheckIcon size={14} weight="bold" /> : null}
+            </button>
+          </div>
+        ) : null}
+      </div>
+    </div>
   );
 };
 
@@ -1706,22 +2013,6 @@ const Assistant = () => {
       void sessionRef.current.end();
     };
   }, [startSession]);
-
-  useEffect(
-    () =>
-      window.desktop?.onServiceReconnectNeeded((transitionId) => {
-        void (async () => {
-          const connected = await startSession();
-          if (connected) {
-            const result = await window.desktop?.completeServiceReconnect(transitionId);
-            if (result?.ok) return;
-          }
-          await window.desktop?.rollbackServiceReconnect(transitionId);
-          await startSession();
-        })();
-      }),
-    [startSession],
-  );
 
   return (
     <SessionProvider session={session}>

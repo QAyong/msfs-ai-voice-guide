@@ -8,7 +8,7 @@
   "scripts": {
     "build": "pnpm desktop:typecheck && pnpm desktop:build",
     "desktop:dev": "pnpm native:build && electron-vite dev",
-    "desktop:build": "pnpm native:build && electron-vite build && node scripts/stage-global-ptt.mjs && node scripts/stage-msfs-cli.mjs resources/msfs out/msfs && node scripts/stage-livekit-server.mjs resources/livekit out/livekit",
+    "desktop:build": "pnpm native:build && electron-vite build && node scripts/stage-global-ptt.mjs && node scripts/stage-msfs-cli.mjs resources/msfs out/msfs && node scripts/stage-livekit-server.mjs resources/livekit out/livekit && node scripts/stage-tts-voice-samples.mjs resources/tts out/tts",
     "desktop:preview": "electron-vite preview --entry ./out/main/index.js",
     "desktop:typecheck": "tsc --noEmit --project desktop/tsconfig.json",
     "native:build": "node scripts/build-global-ptt.mjs",
@@ -27,6 +27,8 @@
     "search:smoke": "node --env-file=.env node_modules/vitest/vitest.mjs run tests/e2e/search-api.smoke.test.ts",
     "msfs:stage": "node scripts/stage-msfs-cli.mjs resources/msfs out/msfs",
     "livekit:stage": "node scripts/stage-livekit-server.mjs resources/livekit out/livekit",
+    "tts:stage": "node scripts/stage-tts-voice-samples.mjs resources/tts out/tts",
+    "tts:samples": "node --env-file=.env --import tsx scripts/tts-voice-samples.ts",
     "msfs:smoke": "node --env-file=.env --import tsx scripts/smoke-msfs-adapter.ts",
     "explore:spike": "node --import tsx scripts/spike-explore-providers.ts",
     "verify": "pnpm lint && pnpm typecheck && pnpm desktop:typecheck && pnpm test && pnpm format:check"

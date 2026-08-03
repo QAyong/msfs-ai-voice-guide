@@ -12,10 +12,11 @@ import type { GuideSourcesMessage } from '../../../shared/guide-events.js';
 import type { ExploreRequest, ExploreResponse } from '../../../shared/explore-contracts.js';
 import type { SourceWindowState } from '../../../shared/source-preview.js';
 import type {
+  DesktopSettingsSaveRequest,
   DesktopServiceSettings,
+  DesktopTtsVoiceSample,
   ServiceCheckRequest,
   ServiceCheckResult,
-  ServiceSettingsSaveRequest,
 } from '../../../shared/desktop-settings.js';
 import type {
   GlobalPushToTalkConfiguration,
@@ -38,10 +39,6 @@ declare global {
         configuration: GlobalPushToTalkConfiguration,
       ): Promise<GlobalPushToTalkStatus>;
       onGlobalPushToTalk(callback: (event: GlobalPushToTalkEvent) => void): () => void;
-      saveLocale(locale: 'en-US' | 'zh-CN'): Promise<{
-        ok: boolean;
-        readiness: DesktopReadiness;
-      }>;
       onLocaleChanged(callback: (locale: 'en-US' | 'zh-CN') => void): () => void;
       getServiceCredentialStatus(): Promise<{
         encryptionAvailable: boolean;
@@ -57,16 +54,11 @@ declare global {
         searchApiKey: string;
       }>;
       getServiceSettings(): Promise<DesktopServiceSettings>;
-      saveServiceSettings(
-        request: ServiceSettingsSaveRequest,
-      ): Promise<{ ok: true; transitionId: string } | { ok: false; readiness: DesktopReadiness }>;
+      getTtsVoiceSamples(): Promise<DesktopTtsVoiceSample[]>;
+      saveSettings(
+        request: DesktopSettingsSaveRequest,
+      ): Promise<{ ok: boolean; readiness: DesktopReadiness }>;
       testService(request: ServiceCheckRequest): Promise<ServiceCheckResult>;
-      onServiceReconnectNeeded(callback: (transitionId: string) => void): () => void;
-      completeServiceReconnect(transitionId: string): Promise<{ ok: boolean; message: string }>;
-      rollbackServiceReconnect(transitionId: string): Promise<void>;
-      onServiceTransitionResult(
-        callback: (result: { ok: boolean; message: string }) => void,
-      ): () => void;
       openQuitDialog(): Promise<boolean>;
       closeUtilityWindow(): Promise<void>;
       quitApp(): Promise<void>;
