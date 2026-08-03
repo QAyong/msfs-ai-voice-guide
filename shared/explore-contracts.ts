@@ -12,7 +12,7 @@ const safeWebUrlSchema = z
   }, '必须是 HTTP(S) URL');
 
 export const explorePreferencesSchema = z.object({
-  encyclopedia: z.enum(['wikipedia', 'baidu_baike', '360_baike']),
+  encyclopedia: z.enum(['wikipedia', 'baidu_baike']),
   videoPlatforms: z.array(z.enum(['youtube', 'bilibili'])).max(2),
 });
 

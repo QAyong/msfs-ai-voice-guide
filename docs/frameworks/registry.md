@@ -23,7 +23,7 @@
 ## 规划依赖说明
 
 - Mem0 目前只是已接受的未来技术方向，不是当前运行时依赖。
-- Explore 模式当前接入 Wikipedia、百度百科、360 百科、YouTube 网页搜索和哔哩哔哩站内搜索页；3～5 个具体词条约束、360 百科真实 `/doc/` 解析与 URL 去重已完成自动化验证和桌面构建验证。真实 Electron 来源窗口、LiveKit、MSFS 与目标网络下的端到端人工验收尚未完成。详见 [Spec-015](../specs/spec-015-user-triggered-explore-mode.md) 与 [Feature-015 Spike](compliance/feature-015-explore-content-provider-spike.md)。
+- Explore 模式当前接入 Wikipedia、百度百科、YouTube 搜索页和哔哩哔哩站内搜索页；3～5 个具体词条约束与 URL 去重已完成自动化验证和桌面构建验证。真实 Electron 来源窗口、LiveKit、MSFS 与目标网络下的端到端人工验收尚未完成。详见 [Spec-015](../specs/spec-015-user-triggered-explore-mode.md) 与 [Feature-015 Spike](compliance/feature-015-explore-content-provider-spike.md)。
 - Mem0 官方 LiveKit 示例当前以 Python 为主；本项目是 TypeScript，因此实施时必须同时核对 Mem0 Node SDK 和已安装 LiveKit Agents 版本，不能直接复制 Python 示例。
 - 在实际安装 Mem0、Embedding 或存储依赖后，必须用锁文件中的精确版本更新本表。
 
@@ -34,4 +34,4 @@
 - 新增或升级核心框架时同步更新本表。
 - 无法找到对应版本文档时，记录所检查的本地源码或 TypeScript 类型定义。
 - LiveKit Server 是独立二进制发布物，不由 pnpm 锁文件管理；将它纳入安装包时必须登记精确版本、上游下载地址、SHA-256 与许可证，不能使用无版本的全局安装或 Docker `latest` 标签。
-- `duck-duck-scrape` 为 MIT，但当前 YouTube 探索使用配置的网页搜索服务；平台 URL 过滤与可达性变化必须通过可替换 Provider 边界和 [Feature-015 Spike](compliance/feature-015-explore-content-provider-spike.md) 复核。
+- `duck-duck-scrape` 为 MIT，当前探索 Provider 不依赖它；平台 URL 过滤与可达性变化必须通过可替换 Provider 边界和 [Feature-015 Spike](compliance/feature-015-explore-content-provider-spike.md) 复核。

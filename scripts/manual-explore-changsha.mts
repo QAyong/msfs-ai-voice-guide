@@ -22,8 +22,6 @@ const { ExploreService } = await import('../src/explore/service.ts');
 const { EncyclopediaService } = await import('../src/explore/encyclopedia/service.ts');
 const { WikipediaProvider } = await import('../src/explore/encyclopedia/wikipedia.ts');
 const { BaiduBaikeSearchPageProvider } = await import('../src/explore/encyclopedia/baidu-baike.ts');
-const { Qihoo360BaikeSearchPageProvider } =
-  await import('../src/explore/encyclopedia/qihoo-360-baike.ts');
 const { VideoService } = await import('../src/explore/video/service.ts');
 const { BilibiliSearchPageProvider } = await import('../src/explore/video/bilibili.ts');
 const { YouTubeProvider } = await import('../src/explore/video/youtube.ts');
@@ -44,7 +42,6 @@ const service = new ExploreService(
   new EncyclopediaService([
     new WikipediaProvider(),
     new BaiduBaikeSearchPageProvider(),
-    new Qihoo360BaikeSearchPageProvider(),
   ]),
   new VideoService([
     new YouTubeProvider(new SearchService(loadSearchConfig())),
@@ -64,7 +61,7 @@ const conversation = [
 
 const preferencesVariants = [
   { name: 'default-wikipedia-youtube', encyclopedia: 'wikipedia', videoPlatforms: ['youtube'] },
-  { name: 'baidu-360', encyclopedia: 'baidu_baike', videoPlatforms: ['bilibili'] },
+  { name: 'baidu-bilibili', encyclopedia: 'baidu_baike', videoPlatforms: ['bilibili'] },
 ];
 
 for (const pref of preferencesVariants) {

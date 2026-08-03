@@ -6,7 +6,6 @@ import type { EncyclopediaProvider } from './provider.js';
 const defaultProviderTimeoutMs: Record<EncyclopediaProvider['id'], number> = {
   wikipedia: 4_000,
   baidu_baike: 2_500,
-  '360_baike': 3_000,
 };
 
 export type EncyclopediaServiceOptions = {

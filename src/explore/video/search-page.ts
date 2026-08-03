@@ -2,7 +2,7 @@ import { exploreCardSchema, type ExploreCard } from '../../../shared/explore-con
 import type { VideoCandidate, VideoProvider } from './provider.js';
 
 type SearchPageVideoOptions = {
-  id: 'bilibili';
+  id: 'youtube' | 'bilibili';
   siteName: string;
   allowedHosts: readonly string[];
   buildSearchUrl(query: string): URL;
@@ -39,8 +39,9 @@ export const createVideoSearchPageCard = (
 };
 
 /**
- * Domestic platforms currently use their own search UI as the stable fallback.
- * This provider intentionally does not scrape private or signed result APIs.
+ * Platform search pages are the stable discovery boundary for providers that do not
+ * need backend result scraping. This provider intentionally does not access private,
+ * signed or account-bound result APIs.
  */
 export class SearchPageVideoProvider implements VideoProvider {
   readonly id: SearchPageVideoOptions['id'];

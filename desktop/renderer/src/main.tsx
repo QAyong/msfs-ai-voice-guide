@@ -282,7 +282,7 @@ type Preferences = {
   alwaysOnTop: boolean;
   agentVolume: number;
   openSourcesInApp: boolean;
-  exploreEncyclopedia: 'wikipedia' | 'baidu_baike' | '360_baike';
+  exploreEncyclopedia: 'wikipedia' | 'baidu_baike';
   exploreVideoPlatforms: ExploreVideoPlatform[];
   interfaceMotion: boolean;
   voiceInputMode: VoiceInputMode;
@@ -326,9 +326,7 @@ const readPreferences = (): Preferences => {
       exploreEncyclopedia:
         raw.exploreEncyclopedia === 'baidu_baike'
           ? 'baidu_baike'
-          : raw.exploreEncyclopedia === '360_baike' || raw.exploreEncyclopedia === 'douyin_baike'
-            ? '360_baike'
-            : defaultPreferences.exploreEncyclopedia,
+          : defaultPreferences.exploreEncyclopedia,
       exploreVideoPlatforms:
         savedVideoPlatforms.length > 0 ? savedVideoPlatforms : defaultExploreVideoPlatforms(locale),
     };
@@ -990,7 +988,6 @@ const SettingsDialog = ({ onClose, preferences, savePreferences }: SettingsDialo
                 >
                   <option value="wikipedia">Wikipedia</option>
                   <option value="baidu_baike">{english ? 'Baidu Baike' : '百度百科'}</option>
-                  <option value="360_baike">{english ? '360 Baike' : '360百科'}</option>
                 </select>
               </label>
               <div
