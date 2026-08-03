@@ -2760,8 +2760,13 @@ html[data-motion='off'] *::after {
   font-size: 11px;
 }
 .explore-topic-heading > small {
+  flex: 1;
+  min-width: 0;
   overflow: hidden;
-  color: #7a8799;
+  border-radius: 4px;
+  padding: 4px 6px;
+  background: #f3f7ff;
+  color: #6f7f97;
   font-size: 9px;
   line-height: 1.35;
   text-overflow: ellipsis;

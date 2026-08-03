@@ -37,12 +37,10 @@ import { ExploreService } from '../../src/explore/service.js';
 import { EncyclopediaService } from '../../src/explore/encyclopedia/service.js';
 import { WikipediaProvider } from '../../src/explore/encyclopedia/wikipedia.js';
 import { BaiduBaikeSearchPageProvider } from '../../src/explore/encyclopedia/baidu-baike.js';
-import { Qihoo360BaikeSearchPageProvider } from '../../src/explore/encyclopedia/qihoo-360-baike.js';
 import { VideoService } from '../../src/explore/video/service.js';
 import { BilibiliSearchPageProvider } from '../../src/explore/video/bilibili.js';
-import { YouTubeProvider } from '../../src/explore/video/youtube.js';
+import { YouTubeSearchPageProvider } from '../../src/explore/video/youtube.js';
 import type { VideoProvider } from '../../src/explore/video/provider.js';
-import { SearchService } from '../../src/search/service.js';
 import { DeepSeekExplorePlanner } from '../../src/providers/llm/deepseek-explore.js';
 import type {
   DesktopReadiness,
@@ -691,20 +689,9 @@ const createExploreService = async (): Promise<ExploreService | null> => {
     new EncyclopediaService([
       new WikipediaProvider(),
       new BaiduBaikeSearchPageProvider(),
-      new Qihoo360BaikeSearchPageProvider(),
     ]),
     new VideoService([
-      ...(configuration.config.search.apiKey
-        ? [
-            new YouTubeProvider(
-              new SearchService({
-                apiKey: configuration.config.search.apiKey,
-                endpoint: configuration.config.search.endpoint,
-                timeoutMs: configuration.config.search.timeoutMs,
-              }),
-            ),
-          ]
-        : []),
+      new YouTubeSearchPageProvider(),
       new BilibiliSearchPageProvider(),
     ] satisfies VideoProvider[]),
   );
