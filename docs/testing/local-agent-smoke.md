@@ -1,6 +1,6 @@
 # 本地语音与文字 Agent 冒烟测试
 
-**最近一次通过：** 2026-08-01，开发态 Electron 默认自动启动本地 LiveKit：动态端口 6932、Agent 健康检查 HTTP 200。2026-07-19 已在 Electron 中完成语音与文字两条真实链路：连续对话可自动检测轮次结束并经过豆包 STT、DeepSeek 与豆包 TTS；文字输入可通过 LiveKit `lk.chat` 进入同一 AgentSession，显示并播放回答，且回答中发送新文字可以触发打断。用户确认测试没有问题。2026-07-16 已另行验证 `searchWeb` 的真实搜索链路。
+**最近一次通过：** 2026-08-03，桌面设置中的 TTS 音色筛选、试听、自定义 speaker、保存反馈和构建资源清理已完成验收；开发态 Electron 默认自动启动本地 LiveKit。2026-07-19 已在 Electron 中完成语音与文字两条真实链路：连续对话可自动检测轮次结束并经过豆包 STT、DeepSeek 与豆包 TTS；文字输入可通过 LiveKit `lk.chat` 进入同一 AgentSession，显示并播放回答，且回答中发送新文字可以触发打断。用户确认测试没有问题。2026-07-16 已另行验证 `searchWeb` 的真实搜索链路。
 
 ## 前置条件
 
@@ -42,6 +42,19 @@ MSFS_AUTO_START_LIVEKIT=true
 - DeepSeek 对需要外部信息的问题主动调用 `searchWeb`，搜索服务返回 `ok` 或可解释的低置信度/错误状态。
 - 天气、新闻等时效性回答说明来源地点和时间；来源时间不明确时不声称为实时信息。
 
+## 桌面设置与 TTS 音色闭环
+
+1. 执行 `pnpm desktop:build`，再执行 `pnpm desktop:preview` 打开 Electron 桌面窗口。
+2. 打开设置的“服务配置”页，确认音色样例只来自项目内 `resources/tts/confirmed-voices/`。
+3. 在中文项目语言下确认列表显示中文样例并默认 Vivi；切换到 English 后确认默认 Dacey、Stokie 可选，列表中不出现 Tim。
+4. 选择一个本地音色，点击“试听”，确认音频播放；再次点击后停止试听。试听不会自动保存服务配置。
+5. 选择“自定义 speaker ID”，填写自定义值并切换项目语言，确认自定义值保持不变；切换回内置音色后才恢复语言对齐。
+6. 点击“保存并重新连接”，确认按钮依次显示保存中、成功图标/成功文案并恢复正常；保存失败时显示失败状态，按钮仍可再次点击重试。
+7. 使用旧的 `en_male_tim_uranus_bigtts` 服务配置启动设置页，确认英文项目迁移到 Dacey，中文项目迁移到 Vivi，且 Worker 使用迁移后的 speaker 重启。
+8. 构建完成后检查 `out/tts/confirmed-voices/` 与 `resources/tts/confirmed-voices/` 内容一致，确认已删除的 Tim 样例不会残留在 `out/tts`。
+
+通过标准：音色列表没有目录外或旧构建残留音色；语言过滤、试听、保存重连和旧配置迁移均符合预期，失败状态不会误报保存成功。
+
 ## 桌面语音闭环
 
 1. 执行 `pnpm desktop:build`，再执行 `pnpm desktop:preview` 打开 Electron 桌面窗口。
@@ -82,6 +95,7 @@ MSFS_AUTO_START_LIVEKIT=true
 ## 常见配置问题
 
 - `VOLCENGINE_TTS_SPEAKER` 必须是当前账户已开通的音色，不可直接使用示例值。
+- 本地试听样例必须放在 `resources/tts/confirmed-voices/`，文件名需要包含可解析的语言和性别标记；删除样例后重新执行 `pnpm desktop:build`，staging 会清理 `out/tts` 中的旧文件。
 - `VOLCENGINE_LLM_MODEL` 必须是方舟账户可调用的 endpoint/model ID。
 - `VOLCENGINE_SPEECH_API_KEY` 可供 STT 优先使用；TTS 仍需要 App ID 和 Access Token。
 - `pnpm agent:check` 不会调用云端服务，因此只能验证配置完整性，不能替代上述真实语音联调。

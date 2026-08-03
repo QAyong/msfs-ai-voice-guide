@@ -8,9 +8,8 @@ import {
   shell,
   WebContentsView,
 } from 'electron';
-import { readFile, writeFile } from 'node:fs/promises';
-import { randomUUID } from 'node:crypto';
-import { dirname, join } from 'node:path';
+import { readdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { basename, dirname, extname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { AppConfig } from '../../src/config/schema.js';
 import { guideSourcesMessageSchema, type GuideSource } from '../../shared/guide-events.js';
@@ -60,19 +59,21 @@ import {
   type DiagnosticExportResult,
 } from '../../shared/desktop-diagnostics.js';
 import {
+  alignTtsSpeakerToLocale,
   defaultDesktopServiceSettings,
   desktopServiceSettingsSchema,
+  desktopSettingsSaveRequestSchema,
   serviceCredentialKeys,
   serviceCredentialUpdatesSchema,
   serviceCheckRequestSchema,
-  serviceSettingsSaveRequestSchema,
   supportedLocaleSchema,
+  type DesktopSettingsSaveRequest,
   type DesktopServiceSettings,
   type ServiceCredentialKey,
   type ServiceCredentialStatus,
   type ServiceCheckResult,
-  type ServiceSettingsSaveRequest,
   type StoredServiceCredentials,
+  type DesktopTtsVoiceSample,
 } from '../../shared/desktop-settings.js';
 
 import {
@@ -99,11 +100,7 @@ import {
   getLocalLiveKitServerPath,
   shouldAutoStartLocalLiveKit,
 } from './local-livekit-runtime.js';
-import {
-  checkDesktopConfiguration,
-  localLiveKitFailureReadiness,
-  workerFailureReadiness,
-} from './readiness.js';
+import { checkDesktopConfiguration, localLiveKitFailureReadiness } from './readiness.js';
 import { createDesktopSessionCredentials } from './session-token.js';
 import { getSourceViewBounds, SOURCE_TITLE_BAR_HEIGHT } from './source-view-bounds.js';
 import { getLandscapeSourceWindowBounds } from './source-window-fullscreen.js';
@@ -221,21 +218,11 @@ const createAgentRuntime = (healthPort = 8098) =>
   new EmbeddedAgentRuntime(healthPort, (stream, message) => {
     void getDiagnosticsLogger().append('worker', { stream, message });
   });
-let agentRuntime = createAgentRuntime();
+const agentRuntime = createAgentRuntime();
 const localLiveKitRuntime = new LocalLiveKitRuntime();
 const serviceAvailabilityChecker = new ServiceAvailabilityChecker();
 let guideLocale: GuideLocale = 'zh-CN';
 let exploreController: ExploreController | null = null;
-
-type PendingServiceTransition = {
-  id: string;
-  runtime: EmbeddedAgentRuntime;
-  config: AppConfig;
-  services: DesktopServiceSettings;
-  credentials: StoredServiceCredentials;
-  persistCredentials: boolean;
-};
-let pendingServiceTransition: PendingServiceTransition | null = null;
 
 const aboutLinks: readonly AboutLink[] = [];
 
@@ -277,6 +264,12 @@ const getAgentProcessPath = () => join(mainDir, 'agent-process.js');
 const getPackagedResourcesPath = () =>
   (process as NodeJS.Process & { resourcesPath?: string }).resourcesPath ??
   join(process.cwd(), 'out');
+const getTtsVoiceSamplesPath = () =>
+  join(
+    app.isPackaged ? getPackagedResourcesPath() : join(process.cwd(), 'resources'),
+    'tts',
+    'confirmed-voices',
+  );
 const getLocalLiveKitRuntimeDirectory = () => join(app.getPath('userData'), 'livekit-runtime');
 const getLocalLiveKitExecutablePath = () =>
   getLocalLiveKitServerPath({
@@ -329,7 +322,14 @@ const readStoredServiceSettings = async (): Promise<DesktopServiceSettings | und
     const parsed = desktopServiceSettingsSchema.safeParse(
       JSON.parse(await readFile(getServiceSettingsPath(), 'utf8')),
     );
-    return parsed.success ? parsed.data : undefined;
+    if (!parsed.success) return undefined;
+    return {
+      ...parsed.data,
+      tts: {
+        ...parsed.data.tts,
+        speaker: alignTtsSpeakerToLocale(parsed.data.tts.speaker, guideLocale),
+      },
+    };
   } catch {
     return undefined;
   }
@@ -337,6 +337,54 @@ const readStoredServiceSettings = async (): Promise<DesktopServiceSettings | und
 
 const writeStoredServiceSettings = async (settings: DesktopServiceSettings): Promise<void> => {
   await writeFile(getServiceSettingsPath(), JSON.stringify(settings), { mode: 0o600 });
+};
+
+const ttsVoiceMimeTypes: Record<string, string> = {
+  '.wav': 'audio/wav',
+  '.mp3': 'audio/mpeg',
+  '.ogg': 'audio/ogg',
+  '.m4a': 'audio/mp4',
+};
+
+const readTtsVoiceSamples = async (): Promise<DesktopTtsVoiceSample[]> => {
+  try {
+    const entries = await readdir(getTtsVoiceSamplesPath(), { withFileTypes: true });
+    const samples = await Promise.all(
+      entries
+        .filter((entry) => entry.isFile())
+        .map(async (entry) => {
+          const extension = extname(entry.name).toLowerCase();
+          const mimeType = ttsVoiceMimeTypes[extension];
+          if (!mimeType) return null;
+
+          const baseName = basename(entry.name, extension);
+          const speakerMarker = baseName.search(/_(?:zh|en)_(?:female|male)_/);
+          if (speakerMarker <= 0) return null;
+
+          const name = baseName.slice(0, speakerMarker);
+          const speaker = baseName.slice(speakerMarker + 1);
+          const locale = speaker.startsWith('en_') ? 'en-US' : 'zh-CN';
+          const audio = await readFile(join(getTtsVoiceSamplesPath(), entry.name));
+
+          return {
+            name,
+            speaker,
+            locale,
+            fileName: entry.name,
+            dataUrl: `data:${mimeType};base64,${audio.toString('base64')}`,
+          } satisfies DesktopTtsVoiceSample;
+        }),
+    );
+
+    return samples
+      .filter((sample): sample is DesktopTtsVoiceSample => sample !== null)
+      .sort(
+        (left, right) =>
+          left.locale.localeCompare(right.locale) || left.name.localeCompare(right.name, 'zh-CN'),
+      );
+  } catch {
+    return [];
+  }
 };
 
 const writeStoredServiceCredentials = async (
@@ -508,131 +556,99 @@ const startConfiguredAgent = async (
   }
 };
 
-type ServiceSettingsSaveResult =
-  { ok: true; transitionId: string } | { ok: false; readiness: DesktopReadiness };
+type DesktopSettingsSaveResult =
+  | { ok: true; readiness: DesktopReadiness }
+  | {
+      ok: false;
+      readiness: DesktopReadiness;
+    };
 
-const serviceSettingsFailure = (message: string): ServiceSettingsSaveResult => ({
+const desktopSettingsFailure = (message: string): DesktopSettingsSaveResult => ({
   ok: false,
   readiness: { status: 'error', message, issues: [] },
 });
 
-const sendServiceTransitionResult = (result: { ok: boolean; message: string }) => {
-  void getDiagnosticsLogger().append('main', { event: 'service_transition_result', ...result });
-  if (isLiveWindow(utilityWindow) && !utilityWindow.webContents.isDestroyed()) {
-    utilityWindow.webContents.send('settings:service-transition-result', result);
+const notifyLocaleSaved = (locale: GuideLocale) => {
+  if (isLiveWindow(assistantWindow) && !assistantWindow.webContents.isDestroyed()) {
+    assistantWindow.webContents.send('settings:locale-saved', locale);
+  }
+  if (isLiveWindow(sourceWindow) && !sourceWindow.webContents.isDestroyed()) {
+    sourceWindow.webContents.send('settings:locale-saved', locale);
+  }
+  if (
+    sourceView &&
+    !sourceView.webContents.isDestroyed() &&
+    sourceWindowState &&
+    sourceWindowState.mode !== 'preview'
+  ) {
+    sourceView.webContents.reloadIgnoringCache();
   }
 };
 
-const prepareServiceTransition = async (
-  request: ServiceSettingsSaveRequest,
-): Promise<ServiceSettingsSaveResult> => {
-  void getDiagnosticsLogger().append('main', { event: 'service_transition_requested' });
-  if (pendingServiceTransition) return serviceSettingsFailure('已有服务配置正在重新连接。');
+const restoreStoredServiceSettings = async (settings: DesktopServiceSettings | undefined) => {
+  if (settings) {
+    await writeStoredServiceSettings(settings);
+    return;
+  }
+  await rm(getServiceSettingsPath(), { force: true });
+};
 
+const applyDesktopSettings = async (
+  request: DesktopSettingsSaveRequest,
+): Promise<DesktopSettingsSaveResult> => {
+  void getDiagnosticsLogger().append('main', { event: 'settings_save_requested' });
   const hasCredentialUpdate = serviceCredentialKeys.some(
     (key) => request.credentials[key] !== undefined,
   );
   if (hasCredentialUpdate && !safeStorage.isEncryptionAvailable()) {
-    return serviceSettingsFailure('系统加密服务不可用，未保存任何凭据。');
+    return desktopSettingsFailure('系统加密服务不可用，未保存任何凭据。');
   }
 
-  const credentials = mergeCredentialUpdates(
-    await readStoredServiceCredentials(),
-    request.credentials,
-  );
-  const environment = await getEffectiveServiceEnvironment(request.services, credentials);
-  if (shouldAutoStartLocalLiveKit(environment)) {
-    try {
-      const localConnection = await localLiveKitRuntime.ensureStarted({
-        executablePath: getLocalLiveKitExecutablePath(),
-        runtimeDirectory: getLocalLiveKitRuntimeDirectory(),
-      });
-      Object.assign(environment, applyLocalLiveKitEnvironment(environment, localConnection));
-    } catch (error) {
-      return { ok: false, readiness: localLiveKitFailureReadiness(error) };
-    }
-  }
-
-  const configuration = checkDesktopConfiguration(environment);
-  if (!configuration.ok) return { ok: false, readiness: configuration.readiness };
-
-  const transitionId = randomUUID();
-  const candidateConfig: AppConfig = {
-    ...configuration.config,
-    livekit: {
-      ...configuration.config.livekit,
-      // The candidate must not compete with the current Worker for its Room dispatch.
-      agentName: `${configuration.config.livekit.agentName}-candidate-${transitionId.slice(0, 8)}`,
+  const previousLocale = guideLocale;
+  const previousServices = await readStoredServiceSettings();
+  const previousCredentials = await readStoredServiceCredentials();
+  const credentials = mergeCredentialUpdates(previousCredentials, request.credentials);
+  const services: DesktopServiceSettings = {
+    ...request.services,
+    tts: {
+      ...request.services.tts,
+      speaker: alignTtsSpeakerToLocale(request.services.tts.speaker, request.locale),
     },
   };
-  const candidateEnvironment = {
-    ...environment,
-    LIVEKIT_AGENT_NAME: candidateConfig.livekit.agentName,
-  };
-  const candidateRuntime = createAgentRuntime(8099);
-  try {
-    await candidateRuntime.ensureStarted(
-      candidateConfig,
-      getAgentProcessPath(),
-      guideLocale,
-      candidateEnvironment,
-    );
-    const ready = await candidateRuntime.waitUntilReady();
-    if (!ready) {
-      await candidateRuntime.stop();
-      return { ok: false, readiness: candidateRuntime.getReadiness() };
-    }
-  } catch (error) {
-    await candidateRuntime.stop();
-    return { ok: false, readiness: workerFailureReadiness(error) };
-  }
 
-  pendingServiceTransition = {
-    id: transitionId,
-    runtime: candidateRuntime,
-    config: candidateConfig,
-    services: request.services,
-    credentials,
-    persistCredentials: hasCredentialUpdate,
-  };
-  void getDiagnosticsLogger().append('main', { event: 'service_transition_candidate_ready' });
-  if (isLiveWindow(assistantWindow) && !assistantWindow.webContents.isDestroyed()) {
-    assistantWindow.webContents.send('settings:service-reconnect-needed', transitionId);
-  }
-  return { ok: true, transitionId };
-};
-
-const completeServiceTransition = async (transitionId: string) => {
-  const transition = pendingServiceTransition;
-  if (!transition || transition.id !== transitionId) {
-    return { ok: false, message: '服务配置切换已失效，请重新保存。' };
-  }
   try {
-    await writeStoredServiceSettings(transition.services);
-    if (transition.persistCredentials) await writeStoredServiceCredentials(transition.credentials);
+    await writeStoredServiceSettings(services);
+    if (hasCredentialUpdate) await writeStoredServiceCredentials(credentials);
   } catch {
-    await transition.runtime.stop();
-    pendingServiceTransition = null;
-    const result = { ok: false, message: '无法安全保存服务配置，已恢复旧会话。' };
-    sendServiceTransitionResult(result);
-    return result;
+    await restoreStoredServiceSettings(previousServices);
+    if (hasCredentialUpdate) await writeStoredServiceCredentials(previousCredentials);
+    return desktopSettingsFailure('无法安全保存服务配置，未保存任何内容。');
   }
 
-  const previousRuntime = agentRuntime;
-  agentRuntime = transition.runtime;
-  pendingServiceTransition = null;
-  await previousRuntime.stop();
-  const result = { ok: true, message: '服务配置已生效，已连接新的导游会话。' };
-  sendServiceTransitionResult(result);
-  return result;
-};
+  guideLocale = request.locale;
+  const result = await startConfiguredAgent(true);
+  if ('config' in result && result.readiness.status === 'ready') {
+    try {
+      await saveGuideLocale(guideLocale);
+      notifyLocaleSaved(guideLocale);
+      void getDiagnosticsLogger().append('main', { event: 'settings_save_succeeded' });
+      return { ok: true, readiness: result.readiness };
+    } catch {
+      // Restore the last working configuration below.
+    }
+  }
 
-const rollbackServiceTransition = async (transitionId: string) => {
-  const transition = pendingServiceTransition;
-  if (!transition || transition.id !== transitionId) return;
-  pendingServiceTransition = null;
-  await transition.runtime.stop();
-  sendServiceTransitionResult({ ok: false, message: '新服务会话未能连接，已保留原有会话。' });
+  await restoreStoredServiceSettings(previousServices);
+  if (hasCredentialUpdate) {
+    await writeStoredServiceCredentials(previousCredentials);
+  }
+  guideLocale = previousLocale;
+  const rollback = await startConfiguredAgent(true);
+  void getDiagnosticsLogger().append('main', { event: 'settings_save_rolled_back' });
+  return {
+    ok: false,
+    readiness: 'readiness' in rollback ? rollback.readiness : result.readiness,
+  };
 };
 
 const loadRenderer = async (window: BrowserWindow, hash: string) => {
@@ -686,10 +702,7 @@ const createExploreService = async (): Promise<ExploreService | null> => {
   if (!configuration.ok) return null;
   return new ExploreService(
     new DeepSeekExplorePlanner(configuration.config.llm),
-    new EncyclopediaService([
-      new WikipediaProvider(),
-      new BaiduBaikeSearchPageProvider(),
-    ]),
+    new EncyclopediaService([new WikipediaProvider(), new BaiduBaikeSearchPageProvider()]),
     new VideoService([
       new YouTubeSearchPageProvider(),
       new BilibiliSearchPageProvider(),
@@ -1952,12 +1965,6 @@ ipcMain.handle('livekit:create-session', async (event): Promise<DesktopSessionRe
       readiness: { status: 'error', message: '不允许的会话请求。', issues: [] },
     };
   }
-  if (pendingServiceTransition) {
-    return {
-      ok: true,
-      credentials: await createDesktopSessionCredentials(pendingServiceTransition.config),
-    };
-  }
   const result = await startConfiguredAgent(true);
   if (!('config' in result) || result.readiness.status !== 'ready') {
     return { ok: false, readiness: result.readiness };
@@ -1998,58 +2005,6 @@ ipcMain.handle('voice:configure-global-ptt', (event, value: unknown): GlobalPush
   return globalPushToTalk.configure(parsed.data);
 });
 
-ipcMain.handle('settings:save-locale', async (event, value: unknown) => {
-  if (!isUtilitySender(event.sender)) {
-    return {
-      ok: false,
-      readiness: { status: 'error', message: '无权更新语言设置。', issues: [] },
-    } satisfies { ok: boolean; readiness: DesktopReadiness };
-  }
-  const parsed = supportedLocaleSchema.safeParse(value);
-  if (!parsed.success) {
-    return {
-      ok: false,
-      readiness: { status: 'error', message: '语言设置无效。', issues: [] },
-    } satisfies { ok: boolean; readiness: DesktopReadiness };
-  }
-  if (parsed.data === guideLocale) {
-    return { ok: true, readiness: agentRuntime.getReadiness() };
-  }
-
-  const previousLocale = guideLocale;
-  guideLocale = parsed.data;
-  const result = await startConfiguredAgent(true);
-  if ('config' in result && result.readiness.status === 'ready') {
-    try {
-      await saveGuideLocale(guideLocale);
-      if (isLiveWindow(assistantWindow)) {
-        assistantWindow.webContents.send('settings:locale-saved', guideLocale);
-      }
-      if (isLiveWindow(sourceWindow)) {
-        sourceWindow.webContents.send('settings:locale-saved', guideLocale);
-      }
-      if (
-        sourceView &&
-        !sourceView.webContents.isDestroyed() &&
-        sourceWindowState &&
-        sourceWindowState.mode !== 'preview'
-      ) {
-        sourceView.webContents.reloadIgnoringCache();
-      }
-      return { ok: true, readiness: result.readiness };
-    } catch {
-      // Fall through to restore the last working locale and worker.
-    }
-  }
-
-  guideLocale = previousLocale;
-  const rollback = await startConfiguredAgent(true);
-  return {
-    ok: false,
-    readiness: 'readiness' in rollback ? rollback.readiness : result.readiness,
-  };
-});
-
 ipcMain.handle(
   'settings:get-credential-status',
   async (event): Promise<ServiceCredentialStatus> => {
@@ -2083,6 +2038,14 @@ ipcMain.handle('settings:get-service-settings', async (event): Promise<DesktopSe
 });
 
 ipcMain.handle(
+  'settings:get-tts-voice-samples',
+  async (event): Promise<DesktopTtsVoiceSample[]> => {
+    if (!isUtilitySender(event.sender)) return [];
+    return readTtsVoiceSamples();
+  },
+);
+
+ipcMain.handle(
   'settings:save-credentials',
   async (event, value: unknown): Promise<ServiceCredentialStatus> => {
     if (!isUtilitySender(event.sender)) return emptyServiceCredentialStatus('无权保存服务凭据。');
@@ -2096,11 +2059,11 @@ ipcMain.handle(
   },
 );
 
-ipcMain.handle('settings:save-service-settings', async (event, value: unknown) => {
-  if (!isUtilitySender(event.sender)) return serviceSettingsFailure('无权保存服务配置。');
-  const parsed = serviceSettingsSaveRequestSchema.safeParse(value);
-  if (!parsed.success) return serviceSettingsFailure('服务配置格式无效，未保存任何内容。');
-  return prepareServiceTransition(parsed.data);
+ipcMain.handle('settings:save-settings', async (event, value: unknown) => {
+  if (!isUtilitySender(event.sender)) return desktopSettingsFailure('无权保存设置。');
+  const parsed = desktopSettingsSaveRequestSchema.safeParse(value);
+  if (!parsed.success) return desktopSettingsFailure('设置格式无效，未保存任何内容。');
+  return applyDesktopSettings(parsed.data);
 });
 
 ipcMain.handle(
@@ -2122,18 +2085,6 @@ ipcMain.handle(
     return serviceAvailabilityChecker.check(parsed.data.target, environment);
   },
 );
-
-ipcMain.handle('settings:complete-service-reconnect', async (event, transitionId: unknown) => {
-  if (!isAssistantSender(event.sender) || typeof transitionId !== 'string') {
-    return { ok: false, message: '无权完成服务重连。' };
-  }
-  return completeServiceTransition(transitionId);
-});
-
-ipcMain.handle('settings:rollback-service-reconnect', async (event, transitionId: unknown) => {
-  if (!isAssistantSender(event.sender) || typeof transitionId !== 'string') return;
-  await rollbackServiceTransition(transitionId);
-});
 
 ipcMain.handle('app:open-quit-dialog', async (event) => {
   if (!isAssistantSender(event.sender)) return false;
@@ -2383,11 +2334,8 @@ app.on('before-quit', (event) => {
   }
   globalPushToTalk.dispose();
   persistWindowState();
-  const pendingRuntime = pendingServiceTransition?.runtime;
-  pendingServiceTransition = null;
   void agentRuntime
     .stop()
-    .finally(() => pendingRuntime?.stop())
     .finally(() => localLiveKitRuntime.stop())
     .finally(() => {
       shutdownComplete = true;

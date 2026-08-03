@@ -1,6 +1,6 @@
 # DeepSeek LLM 与火山语音 Provider 集成设计
 
-**最后更新：** 2026-07-16
+**最后更新：** 2026-08-03
 
 **状态：** 语音 Provider 与搜索 API 均已实现；`searchWeb` 已完成真实接口和语音端到端验证
 
@@ -62,6 +62,16 @@ src/providers/
 | 豆包搜索     | `VOLCENGINE_SEARCH_API_KEY`、可选 endpoint 与 timeout                                                                    | Agent 未配置 Key 时不注册工具；搜索 CLI 必须配置 Key。不得写入 CLI 参数、日志、测试快照或提交文件。 |
 
 TTS 采用火山文档推荐的 V3 双向流式 WebSocket，适合实时文本输入与流式音频输出；端点、资源 ID 和音色许可均以账户控制台及官方当日文档为准。[豆包语音双向流式 TTS 文档](https://www.volcengine.com/docs/6561/2532486?lang=zh)
+
+### 桌面音色目录与语言适配
+
+桌面设置不会维护一份远程或硬编码的完整音色目录。主进程只从项目内 `resources/tts/confirmed-voices/` 读取本地音频样例，通过白名单 IPC 返回样例数据；Renderer 根据当前项目语言过滤列表，并提供试听/停止试听按钮。试听只读取本地样例，不会修改服务配置。
+
+- 中文默认 speaker 为 `zh_female_vv_uranus_bigtts`（Vivi）。
+- 英文默认 speaker 为 `en_female_dacey_uranus_bigtts`（Dacey）；`en_female_stokie_uranus_bigtts`（Stokie）可选。
+- 自定义 speaker ID 不参与内置音色语言对齐，切换项目语言时原样保留。
+- `en_male_tim_uranus_bigtts` 已退出可选目录；读取旧配置时，英文迁移到 Dacey，中文迁移到 Vivi。
+- `scripts/stage-tts-voice-samples.mjs` 在 `desktop:build` 时先清理目标目录，再复制本地样例，确保删除的音色不会残留在 `out/tts`。
 
 ### 当前可提交模板的参考基线
 

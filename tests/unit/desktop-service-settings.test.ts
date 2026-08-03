@@ -1,6 +1,9 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
+  alignTtsSpeakerToLocale,
   defaultDesktopServiceSettings,
+  defaultTtsSpeakerByLocale,
+  desktopSettingsSaveRequestSchema,
   desktopServiceSettingsSchema,
   serviceSettingsSaveRequestSchema,
 } from '../../shared/desktop-settings.js';
@@ -33,6 +36,36 @@ describe('desktop service settings', () => {
     expect(
       serviceSettingsSaveRequestSchema.safeParse({ services: invalid, credentials: {} }).success,
     ).toBe(false);
+  });
+
+  it('aligns confirmed voices to the project language while preserving custom speakers', () => {
+    expect(defaultTtsSpeakerByLocale['en-US']).toBe('en_female_dacey_uranus_bigtts');
+    expect(alignTtsSpeakerToLocale('zh_female_vv_uranus_bigtts', 'en-US')).toBe(
+      defaultTtsSpeakerByLocale['en-US'],
+    );
+    expect(alignTtsSpeakerToLocale('en_male_tim_uranus_bigtts', 'en-US')).toBe(
+      defaultTtsSpeakerByLocale['en-US'],
+    );
+    expect(alignTtsSpeakerToLocale('en_male_tim_uranus_bigtts', 'zh-CN')).toBe(
+      defaultTtsSpeakerByLocale['zh-CN'],
+    );
+    expect(alignTtsSpeakerToLocale('en_female_dacey_uranus_bigtts', 'en-US')).toBe(
+      'en_female_dacey_uranus_bigtts',
+    );
+    expect(alignTtsSpeakerToLocale('en_female_stokie_uranus_bigtts', 'en-US')).toBe(
+      'en_female_stokie_uranus_bigtts',
+    );
+    expect(alignTtsSpeakerToLocale('custom_speaker_id', 'en-US')).toBe('custom_speaker_id');
+  });
+
+  it('validates the unified locale and service settings request', () => {
+    expect(
+      desktopSettingsSaveRequestSchema.safeParse({
+        locale: 'en-US',
+        services: defaultDesktopServiceSettings,
+        credentials: {},
+      }).success,
+    ).toBe(true);
   });
 
   it('uses inherited process settings before protected desktop settings, then local environment values', () => {
