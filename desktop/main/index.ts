@@ -262,8 +262,10 @@ const getServiceSettingsPath = () => join(app.getPath('userData'), 'service-sett
 const getServiceCredentialsPath = () => join(app.getPath('userData'), 'service-credentials.bin');
 const getAgentProcessPath = () => join(mainDir, 'agent-process.js');
 const getPackagedResourcesPath = () =>
-  (process as NodeJS.Process & { resourcesPath?: string }).resourcesPath ??
-  join(process.cwd(), 'out');
+  app.isPackaged
+    ? ((process as NodeJS.Process & { resourcesPath?: string }).resourcesPath ??
+      join(process.cwd(), 'resources'))
+    : join(process.cwd(), 'resources');
 const getTtsVoiceSamplesPath = () =>
   join(
     app.isPackaged ? getPackagedResourcesPath() : join(process.cwd(), 'resources'),
@@ -716,7 +718,7 @@ const getExploreMsfsContext = async (signal: AbortSignal) => {
   const configuration = checkDesktopConfiguration(environment);
   if (!configuration.ok) return undefined;
   const config = configuration.config;
-  const resourcesPath = (process as NodeJS.Process & { resourcesPath?: string }).resourcesPath;
+  const resourcesPath = getPackagedResourcesPath();
   const service = new MsfsGuideService(
     new MsfsCliClient({
       executablePath: resolveMsfsCliPath({

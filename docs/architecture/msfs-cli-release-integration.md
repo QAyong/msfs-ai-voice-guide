@@ -1,7 +1,7 @@
 # MSFS CLI 发布物集成
 
-**最后更新：** 2026-07-25
-**状态：** 当前发布约定；Electron 安装包实现待完成
+**最后更新：** 2026-08-04
+**状态：** 当前发布约定；开发态实机验证通过，Electron 正式安装包实现待完成
 
 ## 目的
 
@@ -43,6 +43,28 @@ CLI 仓库负责：
 | CI / 候选发布 / 正式发布 | 明确提供的、已验证的 CLI 发布目录             | 必须设置 `MSFS_CLI_DISTRIBUTION_DIR`                                   | 不得依赖 `D:\code\微软模拟飞行cli`、开发机 SDK 或未版本化的 `build/`。 |
 
 现有 `scripts/stage-msfs-cli.mjs` 负责将 CLI 运行时文件暂存到 `resources/msfs/` 与构建输出目录。它只解决 CLI/daemon 的资源复制；正式安装器还必须处理 Community Package 的携带、目标目录发现、升级与卸载。
+
+### Electron 开发态资源路径注意事项
+
+Electron 的 `process.resourcesPath` 在开发态通常指向 Electron 自身的运行时资源目录，不等于本项目的 `resources/`。因此 Agent Worker 不得在开发态无条件把它拼成 `process.resourcesPath/msfs/msfs.exe`。
+
+当前路径规则如下：
+
+1. 用户显式配置的 `MSFS_CLI_PATH` 优先。
+2. 安装态只有在 `process.resourcesPath/msfs/msfs.exe` 实际存在时才使用该路径。
+3. 开发态回退到项目工作目录下的 `resources/msfs/msfs.exe`。
+
+这条规则必须在 `desktop:dev` 和正式打包后的 Worker 中保持一致。命令行冒烟测试能找到 CLI，不代表 Electron Worker 已找到同一个 CLI 文件；两条路径都必须单独验证。
+
+开发构建前建议执行：
+
+```powershell
+pnpm msfs:stage
+pnpm desktop:dev
+pnpm msfs:smoke
+```
+
+正式构建必须通过 `MSFS_CLI_DISTRIBUTION_DIR` 提供已验证的 CLI 发布目录，并由打包脚本校验必需文件；不能把本机 `D:\code\微软模拟飞行cli` 或未版本化的相邻 `build/` 作为发布输入。
 
 ## 发布物契约
 

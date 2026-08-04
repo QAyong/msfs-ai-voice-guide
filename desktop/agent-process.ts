@@ -1,4 +1,5 @@
 import { AgentServer, ServerOptions, initializeLogger } from '@livekit/agents';
+import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { loadConfig } from '../src/config/schema.js';
@@ -7,8 +8,13 @@ import { loadConfig } from '../src/config/schema.js';
 // in Node mode instead of attempting to open another desktop window.
 process.env.ELECTRON_RUN_AS_NODE = '1';
 const resourcesPath = (process as NodeJS.Process & { resourcesPath?: string }).resourcesPath;
-if (!process.env.MSFS_CLI_PATH && resourcesPath) {
-  process.env.MSFS_CLI_PATH = join(resourcesPath, 'msfs', 'msfs.exe');
+if (!process.env.MSFS_CLI_PATH) {
+  const packagedCliPath = resourcesPath ? join(resourcesPath, 'msfs', 'msfs.exe') : undefined;
+  const developmentCliPath = join(process.cwd(), 'resources', 'msfs', 'msfs.exe');
+  const cliPath =
+    (packagedCliPath && existsSync(packagedCliPath) ? packagedCliPath : undefined) ??
+    (existsSync(developmentCliPath) ? developmentCliPath : undefined);
+  if (cliPath) process.env.MSFS_CLI_PATH = cliPath;
 }
 
 const healthHost = '127.0.0.1';

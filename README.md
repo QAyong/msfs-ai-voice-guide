@@ -2,7 +2,7 @@
 
 这是一个使用 TypeScript 与 LiveKit Agents 构建的实时语音与文字导游助手。第一版目标是尽快在本地跑通“一名用户进入一间房间，与导游 Agent 自然对话”的闭环。
 
-第一版已在本机完成真实语音对话联调。当前使用 DeepSeek LLM（大语言模型）、豆包 STT（语音转文字）和豆包 TTS（文字转语音），并可选接入豆包搜索 Custom API 或博查 Web Search API。Agent 已通过随应用分发的原生 MSFS CLI 接入只读飞行快照、地理上下文、EFB 航路、下一航点、附近航空设施、游戏内天气/时间和本次会话轨迹；真实模拟器场景仍需在运行中的 MSFS 2024 内完成冒烟验收。
+第一版已在本机完成真实语音对话联调。当前使用 DeepSeek LLM（大语言模型）、豆包 STT（语音转文字）和豆包 TTS（文字转语音），并可选接入豆包搜索 Custom API 或博查 Web Search API。Agent 已通过随应用分发的原生 MSFS CLI 接入只读飞行快照、地理上下文、EFB 航路、下一航点、附近航空设施、游戏内天气/时间和本次会话轨迹；开发态已在运行中的 MSFS 2024 内完成 CLI、SimConnect 和桌面对话冒烟验证，正式安装包仍待完成。
 
 桌面前端已接通真实 LiveKit Room：应用自动校验配置并启动隔离的 Agent Worker，主进程签发短期 Token；Renderer 使用 LiveKit 官方 React Session 组件管理房间、麦克风、消息和回答音频，同时支持鼠标/空格键按住说话与连续自然对话。开发与安装态均使用官方 Windows `livekit-server.exe` 的本地运行方式，不使用 Docker；正式 `.exe` 安装包与自动运行时管理仍待实现，见 [Spec-011](docs/specs/spec-011-packaged-local-livekit-runtime.md)。
 
@@ -17,6 +17,7 @@
 - [来源预览面板轻量浏览器能力](docs/specs/spec-016-source-preview-lightweight-browser.md)
 - [原生 MSFS CLI 导游工具接入](docs/specs/spec-008-native-msfs-cli-guide-tools.md)
 - [MSFS CLI 发布物集成](docs/architecture/msfs-cli-release-integration.md)
+- [MSFS CLI 就绪误判与开发态资源路径 Bug](docs/bugs/bug-20260804-msfs-cli-readiness-and-dev-resource-path.md)
 - [桌面安装包的本地 LiveKit 运行时](docs/specs/spec-011-packaged-local-livekit-runtime.md)
 - [本地 LiveKit 运行时架构](docs/architecture/local-livekit-runtime.md)
 - [基于 Mem0 的持久化对话记忆规划](docs/specs/spec-005-persistent-conversation-memory.md)
@@ -43,7 +44,7 @@ pnpm run verify
 
 当前已完成工程工具链、LiveKit SDK 类型契约、火山 Provider 适配器、LiveKit 会话入口、`searchWeb` 和 7 个只读 MSFS 工具。
 
-开发态可在 `.env` 中通过 `MSFS_CLI_PATH` 指向本地 `msfs.exe`；执行 `pnpm msfs:stage` 会将 `msfs.exe`、`msfsd.exe` 和本机可用的运行时文件暂存到 Electron 资源目录。安装态默认从 `resources/msfs/msfs.exe` 解析。CLI 只连接真实的 MSFS 2024 SimConnect；游戏未启动或未加载飞行时，前端会显示不可读取状态而不会返回模拟数据。EFB 航路还要求在 MSFS 2024 的 `Community2024` 中安装配套 route bridge。CLI 是独立发布依赖：正式打包必须使用经校验的发布目录，不得依赖开发机上的 `D:\code\微软模拟飞行cli`；完整约定见 [MSFS CLI 发布物集成](docs/architecture/msfs-cli-release-integration.md)。
+开发态可在 `.env` 中通过 `MSFS_CLI_PATH` 指向本地 `msfs.exe`；未配置时，Electron Worker 使用项目根目录的 `resources/msfs/msfs.exe`。执行 `pnpm msfs:stage` 会将 `msfs.exe`、`msfsd.exe` 和本机可用的运行时文件暂存到 Electron 资源目录。安装态默认从应用私有资源目录解析。CLI 只连接真实的 MSFS 2024 SimConnect；游戏未启动或未加载飞行时，前端会显示不可读取状态而不会返回模拟数据。EFB 航路还要求在 MSFS 2024 的 `Community2024` 中安装配套 route bridge。CLI 是独立发布依赖：正式打包必须使用经校验的发布目录，不得依赖开发机上的 `D:\code\微软模拟飞行cli`；完整约定见 [MSFS CLI 发布物集成](docs/architecture/msfs-cli-release-integration.md)。
 
 ## 桌面前端
 

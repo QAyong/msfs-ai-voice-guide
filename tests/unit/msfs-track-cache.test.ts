@@ -55,7 +55,11 @@ class TrackingRunner implements MsfsProcessRunner {
           }
         : {
             name: 'AircraftLoaded',
-            value: { integer: 1, float: 0, string: '' },
+            value: {
+              integer: 0,
+              float: 0,
+              string: 'SimObjects\\Airplanes\\asobo_c172sp_g1000\\aircraft.CFG',
+            },
           };
     return {
       exitCode: 0,

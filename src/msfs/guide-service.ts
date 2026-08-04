@@ -214,7 +214,10 @@ export class MsfsGuideService {
       signal,
     );
     if (state.status !== 'ok') return this.readinessFromFailure(state);
-    if (state.data.value.integer === 0) {
+    // AircraftLoaded is a string-valued SimConnect system state. Its integer
+    // field is not a loaded/unloaded flag and is commonly zero even when the
+    // returned aircraft path is valid.
+    if (!state.data.value.string.trim()) {
       return msfsReadinessSchema.parse({
         status: 'simulator_not_ready',
         message: '模拟器已连接，但尚未进入已加载飞行的座舱。',

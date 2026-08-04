@@ -1,7 +1,7 @@
 # Spec-008：原生 MSFS CLI 导游工具接入
 
 **日期：** 2026-07-24  
-**状态：** 已实现，待 MSFS 2024 实机冒烟验收
+**状态：** 已实现；开发态 MSFS 2024 实机冒烟和桌面对话验证通过，安装态验收待完成
 
 ## 背景
 
@@ -125,7 +125,7 @@ CLI 只连接真实的 MSFS 2024 SimConnect。本地未启动游戏或飞行未�
 - [x] 默认注册集合只包含 7 个 MSFS 工具与现有 `searchWeb`；不注册任何写操作。
 - [x] 覆盖单元、集成和模拟器未就绪场景的自动化测试。
 
-2026-07-24 验证：TypeScript、Desktop TypeScript、ESLint、Prettier、Vitest 与 Electron Vite 构建通过；真实暂存 CLI 的离线冒烟返回结构化 `SIM_NOT_READY`。EFB route bridge、设施、Geo Cloud 与轨迹的运行中 MSFS 验收仍待完成。
+2026-08-04 验证：修复 `AircraftLoaded` 字符串状态判断和 Electron 开发态 CLI 资源路径后，运行中的 MSFS 2024 已通过 `pnpm msfs:smoke`，返回 `ready` 并读取真实飞行快照；桌面 Agent 实际调用 `getFlightSnapshot` 和 EFB 航路正常。正式安装包中的 CLI 发布物校验、Community Package 安装以及安装态完整验收仍待完成。
 
 ## 相关测试
 
