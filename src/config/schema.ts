@@ -1,4 +1,6 @@
 import { z } from 'zod';
+import { searchProviderSchema, type SearchProviderName } from '../../shared/search-provider.js';
+import { defaultSearchEndpointByProvider, defaultSearchTimeoutMs } from '../search/defaults.js';
 
 const optionalNonEmpty = z.preprocess(
   (value) => (typeof value === 'string' && value.trim() === '' ? undefined : value),
@@ -24,13 +26,19 @@ const boundedInteger = (defaultValue: number, minimum: number, maximum: number) 
     z.number().int().min(minimum).max(maximum).default(defaultValue),
   );
 
+const searchProviderEnvironmentSchema = searchProviderSchema.default('volcengine');
+
 const searchEnvironmentSchema = z.object({
-  VOLCENGINE_SEARCH_API_KEY: requiredText,
+  SEARCH_PROVIDER: searchProviderEnvironmentSchema,
+  VOLCENGINE_SEARCH_API_KEY: optionalNonEmpty,
   VOLCENGINE_SEARCH_CUSTOM_ENDPOINT: z
     .string()
     .url()
-    .default('https://open.feedcoopapi.com/search_api/web_search'),
-  VOLCENGINE_SEARCH_TIMEOUT_MS: positiveInteger(10_000),
+    .default(defaultSearchEndpointByProvider.volcengine),
+  VOLCENGINE_SEARCH_TIMEOUT_MS: positiveInteger(defaultSearchTimeoutMs),
+  BOCHA_SEARCH_API_KEY: optionalNonEmpty,
+  BOCHA_SEARCH_ENDPOINT: z.string().url().default(defaultSearchEndpointByProvider.bocha),
+  BOCHA_SEARCH_TIMEOUT_MS: positiveInteger(defaultSearchTimeoutMs),
 });
 
 const envSchema = z.object({
@@ -41,6 +49,7 @@ const envSchema = z.object({
   DEEPSEEK_API_KEY: requiredText,
   DEEPSEEK_BASE_URL: z.string().url().default('https://api.deepseek.com'),
   DEEPSEEK_LLM_MODEL: requiredText.default('deepseek-v4-flash'),
+  SEARCH_PROVIDER: searchProviderEnvironmentSchema,
   VOLCENGINE_SPEECH_API_KEY: optionalNonEmpty,
   VOLCENGINE_SPEECH_APP_ID: requiredText,
   VOLCENGINE_SPEECH_ACCESS_TOKEN: requiredText,
@@ -56,8 +65,11 @@ const envSchema = z.object({
   VOLCENGINE_SEARCH_CUSTOM_ENDPOINT: z
     .string()
     .url()
-    .default('https://open.feedcoopapi.com/search_api/web_search'),
-  VOLCENGINE_SEARCH_TIMEOUT_MS: positiveInteger(10_000),
+    .default(defaultSearchEndpointByProvider.volcengine),
+  VOLCENGINE_SEARCH_TIMEOUT_MS: positiveInteger(defaultSearchTimeoutMs),
+  BOCHA_SEARCH_API_KEY: optionalNonEmpty,
+  BOCHA_SEARCH_ENDPOINT: z.string().url().default(defaultSearchEndpointByProvider.bocha),
+  BOCHA_SEARCH_TIMEOUT_MS: positiveInteger(defaultSearchTimeoutMs),
   MSFS_CLI_PATH: optionalNonEmpty,
   MSFS_CLI_TIMEOUT_MS: boundedInteger(15_000, 500, 60_000),
   MSFS_CLI_MAX_CONCURRENCY: boundedInteger(2, 1, 4),
@@ -99,6 +111,7 @@ export type AppConfig = {
     };
   };
   search: {
+    provider: SearchProviderName;
     apiKey?: string;
     endpoint: string;
     timeoutMs: number;
@@ -120,6 +133,7 @@ export class ConfigError extends Error {
 }
 
 export type SearchConfig = {
+  provider: SearchProviderName;
   apiKey: string;
   endpoint: string;
   timeoutMs: number;
@@ -131,6 +145,31 @@ export function formatConfigError(error: z.ZodError): string {
     .join('\n');
 }
 
+type SearchEnvironment = z.infer<typeof searchEnvironmentSchema>;
+
+function selectSearchSettings(value: SearchEnvironment): {
+  provider: SearchProviderName;
+  apiKey?: string;
+  endpoint: string;
+  timeoutMs: number;
+} {
+  if (value.SEARCH_PROVIDER === 'bocha') {
+    return {
+      provider: 'bocha',
+      ...(value.BOCHA_SEARCH_API_KEY ? { apiKey: value.BOCHA_SEARCH_API_KEY } : {}),
+      endpoint: value.BOCHA_SEARCH_ENDPOINT,
+      timeoutMs: value.BOCHA_SEARCH_TIMEOUT_MS,
+    };
+  }
+
+  return {
+    provider: 'volcengine',
+    ...(value.VOLCENGINE_SEARCH_API_KEY ? { apiKey: value.VOLCENGINE_SEARCH_API_KEY } : {}),
+    endpoint: value.VOLCENGINE_SEARCH_CUSTOM_ENDPOINT,
+    timeoutMs: value.VOLCENGINE_SEARCH_TIMEOUT_MS,
+  };
+}
+
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
   const result = envSchema.safeParse(env);
   if (!result.success) {
@@ -138,6 +177,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
   }
 
   const value = result.data;
+  const search = selectSearchSettings(value);
   return {
     livekit: {
       url: value.LIVEKIT_URL,
@@ -171,11 +211,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
         sampleRate: value.VOLCENGINE_TTS_SAMPLE_RATE,
       },
     },
-    search: {
-      ...(value.VOLCENGINE_SEARCH_API_KEY ? { apiKey: value.VOLCENGINE_SEARCH_API_KEY } : {}),
-      endpoint: value.VOLCENGINE_SEARCH_CUSTOM_ENDPOINT,
-      timeoutMs: value.VOLCENGINE_SEARCH_TIMEOUT_MS,
-    },
+    search,
     msfs: {
       ...(value.MSFS_CLI_PATH ? { cliPath: value.MSFS_CLI_PATH } : {}),
       timeoutMs: value.MSFS_CLI_TIMEOUT_MS,
@@ -192,9 +228,11 @@ export function loadSearchConfig(env: NodeJS.ProcessEnv = process.env): SearchCo
     throw new ConfigError(`环境配置无效：\n${formatConfigError(result.error)}`);
   }
 
-  return {
-    apiKey: result.data.VOLCENGINE_SEARCH_API_KEY,
-    endpoint: result.data.VOLCENGINE_SEARCH_CUSTOM_ENDPOINT,
-    timeoutMs: result.data.VOLCENGINE_SEARCH_TIMEOUT_MS,
-  };
+  const search = selectSearchSettings(result.data);
+  if (!search.apiKey) {
+    const keyName =
+      search.provider === 'bocha' ? 'BOCHA_SEARCH_API_KEY' : 'VOLCENGINE_SEARCH_API_KEY';
+    throw new ConfigError(`环境配置无效：\n${keyName}：Required`);
+  }
+  return { ...search, apiKey: search.apiKey };
 }

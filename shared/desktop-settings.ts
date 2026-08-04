@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { searchProviderSchema, type SearchProviderName } from './search-provider.js';
 
 export const supportedLocaleSchema = z.enum(['zh-CN', 'en-US']);
 export type SupportedLocale = z.infer<typeof supportedLocaleSchema>;
@@ -64,9 +65,7 @@ export const desktopServiceSettingsSchema = z
         sampleRate: z.number().int().min(8_000).max(48_000),
       })
       .strict(),
-    search: z
-      .object({ endpoint: httpsUrl, timeoutMs: z.number().int().min(1_000).max(60_000) })
-      .strict(),
+    search: z.object({ provider: searchProviderSchema }).strict(),
   })
   .strict();
 export type DesktopServiceSettings = z.infer<typeof desktopServiceSettingsSchema>;
@@ -78,6 +77,7 @@ export const serviceCredentialKeys = [
   'ttsAppId',
   'ttsAccessToken',
   'searchApiKey',
+  'bochaSearchApiKey',
 ] as const;
 export type ServiceCredentialKey = (typeof serviceCredentialKeys)[number];
 
@@ -90,6 +90,7 @@ export const serviceCredentialUpdatesSchema = z
     ttsAppId: credentialValue.nullable().optional(),
     ttsAccessToken: credentialValue.nullable().optional(),
     searchApiKey: credentialValue.nullable().optional(),
+    bochaSearchApiKey: credentialValue.nullable().optional(),
   })
   .strict();
 export type ServiceCredentialUpdates = z.infer<typeof serviceCredentialUpdatesSchema>;
@@ -150,5 +151,5 @@ export const defaultDesktopServiceSettings: DesktopServiceSettings = {
     speaker: 'zh_female_vv_uranus_bigtts',
     sampleRate: 24_000,
   },
-  search: { endpoint: 'https://open.feedcoopapi.com/search_api/web_search', timeoutMs: 10_000 },
+  search: { provider: 'volcengine' satisfies SearchProviderName },
 };

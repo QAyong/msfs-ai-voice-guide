@@ -28,10 +28,9 @@ describe('desktop service settings', () => {
     ).toBe(false);
   });
 
-  it('validates endpoint protocols and bounded numeric settings before any Worker starts', () => {
+  it('validates the selected search provider before any Worker starts', () => {
     const invalid = structuredClone(defaultDesktopServiceSettings);
-    invalid.stt.endpoint = 'https://speech.example.test';
-    invalid.search.timeoutMs = 50;
+    invalid.search = { provider: 'other' as 'volcengine' };
 
     expect(
       serviceSettingsSaveRequestSchema.safeParse({ services: invalid, credentials: {} }).success,
@@ -87,6 +86,18 @@ describe('desktop service settings', () => {
     expect(result.DEEPSEEK_LLM_MODEL).toBe('desktop-model');
   });
 
+  it('applies the selected search provider and its protected credential', () => {
+    const result = applyDesktopServiceSettings(
+      {},
+      {},
+      { ...defaultDesktopServiceSettings, search: { provider: 'bocha' } },
+      { bochaSearchApiKey: 'bocha-key' },
+    );
+
+    expect(result.SEARCH_PROVIDER).toBe('bocha');
+    expect(result.BOCHA_SEARCH_API_KEY).toBe('bocha-key');
+  });
+
   it('merges only explicit credential changes so blank fields preserve existing secrets', () => {
     expect(
       mergeCredentialUpdates(
@@ -111,5 +122,33 @@ describe('desktop service settings', () => {
     expect(first.status).toBe('unavailable');
     expect(first.message).not.toContain('private-api-key-should-not-leak');
     expect(second.status).toBe('rate_limited');
+  });
+
+  it('checks the selected Bocha search provider with the provider payload', async () => {
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(Response.json({ webPages: { value: [] } }));
+    vi.stubGlobal('fetch', fetchMock);
+    const checker = new ServiceAvailabilityChecker();
+
+    const result = await checker.check('search', {
+      SEARCH_PROVIDER: 'bocha',
+      BOCHA_SEARCH_API_KEY: 'bocha-key',
+      BOCHA_SEARCH_ENDPOINT: 'https://api.bochaai.com/v1/web-search',
+      BOCHA_SEARCH_TIMEOUT_MS: '10000',
+    });
+
+    expect(result.status).toBe('available');
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://api.bochaai.com/v1/web-search',
+      expect.objectContaining({
+        body: JSON.stringify({
+          query: 'Microsoft Flight Simulator',
+          freshness: 'noLimit',
+          summary: true,
+          count: 10,
+        }),
+      }),
+    );
   });
 });

@@ -12,6 +12,13 @@ import {
   connectWebSocket,
   readBinaryMessage,
 } from '../../src/providers/volcengine/websocket.js';
+import {
+  defaultSearchEndpointByProvider,
+  defaultSearchTimeoutMs,
+} from '../../src/search/defaults.js';
+import { SearchProviderError } from '../../src/search/provider.js';
+import { createSearchProvider } from '../../src/search/registry.js';
+import { searchProviderSchema, type SearchProviderName } from '../../shared/search-provider.js';
 
 const checkTimeoutMs = 10_000;
 const minimumCheckIntervalMs = 2_500;
@@ -202,29 +209,47 @@ export class ServiceAvailabilityChecker {
   }
 
   async #checkSearch(environment: NodeJS.ProcessEnv): Promise<void> {
-    if (
-      !hasValues(environment, ['VOLCENGINE_SEARCH_CUSTOM_ENDPOINT', 'VOLCENGINE_SEARCH_API_KEY'])
-    ) {
+    const providerResult = searchProviderSchema.safeParse(environment.SEARCH_PROVIDER);
+    const provider: SearchProviderName = providerResult.success
+      ? providerResult.data
+      : 'volcengine';
+    const keyName = provider === 'bocha' ? 'BOCHA_SEARCH_API_KEY' : 'VOLCENGINE_SEARCH_API_KEY';
+    const endpointName =
+      provider === 'bocha' ? 'BOCHA_SEARCH_ENDPOINT' : 'VOLCENGINE_SEARCH_CUSTOM_ENDPOINT';
+    const timeoutName =
+      provider === 'bocha' ? 'BOCHA_SEARCH_TIMEOUT_MS' : 'VOLCENGINE_SEARCH_TIMEOUT_MS';
+    const apiKey = environment[keyName]?.trim();
+    if (!apiKey) {
       throw new ServiceCheckError(missingConfiguration('search').message);
     }
-    const response = await withTimeout((signal) =>
-      fetch(environment.VOLCENGINE_SEARCH_CUSTOM_ENDPOINT!, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${environment.VOLCENGINE_SEARCH_API_KEY}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          Query: 'Microsoft Flight Simulator',
-          SearchType: 'web',
-          Count: 1,
-          Filter: { NeedContent: false, NeedUrl: true },
-          ContentFormats: 'markdown',
-        }),
-        signal,
-      }),
-    );
-    if (!response.ok)
-      throw new ServiceCheckError('服务拒绝了检测请求，请检查 API Key 与账号权限。');
+    const endpoint = environment[endpointName]?.trim() || defaultSearchEndpointByProvider[provider];
+    const parsedTimeout = Number(environment[timeoutName]);
+    const timeoutMs =
+      Number.isFinite(parsedTimeout) && parsedTimeout > 0 ? parsedTimeout : defaultSearchTimeoutMs;
+    const searchProvider = createSearchProvider({
+      provider,
+      apiKey,
+      endpoint,
+      timeoutMs,
+    });
+    try {
+      await withTimeout((signal) =>
+        searchProvider.search({ query: 'Microsoft Flight Simulator' }, signal),
+      );
+    } catch (error) {
+      if (error instanceof SearchProviderError) {
+        if (error.code === 'timeout') {
+          throw new ServiceCheckError('检测超时，请确认网络、服务地址后重试。');
+        }
+        if (error.code === 'invalid_response') {
+          throw new ServiceCheckError('服务返回格式异常，请检查服务地址。');
+        }
+        if (error.code === 'network_error') {
+          throw new ServiceCheckError('无法连接或验证此服务，请检查地址与凭据。');
+        }
+        throw new ServiceCheckError('服务拒绝了检测请求，请检查 API Key 与账号权限。');
+      }
+      throw error;
+    }
   }
 }

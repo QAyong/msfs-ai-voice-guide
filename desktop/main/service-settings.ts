@@ -19,9 +19,13 @@ const providerEnvironmentKeys = [
   'VOLCENGINE_TTS_RESOURCE_ID',
   'VOLCENGINE_TTS_SPEAKER',
   'VOLCENGINE_TTS_SAMPLE_RATE',
+  'SEARCH_PROVIDER',
   'VOLCENGINE_SEARCH_API_KEY',
   'VOLCENGINE_SEARCH_CUSTOM_ENDPOINT',
   'VOLCENGINE_SEARCH_TIMEOUT_MS',
+  'BOCHA_SEARCH_API_KEY',
+  'BOCHA_SEARCH_ENDPOINT',
+  'BOCHA_SEARCH_TIMEOUT_MS',
 ] as const;
 
 const credentialEnvironmentKey: Record<ServiceCredentialKey, string> = {
@@ -31,6 +35,7 @@ const credentialEnvironmentKey: Record<ServiceCredentialKey, string> = {
   ttsAppId: 'VOLCENGINE_SPEECH_APP_ID',
   ttsAccessToken: 'VOLCENGINE_SPEECH_ACCESS_TOKEN',
   searchApiKey: 'VOLCENGINE_SEARCH_API_KEY',
+  bochaSearchApiKey: 'BOCHA_SEARCH_API_KEY',
 };
 
 export function serviceSettingsFromConfig(config: AppConfig): DesktopServiceSettings {
@@ -47,7 +52,7 @@ export function serviceSettingsFromConfig(config: AppConfig): DesktopServiceSett
       speaker: config.volcengine.tts.speaker,
       sampleRate: config.volcengine.tts.sampleRate,
     },
-    search: { endpoint: config.search.endpoint, timeoutMs: config.search.timeoutMs },
+    search: { provider: config.search.provider },
   };
 }
 
@@ -68,8 +73,7 @@ export function applyDesktopServiceSettings(
     VOLCENGINE_TTS_RESOURCE_ID: settings.tts.resourceId,
     VOLCENGINE_TTS_SPEAKER: settings.tts.speaker,
     VOLCENGINE_TTS_SAMPLE_RATE: String(settings.tts.sampleRate),
-    VOLCENGINE_SEARCH_CUSTOM_ENDPOINT: settings.search.endpoint,
-    VOLCENGINE_SEARCH_TIMEOUT_MS: String(settings.search.timeoutMs),
+    SEARCH_PROVIDER: settings.search.provider,
   };
   for (const key of providerEnvironmentKeys) {
     const inherited = inheritedEnvironment[key];

@@ -51,8 +51,24 @@ describe('loadConfig', () => {
     const config = loadConfig(baseEnvironment);
 
     expect(config.search).toEqual({
+      provider: 'volcengine',
       apiKey: 'search-secret',
       endpoint: 'https://open.feedcoopapi.com/search_api/web_search',
+      timeoutMs: 10_000,
+    });
+  });
+
+  it('按选择的服务商解析博查搜索配置', () => {
+    const config = loadConfig({
+      ...baseEnvironment,
+      SEARCH_PROVIDER: 'bocha',
+      BOCHA_SEARCH_API_KEY: 'bocha-secret',
+    });
+
+    expect(config.search).toEqual({
+      provider: 'bocha',
+      apiKey: 'bocha-secret',
+      endpoint: 'https://api.bochaai.com/v1/web-search',
       timeoutMs: 10_000,
     });
   });
@@ -77,8 +93,20 @@ describe('loadConfig', () => {
 
   it('可为独立 CLI 只加载搜索配置', () => {
     expect(loadSearchConfig({ VOLCENGINE_SEARCH_API_KEY: 'search-secret' })).toEqual({
+      provider: 'volcengine',
       apiKey: 'search-secret',
       endpoint: 'https://open.feedcoopapi.com/search_api/web_search',
+      timeoutMs: 10_000,
+    });
+  });
+
+  it('独立 CLI 可加载博查搜索配置', () => {
+    expect(
+      loadSearchConfig({ SEARCH_PROVIDER: 'bocha', BOCHA_SEARCH_API_KEY: 'bocha-secret' }),
+    ).toEqual({
+      provider: 'bocha',
+      apiKey: 'bocha-secret',
+      endpoint: 'https://api.bochaai.com/v1/web-search',
       timeoutMs: 10_000,
     });
   });

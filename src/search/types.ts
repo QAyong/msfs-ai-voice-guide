@@ -1,3 +1,10 @@
+export { searchProviderSchema, type SearchProviderName } from '../../shared/search-provider.js';
+
+export type SearchInput = {
+  query: string;
+  site?: string;
+};
+
 export type SearchSource = {
   rank: number;
   title: string;

@@ -25,7 +25,7 @@ graph TD
     Session --> Tools[tools: LiveKit 工具包装]
     Tools --> Search[search: 共享搜索服务]
     CLI[cli: 命令行工具] --> Search
-    Search --> WebSearch[豆包搜索 Custom API]
+    Search --> WebSearch[选定的搜索 API：豆包或博查]
     Providers --> LLM[DeepSeek LLM]
     Providers --> STT[豆包流式 ASR]
     Providers --> TTS[豆包双向流式 TTS]
@@ -62,7 +62,7 @@ sequenceDiagram
 sequenceDiagram
     participant Caller as Agent 工具或 CLI
     participant Search as `src/search/` 搜索服务
-    participant API as 豆包搜索 Custom API
+    participant API as 选定的搜索 API
     participant Guard as 清洗与相关性保护
 
     Caller->>Search: 传入查询与可选过滤条件
@@ -159,12 +159,12 @@ sequenceDiagram
 - 进程入口、worker/dispatcher 和会话创建按照当前安装版本的官方文档实现；实现前在 `node_modules` 中核对导出的 TypeScript 类型。
 - 使用 LiveKit 已有的房间、音频发布订阅、会话及中断机制；不自行实现 WebSocket 信令、音频流协议或 VAD（语音活动检测）替代品。
 - 业务工具使用当前安装版本支持的 `llm.tool()`（函数工具）或等价官方 API；实现前必须核对官方文档与本地类型定义。
-- 搜索 API 不属于 LLM/STT/TTS Provider，不进入 `src/providers/registry.ts`；它通过共享搜索服务被 Agent 工具调用。
+- 搜索 API 不属于 LLM/STT/TTS Provider，不进入 `src/providers/registry.ts`；它通过共享搜索服务和搜索 Provider 适配器被 Agent 工具调用。
 - 每次桌面会话使用独立 LiveKit 房间，Agent 只服务该房间上下文；Renderer 通过官方 SDK 发布本地音轨并订阅远端音频。
 
 ## Provider 注册与火山引擎边界
 
-当前版本使用 DeepSeek LLM 与豆包语音，并遵循参考项目 `[reference project]` 的按能力注册方式：`src/providers/registry.ts` 是创建 LLM、STT、TTS 的唯一入口。搜索 API 是独立业务依赖，不作为 Provider 注册，也不引入运行时 Provider 切换。
+当前版本使用 DeepSeek LLM 与豆包语音，并遵循参考项目 `[reference project]` 的按能力注册方式：`src/providers/registry.ts` 是创建 LLM、STT、TTS 的唯一入口。搜索 API 是独立业务依赖；搜索服务商由桌面设置选择，但不进入语音 Provider 注册表。
 
 - DeepSeek LLM 使用当前 LiveKit OpenAI 插件的 `withDeepSeek()`（创建 DeepSeek LLM）能力；安装后必须以本地类型为准。
 - 豆包 STT、TTS 先核对当前 LiveKit 官方插件是否已支持；若无，最小 WebSocket 适配代码仅位于对应 Provider 子目录。
@@ -174,7 +174,7 @@ sequenceDiagram
 
 ## 配置与密钥
 
-`src/config/` 以 Zod Schema 集中校验配置。当前配置包括 LiveKit 连接参数、DeepSeek LLM、豆包 STT、豆包 TTS 与搜索配置。`VOLCENGINE_SEARCH_API_KEY` 对纯语音会话可选；存在时 Agent 注册 `searchWeb`，独立搜索 CLI 则要求该 Key。业务模块不得直接读取环境变量。STT 支持 Speech API Key 优先、App ID + Access Token 后备的互斥/成对校验。
+`src/config/` 以 Zod Schema 集中校验配置。当前配置包括 LiveKit 连接参数、DeepSeek LLM、豆包 STT、豆包 TTS 与可选搜索服务商配置。`SEARCH_PROVIDER` 选择豆包或博查；选定服务商存在 Key 时 Agent 注册 `searchWeb`，独立搜索 CLI 则要求对应 Key。业务模块不得直接读取环境变量。STT 支持 Speech API Key 优先、App ID + Access Token 后备的互斥/成对校验。
 
 真实密钥只来自运行环境或未提交的 `.env` 文件。`.env.example` 仅列出变量名和安全的示例值。禁止在源码、测试快照、日志、文档或 Git 历史中写入密钥。
 
@@ -189,7 +189,7 @@ sequenceDiagram
 | DeepSeek                    | 对话理解与生成（LLM）                    | `src/providers/llm/`                     | 当前基线                        |
 | 豆包流式 ASR                | 语音转文字（STT）                        | `src/providers/stt/`                     | 第一版确定                      |
 | 豆包双向流式 TTS            | 文字转语音（TTS）                        | `src/providers/tts/`                     | 第一版确定                      |
-| 豆包搜索 Custom API         | 通用公开网页外部信息检索                 | `src/search/`                            | Spec-003 已实现                 |
+| 豆包搜索 Custom API / 博查 Web Search API | 通用公开网页外部信息检索       | `src/search/`                            | Spec-003 已实现                 |
 | Zod                         | 配置、CLI 响应和工具参数校验             | `src/config/`、`src/msfs/`、`src/tools/` | 已实现                          |
 | 原生 MSFS CLI               | SimConnect、EFB 航路、设施和游戏环境读取 | `src/msfs/`                              | 已实现，待实机冒烟              |
 | Vitest                      | 自动化测试                               | `tests/`                                 | 已确定                          |

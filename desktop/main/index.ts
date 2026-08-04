@@ -431,6 +431,7 @@ const getVisibleLocalServiceCredentials = (): VisibleServiceCredentials => {
     ttsAppId: appId,
     ttsAccessToken: accessToken,
     searchApiKey: process.env.VOLCENGINE_SEARCH_API_KEY?.trim() ?? '',
+    bochaSearchApiKey: process.env.BOCHA_SEARCH_API_KEY?.trim() ?? '',
   };
 };
 
@@ -2023,6 +2024,7 @@ ipcMain.handle('settings:get-visible-local-credentials', (event): VisibleService
       ttsAppId: '',
       ttsAccessToken: '',
       searchApiKey: '',
+      bochaSearchApiKey: '',
     };
   }
   return getVisibleLocalServiceCredentials();

@@ -3,6 +3,8 @@
 **日期：** 2026-07-15  
 **状态：** 已接受
 
+**修订（2026-08-04）：** 搜索底层数据源扩展为可选的豆包搜索 Custom API 或博查 Web Search API；仍保持单一 `SearchService`、统一结果契约，不实现自动回退或多供应商融合。
+
 **实施说明（2026-07-16）：** `searchWeb` 已作为模型获取公开网页外部信息的通用入口实现，不限于人文地理，也可查询天气、新闻等时效性内容。它仍不是专用天气/新闻 Provider，也不具备模拟器遥测能力。
 
 ## 背景
@@ -13,10 +15,10 @@
 
 ## 决策
 
-以豆包搜索 Custom API 作为搜索能力的唯一底层数据入口；在项目内抽取共享的 `src/search/`（搜索服务）层，由 LiveKit 工具和 CLI 分别调用。第一阶段暂不把 MCP（Model Context Protocol，模型上下文协议）作为主接入方式；未来确有外部 MCP 客户端需求时，再为同一搜索服务增加 MCP 适配层。
+以用户选择的搜索 API 作为底层数据入口；在项目内抽取共享的 `src/search/`（搜索服务）层，并在 `src/search/providers/` 中隔离豆包和博查协议，由 LiveKit 工具和 CLI 分别调用。第一阶段暂不把 MCP（Model Context Protocol，模型上下文协议）作为主接入方式；未来确有外部 MCP 客户端需求时，再为同一搜索服务增加 MCP 适配层。
 
 ```text
-豆包搜索 Custom API
+豆包搜索 Custom API / 博查 Web Search API
           ↓
 src/search/（请求、清洗、相关性和来源过滤）
        ↙                 ↘
@@ -45,5 +47,5 @@ src/tools/（LiveKit）     src/cli/（命令行）
 
 - 当前不实现搜索 Agent、事实核验模型或第二个 LLM；这些由后续 Spec 单独评估。
 - 当前不实现 MCP Server，也不承诺所有外部 MCP 客户端兼容。
-- 当前不切换豆包搜索 Global 版，不同时维护多个搜索供应商。
+- 当前不切换豆包搜索 Global 版，不实现自动回退或同时调用多个搜索供应商。
 - 当前不实现模拟器遥测、机场数据库、专用天气 API 或其他结构化业务 Provider；公开网页中的天气等信息可以由通用 `searchWeb` 查询。

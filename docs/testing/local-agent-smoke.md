@@ -1,13 +1,13 @@
 # 本地语音与文字 Agent 冒烟测试
 
-**最近一次通过：** 2026-08-03，桌面设置中的 TTS 音色筛选、试听、自定义 speaker、保存反馈和构建资源清理已完成验收；开发态 Electron 默认自动启动本地 LiveKit。2026-07-19 已在 Electron 中完成语音与文字两条真实链路：连续对话可自动检测轮次结束并经过豆包 STT、DeepSeek 与豆包 TTS；文字输入可通过 LiveKit `lk.chat` 进入同一 AgentSession，显示并播放回答，且回答中发送新文字可以触发打断。用户确认测试没有问题。2026-07-16 已另行验证 `searchWeb` 的真实搜索链路。
+**最近一次通过：** 2026-08-04，已完成豆包/博查搜索服务商切换、英文搜索结果标准化和通用工具调用前中间话术模拟；桌面设置中的 TTS 音色筛选、试听、自定义 speaker、保存反馈和构建资源清理已完成验收；开发态 Electron 默认自动启动本地 LiveKit。2026-07-19 已在 Electron 中完成语音与文字两条真实链路：连续对话可自动检测轮次结束并经过豆包 STT、DeepSeek 与豆包 TTS；文字输入可通过 LiveKit `lk.chat` 进入同一 AgentSession，显示并播放回答，且回答中发送新文字可以触发打断。用户确认测试没有问题。2026-07-16 已另行验证 `searchWeb` 的真实搜索链路。
 
 ## 前置条件
 
 - `resources/livekit/livekit-server.exe` 已准备好；开发态桌面应用会默认自动启动本地 LiveKit，外部模式才需要预先配置可访问的 Server。
 - 已构建 Electron 桌面客户端；它会自动创建短期 Token、加入唯一房间、分派 Agent 并发布麦克风音频。
 - DeepSeek LLM、豆包流式 ASR 和豆包双向流式 TTS 均已开通，且音色已授权。
-- 如需验证外部信息工具，`.env` 中还需配置 `VOLCENGINE_SEARCH_API_KEY`。
+- 如需验证外部信息工具，`.env` 中配置 `SEARCH_PROVIDER=volcengine` + `VOLCENGINE_SEARCH_API_KEY`，或配置 `SEARCH_PROVIDER=bocha` + `BOCHA_SEARCH_API_KEY`。
 
 ## 本机 LiveKit Server（不使用 Docker）
 
@@ -66,6 +66,16 @@ MSFS_AUTO_START_LIVEKIT=true
 7. 让 Agent 开始播放较长回答并点击挂断，确认声音立即停止且旧回答不会在恢复语音后继续播放；文字聊天应保持可用。
 8. 恢复语音后确认上次模式仍被选中，但麦克风不会自动开启。
 9. 使用 Tab 将焦点移动到挂断按钮，在按住说话模式按住空格，确认开始录音而不是触发挂断；Enter 仍可操作按钮。
+
+## 工具调用前中间话术模拟
+
+该检查用于验证通用提示词对所有工具调用的约束，不绑定 `searchWeb` 的实现。它会使用当前 `.env` 的 DeepSeek 和搜索配置，分别模拟中文/英文联网问题与普通问题：
+
+```powershell
+pnpm guide:preamble:smoke
+```
+
+联网问题必须触发工具调用；首轮允许出现一句简短、自然的核实提示，但模型可以选择不说，因此提示话术不是每次都保证出现。普通问题不应调用工具。模拟结果会输出首轮文本、工具调用、搜索状态、来源数量和最终回答；当前验证同时覆盖中文与英文分支。
 
 ## 桌面文字闭环
 

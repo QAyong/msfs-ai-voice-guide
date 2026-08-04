@@ -1,6 +1,6 @@
 # DeepSeek LLM 与火山语音 Provider 集成设计
 
-**最后更新：** 2026-08-03
+**最后更新：** 2026-08-04
 
 **状态：** 语音 Provider 与搜索 API 均已实现；`searchWeb` 已完成真实接口和语音端到端验证
 
@@ -12,13 +12,14 @@
 
 ## 搜索 API 边界
 
-豆包搜索 Custom API（火山搜索服务）是业务数据源，不属于 LLM、STT 或 TTS Provider，因此不进入 `src/providers/registry.ts`。它由 `src/search/`（共享搜索服务）封装，再由 LiveKit Tool（工具）和 CLI（命令行工具）复用。
+豆包搜索 Custom API 与博查 Web Search API 是业务数据源，不属于 LLM、STT 或 TTS Provider，因此不进入 `src/providers/registry.ts`。它们由 `src/search/` 的统一服务和 Provider 适配器封装，再由 LiveKit Tool（工具）和 CLI（命令行工具）复用。
 
 - API 地址：`https://open.feedcoopapi.com/search_api/web_search`
+- 博查地址：`https://api.bochaai.com/v1/web-search`
 - 认证方式：`Authorization: Bearer <API_KEY>`
-- 结果使用：优先使用 `Summary`（摘要）或 `Content`（正文），保留 `Url`（来源 URL）和站点信息；不把 `Snippet`（列表摘要）直接作为 LLM 事实依据。
+- 结果使用：豆包优先使用 `Summary`（摘要）或 `Content`（正文）；博查使用 `summary` 或 `snippet`，统一转换为项目来源契约；保留来源 URL 和站点信息。
 - `searchWeb` 是模型获取公开网页外部信息的通用入口，可查询天气、新闻、活动、规则、地点及知识资料；时效性回答需要核对来源地点和时间。
-- 当前独立测试脚本：`scripts/test-volcengine-search.mjs`，通过 `VOLCENGINE_SEARCH_API_KEY` 显式传入，不写入受 Git 跟踪的文件。
+- 当前独立测试脚本：`scripts/test-volcengine-search.mjs` 继续评测豆包；博查通过 `SEARCH_PROVIDER=bocha` 和 `BOCHA_SEARCH_API_KEY` 复用 CLI/冒烟链路验证。
 - 搜索结果必须经过实体相关性、来源策略、去重和无结果保护，API 返回的权威等级不能直接等同于项目可信度。
 
 详细范围与验收条件见 [Spec-003：网络搜索与可扩展能力模块](../specs/spec-003-web-search-and-capability-modules.md) 和 [ADR-006：搜索访问边界](../adr/adr-006-search-access-boundary.md)。
@@ -45,7 +46,7 @@ src/providers/
 | LLM  | DeepSeek OpenAI 兼容 Chat API | 使用当前 LiveKit OpenAI 插件的 `withDeepSeek()`（创建 DeepSeek LLM）能力；安装后核对其 `baseURL`、`apiKey` 和模型类型 | `DEEPSEEK_API_KEY`、`DEEPSEEK_BASE_URL`、`DEEPSEEK_LLM_MODEL`               |
 | STT  | 豆包大模型流式 ASR            | 先检查当前 LiveKit 官方插件是否已原生支持；若没有，仅在 `src/providers/stt/volcengine.ts` 实现官方 WebSocket 协议适配 | `VOLCENGINE_SPEECH_API_KEY` 或 App ID + Access Token、endpoint、resource ID |
 | TTS  | 豆包双向流式 TTS WebSocket    | 先检查当前 LiveKit 官方插件是否已原生支持；若没有，仅在 `src/providers/tts/volcengine.ts` 实现官方 WebSocket 协议适配 | App ID、Access Token、endpoint、resource ID、speaker                        |
-| 搜索 | 豆包搜索 Custom HTTP API      | 由 `src/search/` 封装并被 LiveKit Tool 与 CLI 复用，不进入 Provider 注册表                                            | API Key、endpoint、timeout                                                  |
+| 搜索 | 豆包 Custom / 博查 Web Search HTTP API | 由 `src/search/` 封装并被 LiveKit Tool 与 CLI 复用，不进入语音 Provider 注册表                              | `SEARCH_PROVIDER` 与对应 API Key                                            |
 
 截至本设计更新日，已安装 LiveKit OpenAI 插件的类型定义提供 `LLM.withDeepSeek()`；DeepSeek 官方也确认其 Chat Completions API 与 OpenAI API 兼容。因此，LLM 不应重新实现 HTTP 客户端。STT/TTS 是否已有官方豆包插件必须在实际安装日再次核对；没有才写最小适配器。参考：[LiveKit 插件总览](https://docs.livekit.io/agents/integrations/plugins/)、[DeepSeek API 快速开始](https://api-docs.deepseek.com/)。
 
@@ -59,7 +60,7 @@ src/providers/
 | DeepSeek LLM | `DEEPSEEK_API_KEY`、`DEEPSEEK_BASE_URL`、`DEEPSEEK_LLM_MODEL`                                                            | 默认地址为官方兼容地址，默认模型为 `deepseek-v4-flash`。                                            |
 | 豆包 STT     | `VOLCENGINE_SPEECH_API_KEY`，或 `VOLCENGINE_SPEECH_APP_ID` + `VOLCENGINE_SPEECH_ACCESS_TOKEN`；另需 endpoint/resource ID | Speech API Key 存在时优先使用；否则要求 App ID 和 Access Token 成对存在。                           |
 | 豆包 TTS     | `VOLCENGINE_SPEECH_APP_ID`、`VOLCENGINE_SPEECH_ACCESS_TOKEN`、endpoint、resource ID、speaker                             | `speaker` 必须是账户已开通的音色；采样率必须为正整数。                                              |
-| 豆包搜索     | `VOLCENGINE_SEARCH_API_KEY`、可选 endpoint 与 timeout                                                                    | Agent 未配置 Key 时不注册工具；搜索 CLI 必须配置 Key。不得写入 CLI 参数、日志、测试快照或提交文件。 |
+| 网络搜索     | `SEARCH_PROVIDER`、`VOLCENGINE_SEARCH_API_KEY` 或 `BOCHA_SEARCH_API_KEY`                                                  | Agent 未配置当前服务商 Key 时不注册工具；搜索 CLI 必须配置对应 Key。不得写入 CLI 参数、日志、测试快照或提交文件。 |
 
 TTS 采用火山文档推荐的 V3 双向流式 WebSocket，适合实时文本输入与流式音频输出；端点、资源 ID 和音色许可均以账户控制台及官方当日文档为准。[豆包语音双向流式 TTS 文档](https://www.volcengine.com/docs/6561/2532486?lang=zh)
 

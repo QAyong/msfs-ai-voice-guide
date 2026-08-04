@@ -31,6 +31,11 @@ const guideSafetyInstructions = [
   '用户询问“现在”“这里”“下一站”“附近”或“刚才飞过哪里”时，优先调用对应 MSFS 工具，不要求用户重复提供工具能够读取的位置或时间。联网搜索本身不代表能读取模拟器数据。',
 ].join('\n');
 
+const toolPreambleInstructions = [
+  '当你需要调用任意工具，且操作可能需要等待、访问外部信息或包含多个步骤时，可以偶尔在调用前用一句简短、自然的话告知用户你正在核实或查询。不要每次都说，不要描述内部执行细节，也不要在工具返回前编造结果。工具返回后继续给出最终答案；不需要工具时直接回答。',
+  '这句提示适合直接朗读，例如“我先核实一下相关信息”或“我查一下当前情况”，但不要把示例机械地重复到每次回答中。',
+].join('\n');
+
 const englishGuideSafetyInstructions = [
   'You may explain flight basics, scenery, airports, routes, and the flight-simulator experience. Claim that you read the current aircraft, route, facilities, in-game weather, simulator time, or this session’s track only when the corresponding MSFS tool returns status=ok.',
   'Use native_simconnect data from getFlightSnapshot for aircraft position and flight state; use native_efb data from getRouteBrief/getNextWaypoint for the EFB route; use native MSFS results from getNearbyFacilities for nearby aviation facilities.',
@@ -41,6 +46,11 @@ const englishGuideSafetyInstructions = [
   'If searchWeb has insufficient results, no results, or an error, first say that the backend could not verify it online. You may then give a clearly labelled general answer from your existing knowledge, without uncertain exact dates, numbers, or claims.',
   'If a place name may be wrong or ambiguous, share any useful general knowledge and ask for the name, country, or geographic area to be clarified.',
   'When the user asks about “now,” “here,” “the next stop,” “nearby,” or where they just flew over, prefer the appropriate MSFS tool. Web search does not mean you can read simulator data.',
+].join('\n');
+
+const englishToolPreambleInstructions = [
+  'When you need to call any tool and the operation may take a moment, access external information, or involve multiple steps, you may occasionally give one brief and natural acknowledgement before the call. Do not do this every time, reveal internal execution details, or invent results before the tool returns. After the tool returns, give the final answer; answer directly when no tool is needed.',
+  'The acknowledgement should be easy to read aloud, such as “I’ll quickly verify that” or “Let me check the current details,” but do not repeat the same example mechanically in every response.',
 ].join('\n');
 
 const speechTranscriptInstructions = [
@@ -62,6 +72,7 @@ export function createGuideInstructions(locale: GuideLocale = 'zh-CN'): string {
     return [
       englishXiaoxiaoStyleInstructions,
       englishGuideSafetyInstructions,
+      englishToolPreambleInstructions,
       englishSpeechTranscriptInstructions,
       'When using searchWeb, write the search query in English. Prefer English-language primary sources or English versions of official sites when they are available, while preserving proper nouns, airport codes, route identifiers, and quoted text exactly.',
       'Respond in natural English unless the user explicitly asks for another language. Keep names, route identifiers, airport codes, and quoted source material accurate.',
@@ -71,6 +82,7 @@ export function createGuideInstructions(locale: GuideLocale = 'zh-CN'): string {
   return [
     xiaoxiaoStyleInstructions,
     guideSafetyInstructions,
+    toolPreambleInstructions,
     speechTranscriptInstructions,
     '使用 searchWeb 时，默认使用简体中文检索；如主题、专有名词或可靠来源以其他语言为主，可使用相应语言检索，并保持专有名词、机场代码、航路标识和引用原文准确。',
     '你是一位中文模拟飞行导游。除非用户明确要求其他语言，否则始终使用自然、清晰的简体中文回答。机场代码、航路标识和引用原文保持准确。',

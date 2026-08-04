@@ -1,5 +1,7 @@
 import { z } from 'zod';
-import type { AppConfig } from '../config/schema.js';
+import type { SearchProviderConfig, SearchProviderDocument } from './provider.js';
+import { SearchProviderError } from './provider.js';
+import { createSearchProvider } from './registry.js';
 import type {
   SearchFailure,
   SearchLowConfidence,
@@ -8,47 +10,9 @@ import type {
   SearchSource,
   SearchSuccess,
 } from './types.js';
+import type { SearchInput } from './types.js';
 
 const MAX_EVIDENCE_LENGTH = 4_000;
-
-const webResultSchema = z.object({
-  Title: z.string().optional(),
-  SiteName: z.string().optional(),
-  Url: z.string().optional(),
-  Summary: z.string().optional(),
-  Content: z.string().optional(),
-  PublishTime: z.string().optional(),
-});
-
-const globalDocumentSchema = z.object({
-  Rank: z.number().int().nonnegative().optional(),
-  Url: z.string().optional(),
-  Title: z.string().optional(),
-  HostInfo: z
-    .object({
-      Hostname: z.string().optional(),
-      IconUrl: z.string().optional(),
-    })
-    .optional(),
-  DocumentInfo: z
-    .object({
-      PublishTime: z.string().optional(),
-    })
-    .optional(),
-  Snippets: z
-    .array(
-      z.object({
-        Text: z.string().optional(),
-        Image: z
-          .object({
-            Url: z.string().optional(),
-            ImageUrl: z.string().optional(),
-          })
-          .optional(),
-      }),
-    )
-    .optional(),
-});
 
 const searchInputSchema = z.object({
   query: z.string().trim().min(2).max(500),
@@ -61,146 +25,50 @@ const searchInputSchema = z.object({
     .optional(),
 });
 
-const apiResponseSchema = z
-  .object({
-    ResponseMetadata: z
-      .object({
-        RequestId: z.string().optional(),
-        Error: z.unknown().optional(),
-      })
-      .optional(),
-    Result: z
-      .object({
-        ErrorCode: z.unknown().optional(),
-        WebResults: z.array(webResultSchema).optional(),
-        GlobalSearchResp: z
-          .object({
-            Documents: z.array(globalDocumentSchema).optional(),
-          })
-          .optional(),
-      })
-      .optional(),
-  })
-  .passthrough();
-
-export type SearchInput = z.input<typeof searchInputSchema>;
-export type SearchServiceConfig = Omit<AppConfig['search'], 'apiKey'> & { apiKey: string };
+export type SearchServiceConfig = Omit<SearchProviderConfig, 'provider'> & {
+  /** Defaults to Volcengine for backwards compatibility with existing callers. */
+  provider?: SearchProviderConfig['provider'];
+};
 export type FetchLike = typeof fetch;
 
 export class SearchService {
-  readonly #config: SearchServiceConfig;
-  readonly #fetch: FetchLike;
+  readonly #provider: ReturnType<typeof createSearchProvider>;
 
   constructor(config: SearchServiceConfig, fetchImplementation: FetchLike = fetch) {
-    this.#config = config;
-    this.#fetch = fetchImplementation;
+    this.#provider = createSearchProvider(
+      {
+        ...config,
+        provider: config.provider ?? 'volcengine',
+      },
+      fetchImplementation,
+    );
   }
 
   async search(input: SearchInput, signal?: AbortSignal): Promise<SearchResult> {
     const { query, site } = searchInputSchema.parse(input);
-    let response: Response;
-
     try {
-      const timeoutSignal = AbortSignal.timeout(this.#config.timeoutMs);
-      response = await this.#fetch(this.#config.endpoint, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${this.#config.apiKey}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          Query: query,
-          SearchType: 'web',
-          Count: 10,
-          Filter: {
-            NeedContent: true,
-            NeedUrl: true,
-            ...(site ? { Sites: site } : {}),
-          },
-          ContentFormats: 'markdown',
-        }),
-        signal: signal ? AbortSignal.any([signal, timeoutSignal]) : timeoutSignal,
-      });
+      const result = await this.#provider.search({ query, ...(site ? { site } : {}) }, signal);
+      const requestId = result.requestId;
+      const sources = normalizeSources(result.documents);
+      if (sources.length === 0) {
+        return noResults(requestId);
+      }
+      const relevantSources = sources.filter((source) => isRelevant(source, query, site));
+      const minimumSourceCount = site ? 1 : 2;
+      if (relevantSources.length < minimumSourceCount) {
+        return lowConfidence(requestId);
+      }
+      return success(sortBySourceQuality(relevantSources), requestId);
     } catch (error) {
-      return failure(
-        error instanceof DOMException && error.name === 'TimeoutError'
-          ? 'timeout'
-          : 'network_error',
-      );
+      if (error instanceof SearchProviderError) {
+        return failure(error.code, error.requestId);
+      }
+      throw error;
     }
-
-    if (!response.ok) {
-      return failure('http_error');
-    }
-
-    const parsed = await parseResponse(response);
-    if (!parsed) {
-      return failure('invalid_response');
-    }
-
-    const requestId = parsed.ResponseMetadata?.RequestId;
-    if (parsed.ResponseMetadata?.Error !== undefined || parsed.Result?.ErrorCode !== undefined) {
-      return failure('api_error', requestId);
-    }
-
-    const sources = normalizeSources([
-      ...(parsed.Result?.WebResults ?? []).map((result, index) => ({
-        rank: index + 1,
-        title: result.Title,
-        siteName: result.SiteName,
-        url: result.Url,
-        summary: result.Summary,
-        content: result.Content,
-        publishTime: result.PublishTime,
-      })),
-      ...(parsed.Result?.GlobalSearchResp?.Documents ?? []).map((document, index) => ({
-        rank: document.Rank ?? index + 1,
-        title: document.Title,
-        siteName: document.HostInfo?.Hostname,
-        url: document.Url,
-        summary: document.Snippets?.find((snippet) => cleanText(snippet.Text))?.Text,
-        iconUrl: document.HostInfo?.IconUrl,
-        thumbnailUrl: document.Snippets?.map(
-          (snippet) => snippet.Image?.Url ?? snippet.Image?.ImageUrl,
-        ).find((url) => normalizeMediaUrl(url)),
-        publishTime: document.DocumentInfo?.PublishTime,
-      })),
-    ]);
-    if (sources.length === 0) {
-      return noResults(requestId);
-    }
-    const relevantSources = sources.filter((source) => isRelevant(source, query, site));
-    const minimumSourceCount = site ? 1 : 2;
-    if (relevantSources.length < minimumSourceCount) {
-      return lowConfidence(requestId);
-    }
-    return success(sortBySourceQuality(relevantSources), requestId);
   }
 }
 
-async function parseResponse(
-  response: Response,
-): Promise<z.infer<typeof apiResponseSchema> | undefined> {
-  try {
-    return apiResponseSchema.parse(await response.json());
-  } catch {
-    return undefined;
-  }
-}
-
-function normalizeSources(
-  results: Array<{
-    rank: number;
-    title?: string | undefined;
-    siteName?: string | undefined;
-    url?: string | undefined;
-    summary?: string | undefined;
-    content?: string | undefined;
-    iconUrl?: string | undefined;
-    thumbnailUrl?: string | undefined;
-    publishTime?: string | undefined;
-  }>,
-): SearchSource[] {
+function normalizeSources(results: SearchProviderDocument[]): SearchSource[] {
   const seenUrls = new Set<string>();
   const sources: SearchSource[] = [];
   for (const result of results) {

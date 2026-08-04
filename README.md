@@ -2,7 +2,7 @@
 
 这是一个使用 TypeScript 与 LiveKit Agents 构建的实时语音与文字导游助手。第一版目标是尽快在本地跑通“一名用户进入一间房间，与导游 Agent 自然对话”的闭环。
 
-第一版已在本机完成真实语音对话联调。当前使用 DeepSeek LLM（大语言模型）、豆包 STT（语音转文字）和豆包 TTS（文字转语音），并可选接入豆包搜索 Custom API。Agent 已通过随应用分发的原生 MSFS CLI 接入只读飞行快照、地理上下文、EFB 航路、下一航点、附近航空设施、游戏内天气/时间和本次会话轨迹；真实模拟器场景仍需在运行中的 MSFS 2024 内完成冒烟验收。
+第一版已在本机完成真实语音对话联调。当前使用 DeepSeek LLM（大语言模型）、豆包 STT（语音转文字）和豆包 TTS（文字转语音），并可选接入豆包搜索 Custom API 或博查 Web Search API。Agent 已通过随应用分发的原生 MSFS CLI 接入只读飞行快照、地理上下文、EFB 航路、下一航点、附近航空设施、游戏内天气/时间和本次会话轨迹；真实模拟器场景仍需在运行中的 MSFS 2024 内完成冒烟验收。
 
 桌面前端已接通真实 LiveKit Room：应用自动校验配置并启动隔离的 Agent Worker，主进程签发短期 Token；Renderer 使用 LiveKit 官方 React Session 组件管理房间、麦克风、消息和回答音频，同时支持鼠标/空格键按住说话与连续自然对话。开发与安装态均使用官方 Windows `livekit-server.exe` 的本地运行方式，不使用 Docker；正式 `.exe` 安装包与自动运行时管理仍待实现，见 [Spec-011](docs/specs/spec-011-packaged-local-livekit-runtime.md)。
 
@@ -81,9 +81,13 @@ Electron 实现使用真实 Agent 转写和来源，并加载经过校验的 HTT
 ```powershell
 pnpm run search -- --query "北京当前天气" --json
 pnpm search:smoke
+# 模拟中英文工具调用前的偶尔中间话术
+pnpm guide:preamble:smoke
 ```
 
 `searchWeb` 查询的是公开网页，并不等同于专用天气 API 或模拟器传感器。回答天气、新闻等时效性问题时，Agent 会关注来源地点与更新时间；来源时间不明确时会提示时效性风险。
+
+`guide:preamble:smoke` 使用当前 `.env` 中的 DeepSeek 与搜索服务配置，模拟中文/英文联网问题和普通问题。联网问题应触发工具调用，工具调用前允许模型偶尔输出一句自然的核实提示；普通问题不应调用工具。该话术由 `src/conversation/guide-instructions.ts` 的通用提示词控制，不保证每次调用都出现。
 
 ## 本地运行
 

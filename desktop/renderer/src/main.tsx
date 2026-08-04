@@ -61,6 +61,7 @@ import { WaveformIcon } from '@phosphor-icons/react/dist/csr/Waveform';
 import { XIcon } from '@phosphor-icons/react/dist/csr/X';
 import type { DesktopReadiness } from '../../../shared/desktop-contracts.js';
 import type { AboutInfo, AboutLinkId, AboutSupportChannel } from '../../../shared/about-info.js';
+import type { SearchProviderName } from '../../../shared/search-provider.js';
 import {
   alignTtsSpeakerToLocale,
   defaultDesktopServiceSettings,
@@ -381,6 +382,7 @@ type ServiceCredentials = {
   ttsAppId: string;
   ttsAccessToken: string;
   searchApiKey: string;
+  bochaSearchApiKey: string;
 };
 type ServiceCredentialStatus = {
   encryptionAvailable: boolean;
@@ -399,6 +401,7 @@ const defaultServiceCredentials: ServiceCredentials = {
   ttsAppId: '',
   ttsAccessToken: '',
   searchApiKey: '',
+  bochaSearchApiKey: '',
 };
 const defaultServiceCredentialStatus: ServiceCredentialStatus = {
   encryptionAvailable: false,
@@ -409,6 +412,7 @@ const defaultServiceCredentialStatus: ServiceCredentialStatus = {
     ttsAppId: false,
     ttsAccessToken: false,
     searchApiKey: false,
+    bochaSearchApiKey: false,
   },
 };
 
@@ -937,7 +941,10 @@ const SettingsDialog = ({ onClose, preferences, savePreferences }: SettingsDialo
   const voiceConfigured =
     (credentialStatus.configured.sttAppId || credentials.sttAppId) &&
     (credentialStatus.configured.sttAccessToken || credentials.sttAccessToken);
-  const searchConfigured = credentialStatus.configured.searchApiKey || credentials.searchApiKey;
+  const searchCredentialKey: 'searchApiKey' | 'bochaSearchApiKey' =
+    services.search.provider === 'bocha' ? 'bochaSearchApiKey' : 'searchApiKey';
+  const searchConfigured =
+    credentialStatus.configured[searchCredentialKey] || credentials[searchCredentialKey];
   const ttsVoiceOptions = ttsVoiceSamples.filter((voice) => voice.locale === draft.locale);
   const selectedTtsVoiceSample = ttsVoiceOptions.find(
     (voice) => voice.speaker === services.tts.speaker,
@@ -1200,8 +1207,8 @@ const SettingsDialog = ({ onClose, preferences, savePreferences }: SettingsDialo
                 <strong>{english ? 'Service configuration' : '服务配置'}</strong>
                 <small>
                   {english
-                    ? 'Set up the three services your guide needs. You can change advanced values when needed.'
-                    : '只需完成导游真正需要的三项服务；高级参数可按需展开。'}
+                    ? 'Set up the three services your guide needs. Search provider settings are kept simple.'
+                    : '只需完成导游真正需要的三项服务；搜索服务只需选择服务商并填写 Key。'}
                 </small>
               </div>
               <div className="service-progress" role="status">
@@ -1520,37 +1527,34 @@ const SettingsDialog = ({ onClose, preferences, savePreferences }: SettingsDialo
                 }
                 title={english ? 'Web search' : '网页搜索'}
               >
+                <label className="service-field">
+                  <span>{english ? 'Provider' : '服务商'}</span>
+                  <span className="service-field-control service-field-control--select">
+                    <select
+                      value={services.search.provider}
+                      onChange={(event) => {
+                        const provider = event.target.value as SearchProviderName;
+                        setServices((current) => ({ ...current, search: { provider } }));
+                        setServiceTests((current) => {
+                          const next = { ...current };
+                          delete next.search;
+                          return next;
+                        });
+                      }}
+                    >
+                      <option value="volcengine">{english ? 'Volcengine' : '豆包搜索'}</option>
+                      <option value="bocha">{english ? 'Bocha' : '博查搜索'}</option>
+                    </select>
+                    <CaretDownIcon size={14} weight="bold" aria-hidden="true" />
+                  </span>
+                </label>
                 <ServiceField
                   label={english ? 'API Key (optional)' : 'API Key（可选）'}
-                  configured={credentialStatus.configured.searchApiKey}
+                  configured={credentialStatus.configured[searchCredentialKey]}
                   type="password"
-                  value={credentials.searchApiKey}
-                  onChange={(value) => updateCredential('searchApiKey', value)}
+                  value={credentials[searchCredentialKey]}
+                  onChange={(value) => updateCredential(searchCredentialKey, value)}
                 />
-                <details className="service-advanced no-drag">
-                  <summary>{english ? 'Advanced settings' : '高级设置'}</summary>
-                  <ServiceField
-                    label="HTTPS endpoint"
-                    value={services.search.endpoint}
-                    onChange={(value) =>
-                      setServices((current) => ({
-                        ...current,
-                        search: { ...current.search, endpoint: value },
-                      }))
-                    }
-                  />
-                  <ServiceField
-                    label={english ? 'Timeout (ms)' : '超时（毫秒）'}
-                    type="number"
-                    value={String(services.search.timeoutMs)}
-                    onChange={(value) =>
-                      setServices((current) => ({
-                        ...current,
-                        search: { ...current.search, timeoutMs: Number(value) },
-                      }))
-                    }
-                  />
-                </details>
               </ServiceGroup>
             </>
           ) : (

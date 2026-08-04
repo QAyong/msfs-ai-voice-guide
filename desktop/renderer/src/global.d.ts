@@ -52,6 +52,7 @@ declare global {
         ttsAppId: string;
         ttsAccessToken: string;
         searchApiKey: string;
+        bochaSearchApiKey: string;
       }>;
       getServiceSettings(): Promise<DesktopServiceSettings>;
       getTtsVoiceSamples(): Promise<DesktopTtsVoiceSample[]>;

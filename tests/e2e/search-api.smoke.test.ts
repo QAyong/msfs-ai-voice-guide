@@ -2,9 +2,14 @@ import { describe, expect, it } from 'vitest';
 import { loadSearchConfig } from '../../src/config/schema.js';
 import { SearchService } from '../../src/search/service.js';
 
-const describeWithSearchKey = process.env.VOLCENGINE_SEARCH_API_KEY ? describe : describe.skip;
+const searchProvider = process.env.SEARCH_PROVIDER === 'bocha' ? 'bocha' : 'volcengine';
+const searchApiKey =
+  searchProvider === 'bocha'
+    ? process.env.BOCHA_SEARCH_API_KEY
+    : process.env.VOLCENGINE_SEARCH_API_KEY;
+const describeWithSearchKey = searchApiKey ? describe : describe.skip;
 
-describeWithSearchKey('Volcengine Search Custom API smoke', () => {
+describeWithSearchKey(`${searchProvider} web search smoke`, () => {
   const createService = () => new SearchService(loadSearchConfig());
   const validCases = [
     ['国内历史', '北京故宫的始建时间、历史沿革和主要建筑'],

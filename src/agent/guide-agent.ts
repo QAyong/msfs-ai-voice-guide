@@ -218,6 +218,7 @@ export default defineAgent({
     const searchTool = config.search.apiKey
       ? createSearchWebTool(
           new SearchService({
+            provider: config.search.provider,
             apiKey: config.search.apiKey,
             endpoint: config.search.endpoint,
             timeoutMs: config.search.timeoutMs,
