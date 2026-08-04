@@ -17,7 +17,6 @@
 | `remark-gfm`                    |    4.0.1 | `package.json`、`pnpm-lock.yaml`                                                                                                                                                                  | [remark-gfm](https://github.com/remarkjs/remark-gfm)                             | 表格、任务列表、删除线等 GFM 扩展                        |
 | Zod                             |    4.4.3 | `package.json`、`pnpm-lock.yaml`                                                                                                                                                                  | [Zod documentation](https://zod.dev/)                                            | 配置、IPC 与来源消息边界校验                             |
 | `archiver`                      |    7.0.1 | `package.json`、`pnpm-lock.yaml`、`node_modules/archiver/package.json`                                                                                                                            | [Archiver API](https://www.archiverjs.com/docs/archiver/)                        | 以流方式生成诊断 ZIP，避免手写归档格式                   |
-| `duck-duck-scrape`              |    2.2.7 | `package.json`、`pnpm-lock.yaml`、`node_modules/duck-duck-scrape/package.json`                                                                                                                    | [duck-duck-scrape](https://www.npmjs.com/package/duck-duck-scrape)               | 探索模式的可替换、免费网页发现；域名过滤与限流由项目负责 |
 | Mem0                            |   未安装 | `package.json` 与 `pnpm-lock.yaml` 中不存在 Mem0 依赖                                                                                                                                             | [Mem0 Node SDK](https://docs.mem0.ai/open-source/node-quickstart)                | Spec-005 的长期记忆候选实现，实施前必须固定版本          |
 
 ## 规划依赖说明
@@ -34,4 +33,3 @@
 - 新增或升级核心框架时同步更新本表。
 - 无法找到对应版本文档时，记录所检查的本地源码或 TypeScript 类型定义。
 - LiveKit Server 是独立二进制发布物，不由 pnpm 锁文件管理；将它纳入安装包时必须登记精确版本、上游下载地址、SHA-256 与许可证，不能使用无版本的全局安装或 Docker `latest` 标签。
-- `duck-duck-scrape` 为 MIT，当前探索 Provider 不依赖它；平台 URL 过滤与可达性变化必须通过可替换 Provider 边界和 [Feature-015 Spike](compliance/feature-015-explore-content-provider-spike.md) 复核。

@@ -6,8 +6,6 @@ import type { VideoProvider } from './provider.js';
 const defaultProviderTimeoutMs: Record<VideoProvider['id'], number> = {
   youtube: 4_000,
   bilibili: 1_500,
-  tiktok: 4_000,
-  douyin: 4_000,
 };
 
 export type VideoServiceOptions = {

@@ -196,7 +196,6 @@ src/
     types.ts                        # 内部领域类型、变化快照
     encyclopedia/{service,provider,wikipedia,baidu-baike}.ts
     video/{service,provider,youtube,bilibili}.ts
-    discovery/{provider,duckduckgo}.ts
   msfs/
     explore-context.ts              # 复用 MsfsGuideService / MsfsCliClient 的薄适配
   providers/llm/
