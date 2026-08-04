@@ -4,6 +4,11 @@ node_modules/
 dist/
 out/
 coverage/
+resources/msfs/
+out/msfs/
+resources/livekit/
+out/livekit/
+native/global-ptt/build/
 
 # Local secrets and overrides
 .env
@@ -14,3 +19,4 @@ coverage/
 *.log
 .DS_Store
 Thumbs.db
+.ua/

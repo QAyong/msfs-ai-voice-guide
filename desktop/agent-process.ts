@@ -1,13 +1,24 @@
 import { AgentServer, ServerOptions, initializeLogger } from '@livekit/agents';
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { loadConfig } from '../src/config/schema.js';
 
 // AgentServer forks job executors. Electron's executable must run those grandchildren
 // in Node mode instead of attempting to open another desktop window.
 process.env.ELECTRON_RUN_AS_NODE = '1';
+const resourcesPath = (process as NodeJS.Process & { resourcesPath?: string }).resourcesPath;
+if (!process.env.MSFS_CLI_PATH && resourcesPath) {
+  process.env.MSFS_CLI_PATH = join(resourcesPath, 'msfs', 'msfs.exe');
+}
 
 const healthHost = '127.0.0.1';
-const healthPort = 8098;
+const configuredHealthPort = Number(process.env.AGENT_HEALTH_PORT ?? '8098');
+const healthPort =
+  Number.isInteger(configuredHealthPort) &&
+  configuredHealthPort >= 1_024 &&
+  configuredHealthPort <= 65_535
+    ? configuredHealthPort
+    : 8098;
 const config = loadConfig();
 const parentPort = process.parentPort;
 const agentPath = fileURLToPath(new URL('./guide-agent.js', import.meta.url));

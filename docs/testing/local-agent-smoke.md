@@ -1,32 +1,28 @@
 # 本地语音与文字 Agent 冒烟测试
 
-**最近一次通过：** 2026-07-19，Electron 中完成语音与文字两条真实链路：连续对话可自动检测轮次结束并经过豆包 STT、DeepSeek 与豆包 TTS；文字输入可通过 LiveKit `lk.chat` 进入同一 AgentSession，显示并播放回答，且回答中发送新文字可以触发打断。用户确认测试没有问题。本地 Worker 健康检查返回 HTTP 200。2026-07-16 已另行验证 `searchWeb` 的真实搜索链路。
+**最近一次通过：** 2026-08-03，桌面设置中的 TTS 音色筛选、试听、自定义 speaker、保存反馈和构建资源清理已完成验收；开发态 Electron 默认自动启动本地 LiveKit。2026-07-19 已在 Electron 中完成语音与文字两条真实链路：连续对话可自动检测轮次结束并经过豆包 STT、DeepSeek 与豆包 TTS；文字输入可通过 LiveKit `lk.chat` 进入同一 AgentSession，显示并播放回答，且回答中发送新文字可以触发打断。用户确认测试没有问题。2026-07-16 已另行验证 `searchWeb` 的真实搜索链路。
 
 ## 前置条件
 
-- 已启动或已配置可访问的 LiveKit Server（实时音视频房间服务）。
+- `resources/livekit/livekit-server.exe` 已准备好；开发态桌面应用会默认自动启动本地 LiveKit，外部模式才需要预先配置可访问的 Server。
 - 已构建 Electron 桌面客户端；它会自动创建短期 Token、加入唯一房间、分派 Agent 并发布麦克风音频。
 - DeepSeek LLM、豆包流式 ASR 和豆包双向流式 TTS 均已开通，且音色已授权。
 - 如需验证外部信息工具，`.env` 中还需配置 `VOLCENGINE_SEARCH_API_KEY`。
 
-## 启动本机 LiveKit Server
+## 本机 LiveKit Server（不使用 Docker）
 
-本项目不容器化 Agent；下列 Docker 命令（容器运行命令）只用于临时启动本机 LiveKit Server。它仅绑定 `127.0.0.1`（本机回环地址），关闭终端或执行停止命令后不会保留服务。
+本项目的开发、测试和发行路径均不使用 Docker。开发者从 [LiveKit 官方 Windows 发布页](https://github.com/livekit/livekit/releases/latest)获取明确版本的 `livekit-server.exe`，核验上游版本、哈希与许可证后放入受 Git 忽略的 `resources/livekit/`。开发态桌面应用默认自动启动并管理本地 Server。
 
 ```powershell
-docker run -d --rm --name msfs-livekit-dev `
-  -p 127.0.0.1:7880:7880/tcp `
-  -p 127.0.0.1:7881:7881/tcp `
-  -p 127.0.0.1:50000-50100:50000-50100/udp `
-  livekit/livekit-server:v1.13.3 --dev --bind 0.0.0.0 --udp-port 50000-50100
+pnpm desktop:preview
 ```
 
-在本地 `.env`（环境变量文件）中使用 LiveKit 开发模式默认值：
+应用会从 `resources/livekit/livekit-server.exe` 启动回环 Server，自动分配端口和本地凭据，并在退出时清理由自己启动的 Server。若需连接外部或手动启动的服务，必须在 `.env` 中明确设置 `MSFS_AUTO_START_LIVEKIT=false`，再填写对应的 LiveKit 连接配置。
+
+如需显式保留自动启动行为，可在本地 `.env`（环境变量文件）中写入：
 
 ```env
-LIVEKIT_URL=ws://127.0.0.1:7880
-LIVEKIT_API_KEY=devkey
-LIVEKIT_API_SECRET=secret
+MSFS_AUTO_START_LIVEKIT=true
 ```
 
 ## 步骤
@@ -45,6 +41,19 @@ LIVEKIT_API_SECRET=secret
 - 用户语音被火山 STT 识别，导游 Agent 生成回复，并由火山 TTS 播放。
 - DeepSeek 对需要外部信息的问题主动调用 `searchWeb`，搜索服务返回 `ok` 或可解释的低置信度/错误状态。
 - 天气、新闻等时效性回答说明来源地点和时间；来源时间不明确时不声称为实时信息。
+
+## 桌面设置与 TTS 音色闭环
+
+1. 执行 `pnpm desktop:build`，再执行 `pnpm desktop:preview` 打开 Electron 桌面窗口。
+2. 打开设置的“服务配置”页，确认音色样例只来自项目内 `resources/tts/confirmed-voices/`。
+3. 在中文项目语言下确认列表显示中文样例并默认 Vivi；切换到 English 后确认默认 Dacey、Stokie 可选，列表中不出现 Tim。
+4. 选择一个本地音色，点击“试听”，确认音频播放；再次点击后停止试听。试听不会自动保存服务配置。
+5. 选择“自定义 speaker ID”，填写自定义值并切换项目语言，确认自定义值保持不变；切换回内置音色后才恢复语言对齐。
+6. 点击“保存并重新连接”，确认按钮依次显示保存中、成功图标/成功文案并恢复正常；保存失败时显示失败状态，按钮仍可再次点击重试。
+7. 使用旧的 `en_male_tim_uranus_bigtts` 服务配置启动设置页，确认英文项目迁移到 Dacey，中文项目迁移到 Vivi，且 Worker 使用迁移后的 speaker 重启。
+8. 构建完成后检查 `out/tts/confirmed-voices/` 与 `resources/tts/confirmed-voices/` 内容一致，确认已删除的 Tim 样例不会残留在 `out/tts`。
+
+通过标准：音色列表没有目录外或旧构建残留音色；语言过滤、试听、保存重连和旧配置迁移均符合预期，失败状态不会误报保存成功。
 
 ## 桌面语音闭环
 
@@ -86,6 +95,7 @@ LIVEKIT_API_SECRET=secret
 ## 常见配置问题
 
 - `VOLCENGINE_TTS_SPEAKER` 必须是当前账户已开通的音色，不可直接使用示例值。
+- 本地试听样例必须放在 `resources/tts/confirmed-voices/`，文件名需要包含可解析的语言和性别标记；删除样例后重新执行 `pnpm desktop:build`，staging 会清理 `out/tts` 中的旧文件。
 - `VOLCENGINE_LLM_MODEL` 必须是方舟账户可调用的 endpoint/model ID。
 - `VOLCENGINE_SPEECH_API_KEY` 可供 STT 优先使用；TTS 仍需要 App ID 和 Access Token。
 - `pnpm agent:check` 不会调用云端服务，因此只能验证配置完整性，不能替代上述真实语音联调。
@@ -101,4 +111,4 @@ LIVEKIT_API_SECRET=secret
 ## 停止本地测试
 
 - 退出桌面应用会自动停止 Agent Worker 并释放 Room、麦克风与回答音频。
-- 执行 `docker stop msfs-livekit-dev` 停止本机 LiveKit Server。
+- 在运行 `livekit-server.exe --dev` 的 PowerShell 窗口按 `Ctrl+C` 停止本机 LiveKit Server。

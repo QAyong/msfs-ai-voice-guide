@@ -1,0 +1,115 @@
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import {
+  alignTtsSpeakerToLocale,
+  defaultDesktopServiceSettings,
+  defaultTtsSpeakerByLocale,
+  desktopSettingsSaveRequestSchema,
+  desktopServiceSettingsSchema,
+  serviceSettingsSaveRequestSchema,
+} from '../../shared/desktop-settings.js';
+import {
+  applyDesktopServiceSettings,
+  mergeCredentialUpdates,
+} from '../../desktop/main/service-settings.js';
+import { ServiceAvailabilityChecker } from '../../desktop/main/service-checks.js';
+
+afterEach(() => vi.unstubAllGlobals());
+
+describe('desktop service settings', () => {
+  it('accepts the fixed Provider configuration and keeps credentials out of its public DTO', () => {
+    expect(desktopServiceSettingsSchema.parse(defaultDesktopServiceSettings)).toEqual(
+      defaultDesktopServiceSettings,
+    );
+    expect(
+      desktopServiceSettingsSchema.safeParse({
+        ...defaultDesktopServiceSettings,
+        apiKey: 'must-not-be-public',
+      }).success,
+    ).toBe(false);
+  });
+
+  it('validates endpoint protocols and bounded numeric settings before any Worker starts', () => {
+    const invalid = structuredClone(defaultDesktopServiceSettings);
+    invalid.stt.endpoint = 'https://speech.example.test';
+    invalid.search.timeoutMs = 50;
+
+    expect(
+      serviceSettingsSaveRequestSchema.safeParse({ services: invalid, credentials: {} }).success,
+    ).toBe(false);
+  });
+
+  it('aligns confirmed voices to the project language while preserving custom speakers', () => {
+    expect(defaultTtsSpeakerByLocale['en-US']).toBe('en_female_dacey_uranus_bigtts');
+    expect(alignTtsSpeakerToLocale('zh_female_vv_uranus_bigtts', 'en-US')).toBe(
+      defaultTtsSpeakerByLocale['en-US'],
+    );
+    expect(alignTtsSpeakerToLocale('en_male_tim_uranus_bigtts', 'en-US')).toBe(
+      defaultTtsSpeakerByLocale['en-US'],
+    );
+    expect(alignTtsSpeakerToLocale('en_male_tim_uranus_bigtts', 'zh-CN')).toBe(
+      defaultTtsSpeakerByLocale['zh-CN'],
+    );
+    expect(alignTtsSpeakerToLocale('en_female_dacey_uranus_bigtts', 'en-US')).toBe(
+      'en_female_dacey_uranus_bigtts',
+    );
+    expect(alignTtsSpeakerToLocale('en_female_stokie_uranus_bigtts', 'en-US')).toBe(
+      'en_female_stokie_uranus_bigtts',
+    );
+    expect(alignTtsSpeakerToLocale('custom_speaker_id', 'en-US')).toBe('custom_speaker_id');
+  });
+
+  it('validates the unified locale and service settings request', () => {
+    expect(
+      desktopSettingsSaveRequestSchema.safeParse({
+        locale: 'en-US',
+        services: defaultDesktopServiceSettings,
+        credentials: {},
+      }).success,
+    ).toBe(true);
+  });
+
+  it('uses inherited process settings before protected desktop settings, then local environment values', () => {
+    const result = applyDesktopServiceSettings(
+      {
+        DEEPSEEK_API_KEY: 'from-local-env',
+        DEEPSEEK_BASE_URL: 'https://from-local-env.example.test',
+      },
+      { DEEPSEEK_API_KEY: 'from-process-env' },
+      {
+        ...defaultDesktopServiceSettings,
+        llm: { baseUrl: 'https://from-desktop-settings.example.test', model: 'desktop-model' },
+      },
+      { deepseekApiKey: 'from-protected-storage' },
+    );
+
+    expect(result.DEEPSEEK_API_KEY).toBe('from-process-env');
+    expect(result.DEEPSEEK_BASE_URL).toBe('https://from-desktop-settings.example.test');
+    expect(result.DEEPSEEK_LLM_MODEL).toBe('desktop-model');
+  });
+
+  it('merges only explicit credential changes so blank fields preserve existing secrets', () => {
+    expect(
+      mergeCredentialUpdates(
+        { deepseekApiKey: 'old-key', searchApiKey: 'old-search-key' },
+        { searchApiKey: null },
+      ),
+    ).toEqual({ deepseekApiKey: 'old-key' });
+  });
+
+  it('returns a redacted service-check failure and rate-limits repeated checks', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('private-api-key-should-not-leak')));
+    const checker = new ServiceAvailabilityChecker();
+    const environment = {
+      DEEPSEEK_API_KEY: 'private-api-key-should-not-leak',
+      DEEPSEEK_BASE_URL: 'https://api.deepseek.com',
+      DEEPSEEK_LLM_MODEL: 'deepseek-v4-flash',
+    };
+
+    const first = await checker.check('llm', environment);
+    const second = await checker.check('llm', environment);
+
+    expect(first.status).toBe('unavailable');
+    expect(first.message).not.toContain('private-api-key-should-not-leak');
+    expect(second.status).toBe('rate_limited');
+  });
+});

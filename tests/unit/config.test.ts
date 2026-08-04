@@ -57,6 +57,24 @@ describe('loadConfig', () => {
     });
   });
 
+  it('为 MSFS CLI 提供受限的进程和轨迹配置', () => {
+    const config = loadConfig({ ...baseEnvironment, MSFS_CLI_PATH: 'tools/msfs.exe' });
+
+    expect(config.msfs).toEqual({
+      cliPath: 'tools/msfs.exe',
+      timeoutMs: 15_000,
+      maxConcurrency: 2,
+      trackIntervalMs: 3_000,
+      trackMaximumPoints: 120,
+    });
+    expect(() => loadConfig({ ...baseEnvironment, MSFS_CLI_MAX_CONCURRENCY: '99' })).toThrow(
+      ConfigError,
+    );
+    expect(() => loadConfig({ ...baseEnvironment, MSFS_TRACK_INTERVAL_MS: '10' })).toThrow(
+      ConfigError,
+    );
+  });
+
   it('可为独立 CLI 只加载搜索配置', () => {
     expect(loadSearchConfig({ VOLCENGINE_SEARCH_API_KEY: 'search-secret' })).toEqual({
       apiKey: 'search-secret',

@@ -2,7 +2,7 @@
 
 ## 项目简介
 
-面向单个模拟飞行用户的实时语音导游助手。当前版本提供由 Electron 自动启动 Worker 的 LiveKit 房间语音对话，并通过 `searchWeb` 查询模型外部的公开网页信息；桌面端已完成悬浮窗口、Room 连接、语音发布/播放、真实转写、来源浏览和启动诊断，安装包仍待完成。项目不读取模拟器遥测数据。
+面向单个模拟飞行用户的实时语音导游助手。当前版本提供由 Electron 自动启动 Worker 的 LiveKit 房间语音对话，通过 `searchWeb` 查询公开网页，并通过原生 MSFS CLI 的 7 个只读高层工具读取飞行快照、地理上下文、EFB 航路、下一航点、附近航空设施、游戏内天气/时间和本次会话轨迹；桌面端已完成悬浮窗口、Room 连接、语音发布/播放、真实转写、来源浏览、启动诊断和非阻断模拟器就绪提示，正式安装包仍待完成。
 
 ## 开发前必读
 
@@ -23,12 +23,12 @@ src/
     stt/           # 豆包流式 ASR 工厂/适配器
     tts/           # 豆包双向流式 TTS 工厂/适配器
   search/         # 共享搜索服务：API 请求、结果清洗与相关性保护
+  msfs/           # 原生 MSFS CLI 适配：进程、JSON/NDJSON、领域模型、错误和轨迹缓存
   memory/         # 未来持久化记忆边界；Mem0 只能位于供应商适配层（Spec-005）
   tools/          # LiveKit 可调用的业务工具包装层
   cli/            # CLI 命令行入口，复用共享业务服务
   shared/         # 无业务归属的小型通用工具
 desktop/          # Electron 主进程、Preload 与 React Renderer
-prototypes/       # 桌面前端早期交互参考，不作为生产客户端入口
 ```
 
 `tools/` 与 `cli/` 已作为 `search/` 的两个真实入口存在。后续仍只在出现真实使用点时抽取新的共享抽象。
@@ -54,11 +54,12 @@ prototypes/       # 桌面前端早期交互参考，不作为生产客户端入
 - `src/tools/` 只负责将共享业务能力包装成 LiveKit Tool（工具）；`src/cli/` 只负责命令行参数、输出和退出码。
 - `searchWeb` 是模型获取公开网页外部信息的通用入口，可用于天气、新闻、活动、规则和知识查询；时效性结果必须保留并关注来源时间。
 - Agent 不得通过 `child_process` 启动 CLI 执行搜索；CLI 是共享服务的入口，不是实时 Agent 的运行时依赖。
-- 桌面前端需求以 Spec-004 与 Spec-006 为准；`desktop/` 是生产实现入口，HTML 原型只保留早期布局参考，不得被描述为真实客户端或 `.exe` 安装包。
+- 桌面前端需求以 Spec-004 与 Spec-006 为准；`desktop/` 是生产实现入口，不得被描述为 `.exe` 安装包。
 - 未来加载第三方网页时，必须放入独立、无 Node 权限的 `WebContentsView`（隔离网页视图）；远程网页不得获得 Preload、IPC、文件系统或 Agent 密钥。
 - Provider 的具体实现只能出现在 `src/providers/`；`registry.ts`（Provider 工厂注册表）是唯一创建入口，其他模块不得散落引用火山 SDK 或 WebSocket。
 - 遵循参考项目 `[reference project]` 的“按 STT/LLM/TTS 分类 + 集中注册表 + 启动前自检”规范；只继承职责边界，不复制 Python/Pipecat 实现。
 - 所有密钥均从环境变量读取；`.env`、`.env.local` 等含密钥文件永不提交。提供不含值的 `.env.example`。
+- LiveKit 开发与安装态均使用官方 Windows `livekit-server.exe` 的本地运行方式；Docker 不属于本项目的开发、测试或发行路径。开发者从受忽略的 `resources/livekit/livekit-server.exe` 以 `--dev` 启动回环服务，安装态由 Electron 以私有配置启动随包二进制，详见 ADR-009 与 Spec-011。
 - 优先使用 LiveKit SDK、Zod、Vitest 和 Provider 官方 SDK 已有能力，不重新实现协议、音频管线、校验器或测试运行器。
 - 修改前先阅读关联 ADR；任何与 ADR 冲突的需求必须先新增或修订 ADR。
 
@@ -74,7 +75,7 @@ prototypes/       # 桌面前端早期交互参考，不作为生产客户端入
 
 - Web 与移动端客户端；Windows Electron 客户端已进入实现阶段，但正式安装包、自动更新和代码签名不在当前范围内。
 - 多用户共用一个 Agent 房间、房间级群聊策略。
-- Microsoft Flight Simulator 遥测、位置、高度、航向或航线数据接入。
+- 任何会改变模拟器状态的 MSFS 写操作，包括自动驾驶、航班加载、AI 飞机、相机和 Input Event 控制。
 - 专用天气 API、新闻 API 或其他独立业务数据 Provider；通用网页查询统一走现有 `searchWeb`。
 - 当前版本不实现云端部署、账号体系和运营后台；持久化记忆作为 Spec-005 的未来需求，实施前不得默认启用第三方云端上传。
 - DeepSeek 与豆包语音以外的 Provider，以及运行时 Provider 切换。

@@ -36,10 +36,39 @@ export type GuideSourcesMessage = z.infer<typeof guideSourcesMessageSchema>;
 
 export const guideSourcesTopic = 'msfs.guide.sources';
 
+export const guideToolEventSchema = z
+  .object({
+    type: z.literal('guide.tools'),
+    tools: z
+      .array(
+        z
+          .object({
+            name: z.string().trim().min(1).max(128),
+            isError: z.boolean(),
+          })
+          .strict(),
+      )
+      .min(1)
+      .max(16),
+  })
+  .strict();
+export type GuideToolEvent = z.infer<typeof guideToolEventSchema>;
+export const guideToolEventsTopic = 'msfs.guide.tool-events';
+
 export function parseGuideSourcesMessage(value: string): GuideSourcesMessage | null {
   try {
     const parsed: unknown = JSON.parse(value);
     const result = guideSourcesMessageSchema.safeParse(parsed);
+    return result.success ? result.data : null;
+  } catch {
+    return null;
+  }
+}
+
+export function parseGuideToolEvent(value: string): GuideToolEvent | null {
+  try {
+    const parsed: unknown = JSON.parse(value);
+    const result = guideToolEventSchema.safeParse(parsed);
     return result.success ? result.data : null;
   } catch {
     return null;

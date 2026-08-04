@@ -3,8 +3,6 @@ import type { AppConfig } from '../../src/config/schema.js';
 import type { DesktopReadiness } from '../../shared/desktop-contracts.js';
 import { workerFailureReadiness } from './readiness.js';
 
-const healthUrl = 'http://127.0.0.1:8098/';
-
 type RuntimeStatus = 'stopped' | 'starting' | 'ready' | 'error';
 type AgentProcessMessage =
   { type: 'error'; message: string } | { type: 'stopped' } | { type: 'started' };
@@ -15,6 +13,15 @@ export class EmbeddedAgentRuntime {
   private error: unknown = null;
   private fingerprint = '';
   private stopping = false;
+
+  constructor(
+    private readonly healthPort = 8098,
+    private readonly onOutput?: (stream: 'stdout' | 'stderr', chunk: string) => void,
+  ) {}
+
+  private get healthUrl() {
+    return `http://127.0.0.1:${this.healthPort}/`;
+  }
 
   getReadiness(): DesktopReadiness {
     if (this.status === 'ready') {
@@ -28,8 +35,13 @@ export class EmbeddedAgentRuntime {
     };
   }
 
-  async ensureStarted(config: AppConfig, agentProcessPath: string): Promise<void> {
-    const fingerprint = JSON.stringify([config, agentProcessPath]);
+  async ensureStarted(
+    config: AppConfig,
+    agentProcessPath: string,
+    locale: 'en-US' | 'zh-CN',
+    environment: NodeJS.ProcessEnv = process.env,
+  ): Promise<void> {
+    const fingerprint = JSON.stringify([config, agentProcessPath, locale, this.healthPort]);
     if (this.child && this.fingerprint === fingerprint && this.status !== 'error') return;
     if (this.child) await this.stop();
 
@@ -40,16 +52,23 @@ export class EmbeddedAgentRuntime {
 
     const child = utilityProcess.fork(agentProcessPath, [], {
       cwd: process.cwd(),
+      env: {
+        ...environment,
+        AGENT_HEALTH_PORT: String(this.healthPort),
+        GUIDE_LOCALE: locale,
+      },
       serviceName: 'MSFS AI Guide Agent',
       stdio: ['ignore', 'pipe', 'pipe'],
     });
     this.child = child;
     let childErrorOutput = '';
-    const captureChildOutput = (chunk: Uint8Array | string) => {
-      childErrorOutput = `${childErrorOutput}${String(chunk)}`.slice(-2_000).trim();
+    const captureChildOutput = (stream: 'stdout' | 'stderr') => (chunk: Uint8Array | string) => {
+      const text = String(chunk);
+      if (stream === 'stderr') childErrorOutput = `${childErrorOutput}${text}`.slice(-2_000).trim();
+      this.onOutput?.(stream, text);
     };
-    child.stdout?.resume();
-    child.stderr?.on('data', captureChildOutput);
+    child.stdout?.on('data', captureChildOutput('stdout'));
+    child.stderr?.on('data', captureChildOutput('stderr'));
 
     child.on('message', (message: AgentProcessMessage) => {
       if (this.child !== child) return;
@@ -79,7 +98,7 @@ export class EmbeddedAgentRuntime {
     while (Date.now() < deadline) {
       if (this.status === 'error') return false;
       try {
-        const response = await fetch(healthUrl, { signal: AbortSignal.timeout(1_000) });
+        const response = await fetch(this.healthUrl, { signal: AbortSignal.timeout(1_000) });
         if (response.ok) {
           this.status = 'ready';
           return true;

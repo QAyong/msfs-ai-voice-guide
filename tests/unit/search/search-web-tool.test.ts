@@ -31,4 +31,10 @@ describe('searchWeb tool', () => {
       Filter: { Sites: 'dpm.org.cn' },
     });
   });
+
+  it('英文模式向模型说明英文检索和来源偏好', () => {
+    const tool = createSearchWebTool({} as SearchService, 'en-US');
+
+    expect(tool.description).toContain('Prefer English-language sources');
+  });
 });

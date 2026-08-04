@@ -1,3 +1,5 @@
+import type { SourceReadingPreferences } from './source-reading-preferences.js';
+
 export type DesktopReadinessStatus =
   'checking' | 'setup_required' | 'worker_starting' | 'ready' | 'error';
 
@@ -30,4 +32,5 @@ export type StoredWindowState = {
   source?: { width: number; height: number };
   collapsed?: boolean;
   dockSide?: 'left' | 'right';
+  sourceReadingPreferences?: SourceReadingPreferences;
 };

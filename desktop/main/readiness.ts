@@ -51,3 +51,15 @@ export function workerFailureReadiness(error: unknown): DesktopReadiness {
     issues: safeDetail ? [safeDetail] : ['请检查 LiveKit 服务是否已启动，然后重试。'],
   };
 }
+
+export function localLiveKitFailureReadiness(error: unknown): DesktopReadiness {
+  const detail = error instanceof Error ? error.message : String(error);
+  const safeDetail = detail
+    .replaceAll(/(api[_ -]?key|secret|token)\s*[=:]\s*\S+/giu, '$1=[已隐藏]')
+    .slice(0, 320);
+  return {
+    status: 'error',
+    message: '本地 LiveKit 服务未能启动。',
+    issues: safeDetail ? [safeDetail] : ['请检查应用本地实时组件是否完整，然后重试。'],
+  };
+}

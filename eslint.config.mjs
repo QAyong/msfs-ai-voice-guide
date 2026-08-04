@@ -4,7 +4,16 @@ import tseslint from 'typescript-eslint';
 
 export default tseslint.config(
   {
-    ignores: ['coverage/', 'dist/', 'node_modules/', 'out/'],
+    ignores: ['coverage/', 'dist/', 'node_modules/', 'out/', '.ua/'],
+  },
+  {
+    files: ['scripts/build-global-ptt.mjs'],
+    languageOptions: {
+      globals: {
+        console: 'readonly',
+        process: 'readonly',
+      },
+    },
   },
   js.configs.recommended,
   ...tseslint.configs.recommended,

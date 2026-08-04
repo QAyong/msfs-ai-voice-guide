@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { checkDesktopConfiguration, workerFailureReadiness } from '../../desktop/main/readiness.js';
+import {
+  checkDesktopConfiguration,
+  localLiveKitFailureReadiness,
+  workerFailureReadiness,
+} from '../../desktop/main/readiness.js';
 
 describe('desktop readiness diagnostics', () => {
   it('returns setup guidance without echoing environment values', () => {
@@ -24,5 +28,14 @@ describe('desktop readiness diagnostics', () => {
     expect(JSON.stringify(readiness)).not.toContain('visible-key');
     expect(JSON.stringify(readiness)).not.toContain('visible-secret');
     expect(JSON.stringify(readiness)).not.toContain('visible-token');
+  });
+
+  it('reports a local Server startup failure without leaking its credentials', () => {
+    const readiness = localLiveKitFailureReadiness(
+      new Error('secret=local-livekit-secret address already in use'),
+    );
+
+    expect(readiness).toMatchObject({ status: 'error', message: '本地 LiveKit 服务未能启动。' });
+    expect(JSON.stringify(readiness)).not.toContain('local-livekit-secret');
   });
 });
