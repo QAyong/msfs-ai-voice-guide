@@ -1,8 +1,8 @@
 # Spec-015：用户触发的探索模式
 
 **日期：** 2026-07-30<br />
-**最后更新：** 2026-08-02<br />
-**状态：** 已实现；人工未验收<br />
+**最后更新：** 2026-08-04<br />
+**状态：** 已实现；真实链路已验证，待人工验收<br />
 **前置决策：** [ADR-006](../adr/adr-006-search-access-boundary.md)、[ADR-008](../adr/adr-008-native-msfs-cli-agent-boundary.md)、[ADR-010](../adr/adr-010-secure-desktop-settings-global-ptt-and-diagnostics.md)<br />
 **关联规格：** [Spec-007](spec-007-desktop-text-input.md)、[Spec-008](spec-008-native-msfs-cli-guide-tools.md)、[Spec-012](spec-012-desktop-settings-localization-global-ptt-and-diagnostics.md)、[Spec-014](spec-014-source-window-adaptive-reading-and-site-preferences.md)、[Spec-016](spec-016-source-preview-lightweight-browser.md)
 
@@ -10,16 +10,19 @@
 
 增加一项由用户主动发起的“探索”能力。用户在聊天面板点击“探索”后，应用以最近已提交的对话为主要线索，并在可用时以当前 MSFS 人文地理与航路信息增强，规划 3～5 个值得继续了解的具体词条；宽泛主题优先规划 5 个，聚焦问题规划 3～4 个。随后从用户已选择的百科与视频平台取得**真实**网页资源，展示为可浏览卡片，并提供 3 条可回填至文字输入框的接续问题。
 
-## 当前实现状态（2026-08-03）
+## 当前实现状态（2026-08-04）
 
-- Explore Planner、百科/视频 Provider 编排、3～5 个具体词条约束和探索结果契约已接入。
+- Explore Planner、百科/视频 Provider 编排、3～5 个具体词条约束和探索结果契约已接入。Planner 拆成 4 个关闭推理模式的 DeepSeek 角色：主题标题与理由、百科查询、视频查询、推荐问题。
+- 主题角色先串行生成 3～5 个主题；百科查询、视频查询和推荐问题三个角色随后并行生成。每个 DeepSeek 请求均显式使用 `thinking: { type: 'disabled' }`，结果按 `topicId` 合并并再次经过 Schema 校验。
 - Planner 会拒绝重复的 `encyclopediaQuery`、topic id 和重复语义的词条；百科服务会按规范化 URL 去重，并在可用时优先返回真实词条，无法确认时保留受控搜索页兜底。
-- 当前可选百科为 Wikipedia 和百度百科；当前可选视频为哔哩哔哩和 YouTube。国内默认哔哩哔哩，英文环境默认 YouTube；两者均使用各自的公开搜索页，不依赖后端搜索服务发现视频。
+- 当前可选百科为 Wikipedia 和百度百科；两者均使用各自的公开搜索页，不由后端抓取百科 API，也不伪造具体词条 URL。当前可选视频为哔哩哔哩和 YouTube；国内默认哔哩哔哩，英文环境默认 YouTube；两者均使用各自的公开搜索页，不依赖后端搜索服务发现视频。
+- 百科主题默认最多 5 路并行；同一主题的主查询与备用查询仍保持串行，最终按主题顺序合并并按 URL 去重。搜索页 Provider 本身不发起百科网络请求，因此不会因批量调用触发 Wikipedia 或百度百科 API 限流。
 - 话题分组标题保持紧凑的行式布局，主题描述使用浅色填充突出显示，不额外引入卡片层级、图标或复杂装饰。
 - 抖音百科、抖音视频和 TikTok 不在当前可选平台中，不作为已支持的探索 Provider 对外承诺。
 - Electron 主进程启动时的路径变量命名冲突已修复，避免打包注入的 `__dirname` 与源码重复声明。
-- 对话驱动探索不等待 MSFS：Planner 立即使用对话开始，MSFS 在后台刷新同会话缓存；相同对话直接恢复上一份结果。百科与视频发现并行执行，Wikipedia、百度百科、YouTube 和哔哩哔哩均有独立来源超时，超时只标记该来源不可用，不阻塞其它结果。
-- 自动化验证已通过：`pnpm test`（151 passed、8 skipped）、桌面 TypeScript 检查、Lint 与桌面构建。上述结果不等同于人工验收；真实 Electron 窗口、目标网络和真实 LiveKit/MSFS 场景仍待人工确认。
+- 对话驱动探索不等待 MSFS：Planner 立即使用对话开始，MSFS 在后台刷新同会话缓存；相同对话直接恢复上一份结果。百科与视频发现并行执行，单个 Provider 失败只标记该来源不可用，不阻塞其它结果。
+- 真实长沙样例已验证：4 个 DeepSeek 请求均返回 HTTP 200 且 `thinking` 已关闭；主题、百科查询、视频查询、推荐问题耗时分别约 2526 ms、2324 ms、1937 ms、2004 ms，总耗时约 4862 ms，最终生成 5 个主题和 15 张来源卡片。
+- 自动化验证已通过：`pnpm test`（162 passed、8 skipped）、桌面 TypeScript 检查、Lint 与格式检查。上述结果不等同于人工验收；真实 Electron 窗口、目标网络和真实 LiveKit/MSFS 场景仍待人工确认。
 
 探索模式是“发现与规划”，不是第二个导游 Agent，也不是现有 `searchWeb` 回答来源的另一种外观。它不得替换、写入或阻塞 LiveKit `AgentSession`，也不得让模型编造网页、视频或元数据。
 
@@ -31,7 +34,7 @@
 4. 每次成功规划只能产生 3～5 个主题和恰好 3 条完整的接续问题。接续问题点击后仅回填聊天文字输入框，用户编辑并主动发送后才调用既有 `useSessionMessages().send()`。
 5. 再次点击时先检查对话变化：存在新增有效用户或导游消息，或最近主题明显变化，即重新规划并重新发现内容。对话无变化时立即恢复本桌面会话中上一次成功的 `ExploreResult`，同时在后台读取 MSFS 人文地理上下文。
 6. 后台 MSFS 读取发现显著变化时，仅使缓存失效，下一次点击才重新规划；它不会拖慢本次展示。首次探索没有成功结果时正常执行。
-7. 百科来源为单选：`Wikipedia`、`百度百科`。所选来源没有可确认的直达词条时不得伪造 URL，也不得偷偷切换其他百科；百度百科可以使用 Provider 声明的受控搜索页作为降级入口。
+7. 百科来源为单选：`Wikipedia`、`百度百科`。两者都通过 Provider 声明的受控站内搜索页打开，不伪造具体词条 URL，也不得偷偷切换其他百科。
 8. 视频来源为多选：`YouTube`、`哔哩哔哩`；允许全部取消。中文环境默认选择哔哩哔哩，英文环境默认选择 YouTube；单个平台失败不影响其他平台、百科或接续问题。
 9. 卡片打开真实的 HTTP(S) 原网页。第一版不下载、转码、保存、重新托管或内嵌播放第三方视频。
 10. 探索内容发现不得以持续付费调用量为前提；脆弱或非官方的平台发现实现必须可替换，并在实施前完成条款、稳定性和许可证 Spike。
@@ -128,7 +131,7 @@ type ExplorePlan = {
 };
 ```
 
-`topics` 长度必须为 3～5。宽泛主题优先返回 5 个，聚焦问题可返回 3～4 个。每个 topic 必须对应不同的具体百科词条；`encyclopediaFallbackQueries` 只能是同一词条的备用名称，不能引入另一个 topic。Schema 必须拒绝重复的 `encyclopediaQuery` 和重复的 topic id。百科服务解析真实页面后还必须按规范化 URL 去重；发生冲突时依次尝试备用查询，不能用重复页面填充结果。搜索页只能作为兜底入口，不计作已解析的直接词条。Schema 和额外策略必须拒绝或剥离 Planner 输出中的 `url`、`videoId`、`pageId`、作者、发布时间和缩略图字段。调用 Planner 前必须保证 `recentConversation` 或 `msfs` 至少有一个有效值。
+`topics` 长度必须为 3～5。宽泛主题优先返回 5 个，聚焦问题可返回 3～4 个。每个 topic 必须对应不同的具体百科词条；`encyclopediaFallbackQueries` 只能是同一词条的备用名称，不能引入另一个 topic。Schema 必须拒绝重复的 `encyclopediaQuery` 和重复的 topic id。百科服务仍必须按规范化 URL 去重；发生冲突时依次尝试备用查询，不能用重复页面填充结果。当前 Wikipedia 与百度百科均返回受控搜索页卡片：它们保证查询与来源域名可控，但不承诺后端已解析出具体词条摘要或缩略图。Schema 和额外策略必须拒绝或剥离 Planner 输出中的 `url`、`videoId`、`pageId`、作者、发布时间和缩略图字段。调用 Planner 前必须保证 `recentConversation` 或 `msfs` 至少有一个有效值。
 
 ### 4.2 MSFS 探索上下文
 
@@ -194,7 +197,7 @@ src/
     service.ts                      # 无 Electron、无 LiveKit 的总编排
     planner.ts                      # ExplorePlanner 接口与提示词输入边界
     types.ts                        # 内部领域类型、变化快照
-    encyclopedia/{service,provider,wikipedia,baidu-baike}.ts
+    encyclopedia/{service,provider,search-page,wikipedia-search-page,baidu-baike}.ts
     video/{service,provider,youtube,bilibili}.ts
   msfs/
     explore-context.ts              # 复用 MsfsGuideService / MsfsCliClient 的薄适配
@@ -223,18 +226,18 @@ flowchart TD
   F --> D["Assistant Renderer textDraft"]
 ```
 
-`ExploreService` 不导入 Electron、LiveKit、`BrowserWindow` 或 Renderer 代码。Main 创建整次请求的 `AbortController`，同一桌面会话同时最多运行一个请求；按钮执行期间禁用。对话存在时 Planner 不等待 MSFS；Planner 后百科与视频并行。当前来源时限为 Wikipedia 4 秒、百度百科 2.5 秒、360 百科 3 秒、YouTube 4 秒、哔哩哔哩 1.5 秒；Wikipedia 的公开 API 请求按短间隔串行，确保一个 3～5 词条批次可在该总时限内完成。超时返回部分结果。目标是首个可用结果 2～4 秒、完整结果不因单来源超过 8 秒。关闭探索窗口不影响 LiveKit 会话；用户取消或开始新的探索时中止未完成的网页请求。
+`ExploreService` 不导入 Electron、LiveKit、`BrowserWindow` 或 Renderer 代码。Main 创建整次请求的 `AbortController`，同一桌面会话同时最多运行一个请求；按钮执行期间禁用。对话存在时 Planner 不等待 MSFS；主题角色完成后，百科查询、视频查询和推荐问题三个 DeepSeek 角色并行，随后百科与视频 Provider 并行。百科服务默认最多 5 个主题并行处理；同一主题内部的备用查询保持串行。Wikipedia 与百度百科当前只构造受控站内搜索页 URL，不在后端请求百科 API，因此不设置百科 API 抓取超时，也不触发百科 API 限流。超时或异常仅返回部分结果。关闭探索窗口不影响 LiveKit 会话；用户取消或开始新的探索时中止未完成的模型请求。
 
 ## 7. Provider 约束与分阶段范围
 
 所有 Provider 以小接口返回已发现的候选资源，并在服务层按 URL 规范化去重、域名允许列表和 Zod Schema 校验。一个 Provider 的异常必须被转换为部分失败，不能击穿其他 Provider。
 
-| Provider  | 第一版策略                                                                                                                 | 重要限制                                                                     |
-| --------- | -------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
-| Wikipedia | Wikimedia 官方 API。                                                                                                       | 只返回与查询实体准确匹配的真实条目。                                         |
-| YouTube   | 构造 `https://www.youtube.com/results?search_query=<query>` 公开搜索页。                                                   | 不抓取视频列表，不使用 `youtubei.js`、YouTube Data API 或后端搜索服务。      |
-| 哔哩哔哩  | 构造 `https://search.bilibili.com/all?keyword=<query>` 站内搜索页。                                                        | 不解析私有接口、Cookie、签名或视频详情；搜索页是稳定降级入口。               |
-| 百度百科  | 构造 `https://baike.baidu.com/search/word?pic=1&sug=1&word=<query>` 站内搜索页。                                           | 只展示 AI 规划的具体词条主题，不猜测具体页面 ID。                            |
+| Provider  | 第一版策略                                                                                | 重要限制                                                                    |
+| --------- | ----------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
+| Wikipedia | 构造 `https://zh.wikipedia.org/w/index.php?search=<query>` 或英文站对应的受控站内搜索页。 | 不抓取 Wikimedia API，不伪造具体条目 URL；用户打开后由 Wikipedia 完成检索。 |
+| YouTube   | 构造 `https://www.youtube.com/results?search_query=<query>` 公开搜索页。                  | 不抓取视频列表，不使用 `youtubei.js`、YouTube Data API 或后端搜索服务。     |
+| 哔哩哔哩  | 构造 `https://search.bilibili.com/all?keyword=<query>` 站内搜索页。                       | 不解析私有接口、Cookie、签名或视频详情；搜索页是稳定降级入口。              |
+| 百度百科  | 构造 `https://baike.baidu.com/search/word?pic=1&sug=1&word=<query>` 站内搜索页。          | 只展示 AI 规划的具体词条主题，不猜测具体页面 ID。                           |
 
 抖音、TikTok 当前不在 `ExplorePreferences` 和桌面设置中，不属于本版已支持平台。无法稳定运行的 Provider 不得伪装为已支持的平台；在重新开放前必须完成网络稳定性、条款、限流和 Electron 打包 Spike。
 

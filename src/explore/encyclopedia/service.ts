@@ -10,6 +10,14 @@ const defaultProviderTimeoutMs: Record<EncyclopediaProvider['id'], number> = {
 
 export type EncyclopediaServiceOptions = {
   providerTimeoutMs?: Partial<Record<EncyclopediaProvider['id'], number>>;
+  topicConcurrency?: number;
+};
+
+const defaultTopicConcurrency = 5;
+
+type TopicResolution = {
+  candidates: ExploreCard[];
+  unavailable: boolean;
 };
 
 export const canonicalizeEncyclopediaUrl = (value: string) => {
@@ -59,18 +67,22 @@ export class EncyclopediaService {
     locale: 'zh-CN' | 'en-US',
     signal: AbortSignal,
   ): Promise<{ cards: ExploreCard[]; unavailable: boolean }> {
-    const cards: ExploreCard[] = [];
-    const seenUrls = new Set<string>();
-    let unavailable = false;
+    const topicConcurrency = Math.max(
+      1,
+      Math.floor(this.options.topicConcurrency ?? defaultTopicConcurrency),
+    );
+    const resolutions = new Array<TopicResolution>(plan.topics.length);
+    let nextTopicIndex = 0;
 
-    // Resolve topics in planner order so the first topic wins when a provider
-    // accidentally maps two different queries to the same canonical page.
-    for (const topic of plan.topics) {
-      const queries = [topic.encyclopediaQuery, ...topic.encyclopediaFallbackQueries];
+    const resolveTopic = async (topic: ExplorePlan['topics'][number]): Promise<TopicResolution> => {
+      const candidates: ExploreCard[] = [];
       let searchPageFallback: ExploreCard | null = null;
-      let resolved: ExploreCard | null = null;
+      let unavailable = false;
 
       try {
+        // Queries for one topic remain serial: the primary query is followed by
+        // its fallbacks, while different topics are resolved concurrently.
+        const queries = [topic.encyclopediaQuery, ...topic.encyclopediaFallbackQueries];
         for (const query of queries) {
           const card = await provider.find(
             {
@@ -83,29 +95,58 @@ export class EncyclopediaService {
           );
           if (!card) continue;
 
-          const urlKey = canonicalizeEncyclopediaUrl(card.url);
-          if (seenUrls.has(urlKey)) continue;
           if (card.sourceType === 'search_page') {
-            // A search page is only a fallback. Keep looking for a concrete
-            // entry from the topic's alternative queries first.
+            // A search page is only a fallback. Keep the first one in case no
+            // concrete entry is returned by any of the topic queries.
             searchPageFallback ??= card;
             continue;
           }
-          resolved = card;
-          break;
+          // Keep all direct candidates so final ordered merging can skip a
+          // duplicate owned by an earlier topic and use this topic's fallback.
+          candidates.push(card);
         }
-
-        if (!resolved && searchPageFallback) resolved = searchPageFallback;
       } catch {
         unavailable = true;
       }
 
-      if (resolved) {
-        seenUrls.add(canonicalizeEncyclopediaUrl(resolved.url));
-        cards.push(resolved);
+      if (searchPageFallback) candidates.push(searchPageFallback);
+      return { candidates, unavailable };
+    };
+
+    const worker = async () => {
+      while (true) {
+        const topicIndex = nextTopicIndex;
+        nextTopicIndex += 1;
+        if (topicIndex >= plan.topics.length) return;
+        const topic = plan.topics[topicIndex];
+        if (!topic) return;
+        resolutions[topicIndex] = await resolveTopic(topic);
+      }
+    };
+
+    await Promise.all(
+      Array.from({ length: Math.min(topicConcurrency, plan.topics.length) }, () => worker()),
+    );
+
+    const cards: ExploreCard[] = [];
+    const seenUrls = new Set<string>();
+
+    // Merge in planner order after concurrent resolution so the first topic
+    // still wins when providers return the same canonical page twice.
+    for (const resolution of resolutions) {
+      if (!resolution) continue;
+      for (const candidate of resolution.candidates) {
+        const urlKey = canonicalizeEncyclopediaUrl(candidate.url);
+        if (seenUrls.has(urlKey)) continue;
+        seenUrls.add(urlKey);
+        cards.push(candidate);
+        break;
       }
     }
 
-    return { cards, unavailable };
+    return {
+      cards,
+      unavailable: resolutions.some((resolution) => resolution?.unavailable),
+    };
   }
 }

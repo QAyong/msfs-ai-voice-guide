@@ -3,12 +3,26 @@ import { BaiduBaikeSearchPageProvider } from '../../src/explore/encyclopedia/bai
 import { SearchPageEncyclopediaProvider } from '../../src/explore/encyclopedia/search-page.js';
 import { EncyclopediaService } from '../../src/explore/encyclopedia/service.js';
 import type { EncyclopediaProvider } from '../../src/explore/encyclopedia/provider.js';
+import { WikipediaSearchPageProvider } from '../../src/explore/encyclopedia/wikipedia-search-page.js';
 import { BilibiliSearchPageProvider } from '../../src/explore/video/bilibili.js';
 import { SearchPageVideoProvider } from '../../src/explore/video/search-page.js';
 import { VideoService } from '../../src/explore/video/service.js';
 import { YouTubeSearchPageProvider } from '../../src/explore/video/youtube.js';
 
 describe('explore content providers', () => {
+  it('builds a Wikipedia search-page card without fetching Wikipedia', async () => {
+    const provider = new WikipediaSearchPageProvider();
+    await expect(
+      provider.find({ topicId: 'changsha', query: '长沙', alternateNames: [] }, 'zh-CN'),
+    ).resolves.toMatchObject({
+      kind: 'encyclopedia',
+      title: '长沙',
+      siteName: 'Wikipedia · 搜索主题',
+      sourceType: 'search_page',
+      url: 'https://zh.wikipedia.org/w/index.php?search=%E9%95%BF%E6%B2%99',
+    });
+  });
+
   it('builds a trusted Baidu Baike search-page card without fetching a third-party page', async () => {
     const provider = new BaiduBaikeSearchPageProvider();
     await expect(
@@ -63,6 +77,107 @@ describe('explore content providers', () => {
     );
     expect(result.cards).toHaveLength(1);
     expect(result.cards[0]?.topicId).toBe('one');
+  });
+
+  it('resolves encyclopedia topics concurrently and merges them in planner order', async () => {
+    let active = 0;
+    let maximumActive = 0;
+    let releaseTopics: (() => void) | undefined;
+    let resolveAllStarted: (() => void) | undefined;
+    const allStarted = new Promise<void>((resolve) => {
+      resolveAllStarted = resolve;
+    });
+    const topicsReleased = new Promise<void>((resolve) => {
+      releaseTopics = resolve;
+    });
+    const provider: EncyclopediaProvider = {
+      id: 'wikipedia',
+      find: async (candidate) => {
+        active += 1;
+        maximumActive = Math.max(maximumActive, active);
+        if (active === 5) resolveAllStarted?.();
+        await topicsReleased;
+        active -= 1;
+        return {
+          id: `wikipedia:${candidate.topicId}`,
+          kind: 'encyclopedia',
+          topicId: candidate.topicId,
+          title: candidate.query,
+          siteName: 'Wikipedia',
+          url: `https://zh.wikipedia.org/wiki/${candidate.topicId}`,
+        };
+      },
+    };
+    const service = new EncyclopediaService([provider]);
+    const resultPromise = service.find(
+      'wikipedia',
+      {
+        topics: [
+          {
+            id: 'one',
+            title: '一',
+            reason: '主题一。',
+            encyclopediaQuery: '一',
+            encyclopediaFallbackQueries: [],
+            videoQuery: '一',
+            alternateNames: [],
+          },
+          {
+            id: 'two',
+            title: '二',
+            reason: '主题二。',
+            encyclopediaQuery: '二',
+            encyclopediaFallbackQueries: [],
+            videoQuery: '二',
+            alternateNames: [],
+          },
+          {
+            id: 'three',
+            title: '三',
+            reason: '主题三。',
+            encyclopediaQuery: '三',
+            encyclopediaFallbackQueries: [],
+            videoQuery: '三',
+            alternateNames: [],
+          },
+          {
+            id: 'four',
+            title: '四',
+            reason: '主题四。',
+            encyclopediaQuery: '四',
+            encyclopediaFallbackQueries: [],
+            videoQuery: '四',
+            alternateNames: [],
+          },
+          {
+            id: 'five',
+            title: '五',
+            reason: '主题五。',
+            encyclopediaQuery: '五',
+            encyclopediaFallbackQueries: [],
+            videoQuery: '五',
+            alternateNames: [],
+          },
+        ],
+        suggestedPrompts: ['问题一？', '问题二？', '问题三？'],
+      },
+      'zh-CN',
+    );
+
+    await allStarted;
+    expect(maximumActive).toBe(5);
+    releaseTopics?.();
+
+    await expect(resultPromise).resolves.toMatchObject({
+      cards: [
+        { topicId: 'one' },
+        { topicId: 'two' },
+        { topicId: 'three' },
+        { topicId: 'four' },
+        { topicId: 'five' },
+      ],
+      unavailable: false,
+    });
   });
 
   it('builds a YouTube search-page card without a backend search request', async () => {

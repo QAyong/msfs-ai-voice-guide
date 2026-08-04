@@ -2080,6 +2080,7 @@ const AssistantView = ({
   const programmaticMessageScrollRef = useRef(false);
   const latestRenderedMessageRef = useRef<string | null>(null);
   const latestRenderedMessageIdRef = useRef<string | null>(null);
+  const assistantActivityVisibleRef = useRef(false);
   const pushToTalkPressedRef = useRef(false);
   const pushToTalkSpaceCapturedRef = useRef(false);
   const pushToTalkTurnActiveRef = useRef(false);
@@ -2374,6 +2375,21 @@ const AssistantView = ({
         ? copy.usingTools
         : copy.thinking
       : null;
+
+  const assistantActivityVisible = displayMessages.length > 0 && Boolean(assistantActivity);
+
+  useLayoutEffect(() => {
+    if (!assistantActivityVisible) {
+      assistantActivityVisibleRef.current = false;
+      return;
+    }
+    if (assistantActivityVisibleRef.current) return;
+
+    assistantActivityVisibleRef.current = true;
+    if (followLatestMessageRef.current) scrollToLatestMessage('auto');
+    else setHasUnreadMessages(true);
+  }, [assistantActivityVisible, scrollToLatestMessage]);
+
   const voiceButtonState = microphoneError
     ? 'error'
     : voiceTransitioning || microphone.pending || starting || agent.isPending

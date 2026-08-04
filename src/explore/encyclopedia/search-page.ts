@@ -6,11 +6,11 @@ export type SearchPageCardOptions = {
   kind: ExploreCard['kind'];
   siteName: string;
   allowedHosts: readonly string[];
-  buildSearchUrl(query: string): URL;
+  buildSearchUrl(query: string, locale: 'zh-CN' | 'en-US'): URL;
 };
 
 export type SearchPageEncyclopediaOptions = Omit<SearchPageCardOptions, 'kind'> & {
-  id: Exclude<EncyclopediaProvider['id'], 'wikipedia'>;
+  id: EncyclopediaProvider['id'];
 };
 
 const isAllowedSearchUrl = (url: URL, allowedHosts: readonly string[]) =>
@@ -20,13 +20,14 @@ const isAllowedSearchUrl = (url: URL, allowedHosts: readonly string[]) =>
 export const createSearchPageCard = (
   candidate: Pick<EncyclopediaCandidate, 'topicId' | 'query'>,
   options: SearchPageCardOptions,
+  locale: 'zh-CN' | 'en-US',
 ): ExploreCard | null => {
   const query = candidate.query.trim();
   if (!query) return null;
 
   let url: URL;
   try {
-    url = options.buildSearchUrl(query);
+    url = options.buildSearchUrl(query, locale);
   } catch {
     return null;
   }
@@ -57,8 +58,7 @@ export class SearchPageEncyclopediaProvider implements EncyclopediaProvider {
     locale: 'zh-CN' | 'en-US',
     signal?: AbortSignal,
   ): Promise<ExploreCard | null> {
-    void locale;
     void signal;
-    return createSearchPageCard(candidate, { ...this.options, kind: 'encyclopedia' });
+    return createSearchPageCard(candidate, { ...this.options, kind: 'encyclopedia' }, locale);
   }
 }

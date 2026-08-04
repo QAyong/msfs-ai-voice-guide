@@ -34,7 +34,7 @@ import { MsfsExploreContextProvider } from '../../src/msfs/explore-context.js';
 import { resolveMsfsCliPath } from '../../src/msfs/path.js';
 import { ExploreService } from '../../src/explore/service.js';
 import { EncyclopediaService } from '../../src/explore/encyclopedia/service.js';
-import { WikipediaProvider } from '../../src/explore/encyclopedia/wikipedia.js';
+import { WikipediaSearchPageProvider } from '../../src/explore/encyclopedia/wikipedia-search-page.js';
 import { BaiduBaikeSearchPageProvider } from '../../src/explore/encyclopedia/baidu-baike.js';
 import { VideoService } from '../../src/explore/video/service.js';
 import { BilibiliSearchPageProvider } from '../../src/explore/video/bilibili.js';
@@ -705,7 +705,10 @@ const createExploreService = async (): Promise<ExploreService | null> => {
   if (!configuration.ok) return null;
   return new ExploreService(
     new DeepSeekExplorePlanner(configuration.config.llm),
-    new EncyclopediaService([new WikipediaProvider(), new BaiduBaikeSearchPageProvider()]),
+    new EncyclopediaService([
+      new WikipediaSearchPageProvider(),
+      new BaiduBaikeSearchPageProvider(),
+    ]),
     new VideoService([
       new YouTubeSearchPageProvider(),
       new BilibiliSearchPageProvider(),
