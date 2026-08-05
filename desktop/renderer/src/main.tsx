@@ -534,6 +534,7 @@ const AboutPanel = ({ english, info, onOpenLink }: AboutPanelProps) => {
     'alipay-qr': alipayQrImage,
   };
   const tutorials = info?.links.filter((link) => link.id === 'tutorial') ?? [];
+  const communityLinks = info?.links.filter((link) => link.id === 'community') ?? [];
   const promotions = info?.links.filter((link) => link.id === 'promotion') ?? [];
 
   return (
@@ -559,6 +560,50 @@ const AboutPanel = ({ english, info, onOpenLink }: AboutPanelProps) => {
           </strong>
         </div>
       </section>
+
+      {communityLinks.length > 0 ? (
+        <section className="about-section" aria-labelledby="about-community-title">
+          <div className="about-section-heading">
+            <strong id="about-community-title">{english ? 'Community' : '交流社区'}</strong>
+          </div>
+          <div className="about-link-list about-link-list--compact">
+            {communityLinks.map((link) => (
+              <button key={link.id} type="button" onClick={() => onOpenLink(link.id)}>
+                <span>
+                  <strong>{english ? (link.labelEn ?? link.label) : link.label}</strong>
+                  {(english ? link.descriptionEn : link.description) ? (
+                    <small>{english ? link.descriptionEn : link.description}</small>
+                  ) : null}
+                </span>
+                <span>{link.hostname}</span>
+                <ArrowSquareOutIcon size={16} weight="bold" aria-hidden="true" />
+              </button>
+            ))}
+          </div>
+        </section>
+      ) : null}
+
+      {tutorials.length > 0 ? (
+        <section className="about-section" aria-labelledby="about-tutorial-title">
+          <div className="about-section-heading">
+            <strong id="about-tutorial-title">{english ? 'Tutorials' : '教程'}</strong>
+          </div>
+          <div className="about-link-list about-link-list--compact">
+            {tutorials.map((link) => (
+              <button key={link.id} type="button" onClick={() => onOpenLink(link.id)}>
+                <span>
+                  <strong>{english ? (link.labelEn ?? link.label) : link.label}</strong>
+                  {(english ? link.descriptionEn : link.description) ? (
+                    <small>{english ? link.descriptionEn : link.description}</small>
+                  ) : null}
+                </span>
+                <span>{link.hostname}</span>
+                <ArrowSquareOutIcon size={16} weight="bold" aria-hidden="true" />
+              </button>
+            ))}
+          </div>
+        </section>
+      ) : null}
 
       {supportChannels.length > 0 ? (
         <section className="about-section" aria-labelledby="about-support-title">
@@ -593,26 +638,6 @@ const AboutPanel = ({ english, info, onOpenLink }: AboutPanelProps) => {
                   </small>
                 </span>
               </article>
-            ))}
-          </div>
-        </section>
-      ) : null}
-
-      {tutorials.length > 0 ? (
-        <section className="about-section" aria-labelledby="about-tutorial-title">
-          <div className="about-section-heading">
-            <strong id="about-tutorial-title">{english ? 'Tutorials' : '教程'}</strong>
-          </div>
-          <div className="about-link-list">
-            {tutorials.map((link) => (
-              <button key={link.id} type="button" onClick={() => onOpenLink(link.id)}>
-                <span>
-                  <strong>{link.label}</strong>
-                  {link.description ? <small>{link.description}</small> : null}
-                </span>
-                <span>{link.hostname}</span>
-                <ArrowSquareOutIcon size={16} weight="bold" aria-hidden="true" />
-              </button>
             ))}
           </div>
         </section>
@@ -3161,47 +3186,64 @@ const AssistantView = ({
   return (
     <main className="assistant-card">
       <header className="drag-bar">
-        <span className="header-explore-control no-drag">
-          <button
-            type="button"
-            className={`header-icon-button header-explore-button ${exploring ? 'is-exploring' : ''} ${exploreNotice ? `has-${exploreNotice.kind}-notice` : ''}`}
-            aria-label={exploring ? copy.exploring : copy.explore}
-            disabled={exploring}
-            onClick={() => void requestExplore()}
-            title={exploring ? copy.exploring : copy.explore}
-          >
-            <CompassIcon className="explore-compass" size={19} aria-hidden="true" />
-          </button>
-          {exploreNotice ? (
-            <span className={`explore-notice explore-notice--${exploreNotice.kind}`} role="status">
-              <strong>{exploreNotice.title}</strong>
-              <small>{exploreNotice.description}</small>
-              <span className="explore-notice-actions">
-                {exploreNotice.kind === 'configuration' ? (
+        <span className="header-leading-controls no-drag">
+          <span className="header-explore-control">
+            <button
+              type="button"
+              className={`header-icon-button header-explore-button ${exploring ? 'is-exploring' : ''} ${exploreNotice ? `has-${exploreNotice.kind}-notice` : ''}`}
+              aria-label={exploring ? copy.exploring : copy.explore}
+              disabled={exploring}
+              onClick={() => void requestExplore()}
+              title={exploring ? copy.exploring : copy.explore}
+            >
+              <CompassIcon className="explore-compass" size={19} aria-hidden="true" />
+            </button>
+            {exploreNotice ? (
+              <span
+                className={`explore-notice explore-notice--${exploreNotice.kind}`}
+                role="status"
+              >
+                <strong>{exploreNotice.title}</strong>
+                <small>{exploreNotice.description}</small>
+                <span className="explore-notice-actions">
+                  {exploreNotice.kind === 'configuration' ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setExploreNotice(null);
+                        void openUtility('settings');
+                      }}
+                    >
+                      {copy.exploreSettings}
+                    </button>
+                  ) : exploreNotice.kind === 'error' ? (
+                    <button type="button" onClick={() => void requestExplore()}>
+                      {copy.exploreRetry}
+                    </button>
+                  ) : null}
                   <button
                     type="button"
-                    onClick={() => {
-                      setExploreNotice(null);
-                      void openUtility('settings');
-                    }}
+                    className="explore-notice-dismiss"
+                    aria-label={english ? 'Dismiss explore notice' : '关闭探索提示'}
+                    onClick={() => setExploreNotice(null)}
+                    title={english ? 'Dismiss' : '关闭'}
                   >
-                    {copy.exploreSettings}
+                    <XIcon size={12} weight="bold" aria-hidden="true" />
                   </button>
-                ) : exploreNotice.kind === 'error' ? (
-                  <button type="button" onClick={() => void requestExplore()}>
-                    {copy.exploreRetry}
-                  </button>
-                ) : null}
-                <button
-                  type="button"
-                  className="explore-notice-dismiss"
-                  aria-label={english ? 'Dismiss explore notice' : '关闭探索提示'}
-                  onClick={() => setExploreNotice(null)}
-                  title={english ? 'Dismiss' : '关闭'}
-                >
-                  <XIcon size={12} weight="bold" aria-hidden="true" />
-                </button>
+                </span>
               </span>
+            ) : null}
+          </span>
+          {msfsConnectionStatus?.visible ? (
+            <span
+              className={`msfs-connection-status ${msfsConnectionStatus.connected ? 'is-connected' : 'is-disconnected'}`}
+              title={msfsConnectionStatus.message}
+              role="status"
+            >
+              <span>
+                {msfsConnectionStatus.connected ? copy.gameConnected : copy.gameDisconnected}
+              </span>
+              <span className="msfs-connection-dot" aria-hidden="true" />
             </span>
           ) : null}
         </span>
@@ -3217,18 +3259,6 @@ const AssistantView = ({
           <GuideExpression state={avatarExpression} />
         </span>
         <span className="header-actions no-drag">
-          {msfsConnectionStatus?.visible ? (
-            <span
-              className={`msfs-connection-status ${msfsConnectionStatus.connected ? 'is-connected' : 'is-disconnected'}`}
-              title={msfsConnectionStatus.message}
-              role="status"
-            >
-              <span className="msfs-connection-dot" aria-hidden="true" />
-              <span>
-                {msfsConnectionStatus.connected ? copy.gameConnected : copy.gameDisconnected}
-              </span>
-            </span>
-          ) : null}
           <button
             type="button"
             className="header-icon-button"

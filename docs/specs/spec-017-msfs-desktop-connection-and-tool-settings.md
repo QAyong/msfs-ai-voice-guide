@@ -8,7 +8,7 @@
 
 ## 聊天标题栏状态
 
-- 在聊天面板标题栏中，紧邻最小化按钮左侧显示状态。
+- 在聊天面板标题栏中，探索按钮右侧显示状态，头像仍保持居中。
 - 只保留两种状态：`游戏已连接` 与 `游戏未连接`。
 - 主进程每 5 秒轮询 CLI `status` 和 `system state --name AircraftLoaded`，游戏启动或关闭后自动推送状态到 Renderer。
 - 只要 7 个 MSFS 工具至少有一个启用，就显示状态；7 个 MSFS 工具全部关闭时隐藏状态。
@@ -48,6 +48,13 @@
 
 保存设置时复用现有“保存并重新连接”逻辑：设置持久化后重启 Agent，并在新会话中只注册启用的工具。旧版本没有工具设置时默认全部启用。
 
+## 关于页与应用图标
+
+- 关于页显示产品版本 `1.0`，应用内部版本使用标准 SemVer `1.0.0`。
+- 交流社区提供 QQ 群 `587441734` 入口，使用教程提供飞书文档入口；两者均通过现有 HTTPS 外链白名单打开。
+- QQ 群和教程的标题、说明支持中英文项目语言。
+- 应用图标资源位于 `resources/app-icon.png` 与 `resources/app-icon.ico`；图标为圆形，四角透明，ICO 包含 16 至 256 像素的 Windows 多尺寸。
+
 ## 打包约定
 
 `pnpm desktop:build` 会暂存 CLI 运行文件和 Community Package。开发构建可以从相邻 CLI 项目的已验证构建目录读取资源；候选发布和正式发布必须通过 `MSFS_CLI_DISTRIBUTION_DIR` 提供明确的发布目录。设置页只检测最终用户的实际 `Community2024` 目录，不把应用资源目录误认为游戏已安装。
@@ -57,4 +64,5 @@
 - MSFS 关闭时标题栏显示“游戏未连接”，启动并加载游戏后自动变为“游戏已连接”。
 - 设置页能分别报告 CLI、UserCfg、Community Package、SimConnect 和 Route Bridge 状态。
 - 关闭任意工具后，该工具不再出现在 Agent 工具列表中；关闭全部 MSFS 工具后标题栏状态隐藏。
+- 关于页的 QQ 群、教程、版本和中英文文案显示正确；应用使用圆形图标资源。
 - `pnpm test`、`pnpm typecheck`、`pnpm desktop:typecheck`、`pnpm lint` 和严格 Community Package 构建均通过。

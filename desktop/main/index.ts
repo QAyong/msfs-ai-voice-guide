@@ -245,13 +245,32 @@ let latestMsfsConnectionStatus: MsfsConnectionStatus = {
   timestamp: new Date().toISOString(),
 };
 
-const aboutLinks: readonly AboutLink[] = [];
+const aboutLinks: readonly AboutLink[] = [
+  {
+    id: 'community',
+    label: '加入 QQ 群',
+    description: '群号 587441734',
+    labelEn: 'Join QQ Group',
+    descriptionEn: 'QQ Group 587441734',
+    url: 'https://qm.qq.com/q/akr8v7IOP0',
+    hostname: 'qm.qq.com',
+  },
+  {
+    id: 'tutorial',
+    label: '使用教程',
+    description: '查看应用配置与使用说明',
+    labelEn: 'User Guide',
+    descriptionEn: 'Application setup and usage instructions',
+    url: 'https://my.feishu.cn/wiki/Q3DuwRSi3iYA72k79necSfkynWc',
+    hostname: 'my.feishu.cn',
+  },
+];
 
 const getAboutInfo = (): AboutInfo =>
   aboutInfoSchema.parse({
     schemaVersion: 1,
     productName: '晓晓飞行导游',
-    version: app.getVersion(),
+    version: '1.0',
     supportChannels: [
       { id: 'wechat', label: '微信', qrAsset: 'wechat-qr' },
       { id: 'alipay', label: '支付宝', qrAsset: 'alipay-qr' },
@@ -288,6 +307,7 @@ const getPackagedResourcesPath = () =>
     ? ((process as NodeJS.Process & { resourcesPath?: string }).resourcesPath ??
       join(process.cwd(), 'resources'))
     : join(process.cwd(), 'resources');
+const getAppIconPath = () => join(getPackagedResourcesPath(), 'app-icon.png');
 const getTtsVoiceSamplesPath = () =>
   join(
     app.isPackaged ? getPackagedResourcesPath() : join(process.cwd(), 'resources'),
@@ -1005,6 +1025,7 @@ const openUtilityWindow = async (kind: UtilityKind): Promise<boolean> => {
     skipTaskbar: true,
     show: false,
     backgroundColor: '#00000000',
+    icon: getAppIconPath(),
     webPreferences: {
       preload: join(mainDir, '../preload/index.cjs'),
       contextIsolation: true,
@@ -1848,6 +1869,7 @@ const createAssistantWindow = async () => {
     transparent: true,
     resizable: true,
     alwaysOnTop: true,
+    icon: getAppIconPath(),
     webPreferences: {
       preload: join(mainDir, '../preload/index.cjs'),
       contextIsolation: true,
@@ -1911,6 +1933,7 @@ const createSourceWindow = async () => {
     resizable: true,
     alwaysOnTop: true,
     show: false,
+    icon: getAppIconPath(),
     webPreferences: {
       preload: join(mainDir, '../preload/index.cjs'),
       contextIsolation: true,

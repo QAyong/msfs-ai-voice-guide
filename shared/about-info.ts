@@ -1,11 +1,13 @@
 import { z } from 'zod';
 
-export const aboutLinkIdSchema = z.enum(['tutorial', 'promotion']);
+export const aboutLinkIdSchema = z.enum(['community', 'tutorial', 'promotion']);
 
 export const aboutLinkSchema = z.object({
   id: aboutLinkIdSchema,
   label: z.string().min(1).max(120),
   description: z.string().min(1).max(240).optional(),
+  labelEn: z.string().min(1).max(120).optional(),
+  descriptionEn: z.string().min(1).max(240).optional(),
   url: z.url().refine((value) => new URL(value).protocol === 'https:', 'HTTPS URL required'),
   hostname: z.string().min(1).max(255),
 });
