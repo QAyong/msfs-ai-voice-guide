@@ -70,6 +70,43 @@ export const desktopServiceSettingsSchema = z
   .strict();
 export type DesktopServiceSettings = z.infer<typeof desktopServiceSettingsSchema>;
 
+export const defaultDesktopToolSettings = {
+  getFlightSnapshot: true,
+  getLocationContext: true,
+  getRouteBrief: true,
+  getNextWaypoint: true,
+  getNearbyFacilities: true,
+  getWeatherAndSimTime: true,
+  getTrackHistory: true,
+  searchWeb: true,
+} as const;
+
+export const desktopToolSettingsSchema = z
+  .object({
+    getFlightSnapshot: z.boolean(),
+    getLocationContext: z.boolean(),
+    getRouteBrief: z.boolean(),
+    getNextWaypoint: z.boolean(),
+    getNearbyFacilities: z.boolean(),
+    getWeatherAndSimTime: z.boolean(),
+    getTrackHistory: z.boolean(),
+    searchWeb: z.boolean(),
+  })
+  .strict();
+export type DesktopToolSettings = z.infer<typeof desktopToolSettingsSchema>;
+
+export const desktopToolSettingsEnvironmentKey = 'GUIDE_ENABLED_TOOLS';
+
+export function parseDesktopToolSettingsEnvironment(value?: string): DesktopToolSettings {
+  if (!value) return { ...defaultDesktopToolSettings };
+  try {
+    const parsed = desktopToolSettingsSchema.safeParse(JSON.parse(value));
+    return parsed.success ? parsed.data : { ...defaultDesktopToolSettings };
+  } catch {
+    return { ...defaultDesktopToolSettings };
+  }
+}
+
 export const serviceCredentialKeys = [
   'deepseekApiKey',
   'sttAppId',
@@ -109,6 +146,7 @@ export const desktopSettingsSaveRequestSchema = z
     locale: supportedLocaleSchema,
     services: desktopServiceSettingsSchema,
     credentials: serviceCredentialUpdatesSchema,
+    tools: desktopToolSettingsSchema.default(defaultDesktopToolSettings),
   })
   .strict();
 export type DesktopSettingsSaveRequest = z.infer<typeof desktopSettingsSaveRequestSchema>;

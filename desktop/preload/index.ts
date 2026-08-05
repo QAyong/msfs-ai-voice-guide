@@ -24,6 +24,11 @@ import type {
   ServiceCheckRequest,
   ServiceCheckResult,
 } from '../../shared/desktop-settings.js';
+import type { DesktopToolSettings } from '../../shared/desktop-settings.js';
+import type {
+  MsfsConfigurationDiagnostic,
+  MsfsConnectionStatus,
+} from '../../shared/msfs-desktop.js';
 import { globalPushToTalkConfigurationSchema } from '../../shared/global-push-to-talk.js';
 import type {
   GlobalPushToTalkConfiguration,
@@ -76,11 +81,23 @@ contextBridge.exposeInMainWorld('desktop', {
     ipcRenderer.on('settings:locale-saved', listener);
     return () => ipcRenderer.removeListener('settings:locale-saved', listener);
   },
+  getMsfsConnectionStatus: (): Promise<MsfsConnectionStatus> =>
+    ipcRenderer.invoke('msfs:get-connection-status'),
+  onMsfsConnectionStatus: (callback: (status: MsfsConnectionStatus) => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, status: MsfsConnectionStatus) =>
+      callback(status);
+    ipcRenderer.on('msfs:connection-status', listener);
+    return () => ipcRenderer.removeListener('msfs:connection-status', listener);
+  },
   getServiceCredentialStatus: () => ipcRenderer.invoke('settings:get-credential-status'),
   getVisibleLocalServiceCredentials: () =>
     ipcRenderer.invoke('settings:get-visible-local-credentials'),
   getServiceSettings: (): Promise<DesktopServiceSettings> =>
     ipcRenderer.invoke('settings:get-service-settings'),
+  getMsfsToolSettings: (): Promise<DesktopToolSettings> =>
+    ipcRenderer.invoke('msfs:get-tool-settings'),
+  checkMsfsConfiguration: (): Promise<MsfsConfigurationDiagnostic> =>
+    ipcRenderer.invoke('msfs:check-configuration'),
   getTtsVoiceSamples: (): Promise<DesktopTtsVoiceSample[]> =>
     ipcRenderer.invoke('settings:get-tts-voice-samples'),
   saveSettings: (request: DesktopSettingsSaveRequest) => {

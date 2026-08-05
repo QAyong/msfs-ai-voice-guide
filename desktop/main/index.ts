@@ -32,6 +32,7 @@ import { MsfsCliClient } from '../../src/msfs/cli-client.js';
 import { MsfsGuideService } from '../../src/msfs/guide-service.js';
 import { MsfsExploreContextProvider } from '../../src/msfs/explore-context.js';
 import { resolveMsfsCliPath } from '../../src/msfs/path.js';
+import { statusDataSchema, systemStateDataSchema } from '../../src/msfs/schemas.js';
 import { ExploreService } from '../../src/explore/service.js';
 import { EncyclopediaService } from '../../src/explore/encyclopedia/service.js';
 import { WikipediaSearchPageProvider } from '../../src/explore/encyclopedia/wikipedia-search-page.js';
@@ -61,7 +62,9 @@ import {
 import {
   alignTtsSpeakerToLocale,
   defaultDesktopServiceSettings,
+  defaultDesktopToolSettings,
   desktopServiceSettingsSchema,
+  desktopToolSettingsSchema,
   desktopSettingsSaveRequestSchema,
   serviceCredentialKeys,
   serviceCredentialUpdatesSchema,
@@ -69,6 +72,7 @@ import {
   supportedLocaleSchema,
   type DesktopSettingsSaveRequest,
   type DesktopServiceSettings,
+  type DesktopToolSettings,
   type ServiceCredentialKey,
   type ServiceCredentialStatus,
   type ServiceCheckResult,
@@ -132,6 +136,7 @@ import {
 import { readStoredWindowState, writeStoredWindowState } from './window-state.js';
 import {
   applyDesktopServiceSettings,
+  applyDesktopToolSettings,
   mergeCredentialUpdates,
   serviceSettingsFromConfig,
 } from './service-settings.js';
@@ -140,6 +145,14 @@ import { getGlobalPushToTalkAddonPath, GlobalPushToTalkController } from './glob
 import { DiagnosticLogger, writeDiagnosticArchive } from './diagnostics.js';
 import { withSourceAcceptLanguage } from './source-locale.js';
 import { ExploreController } from './explore-controller.js';
+import { MsfsConfigurationChecker } from './msfs-diagnostics.js';
+import { MsfsConnectionMonitor } from './msfs-connection-monitor.js';
+import {
+  msfsConfigurationDiagnosticSchema,
+  msfsConnectionStatusSchema,
+  type MsfsConfigurationDiagnostic,
+  type MsfsConnectionStatus,
+} from '../../shared/msfs-desktop.js';
 
 const ignoreProcessOutputErrors = (stream: NodeJS.WriteStream) => {
   stream.on('error', () => undefined);
@@ -223,6 +236,14 @@ const localLiveKitRuntime = new LocalLiveKitRuntime();
 const serviceAvailabilityChecker = new ServiceAvailabilityChecker();
 let guideLocale: GuideLocale = 'zh-CN';
 let exploreController: ExploreController | null = null;
+let msfsToolSettings: DesktopToolSettings = { ...defaultDesktopToolSettings };
+let msfsConnectionMonitor: MsfsConnectionMonitor | null = null;
+let latestMsfsConnectionStatus: MsfsConnectionStatus = {
+  visible: true,
+  connected: false,
+  message: 'MSFS 游戏未连接。',
+  timestamp: new Date().toISOString(),
+};
 
 const aboutLinks: readonly AboutLink[] = [];
 
@@ -259,6 +280,7 @@ const localEnvironmentExamplePath = app.isPackaged
 const getWindowStatePath = () => join(app.getPath('userData'), 'window-state.json');
 const getGuideLocalePath = () => join(app.getPath('userData'), 'guide-locale.json');
 const getServiceSettingsPath = () => join(app.getPath('userData'), 'service-settings.json');
+const getToolSettingsPath = () => join(app.getPath('userData'), 'guide-tool-settings.json');
 const getServiceCredentialsPath = () => join(app.getPath('userData'), 'service-credentials.bin');
 const getAgentProcessPath = () => join(mainDir, 'agent-process.js');
 const getPackagedResourcesPath = () =>
@@ -339,6 +361,21 @@ const readStoredServiceSettings = async (): Promise<DesktopServiceSettings | und
 
 const writeStoredServiceSettings = async (settings: DesktopServiceSettings): Promise<void> => {
   await writeFile(getServiceSettingsPath(), JSON.stringify(settings), { mode: 0o600 });
+};
+
+const readStoredToolSettings = async (): Promise<DesktopToolSettings> => {
+  try {
+    const parsed = desktopToolSettingsSchema.safeParse(
+      JSON.parse(await readFile(getToolSettingsPath(), 'utf8')),
+    );
+    return parsed.success ? parsed.data : { ...defaultDesktopToolSettings };
+  } catch {
+    return { ...defaultDesktopToolSettings };
+  }
+};
+
+const writeStoredToolSettings = async (settings: DesktopToolSettings): Promise<void> => {
+  await writeFile(getToolSettingsPath(), JSON.stringify(settings), { mode: 0o600 });
 };
 
 const ttsVoiceMimeTypes: Record<string, string> = {
@@ -440,16 +477,141 @@ const getVisibleLocalServiceCredentials = (): VisibleServiceCredentials => {
 const getEffectiveServiceEnvironment = async (
   services?: DesktopServiceSettings,
   credentials?: StoredServiceCredentials,
+  tools?: DesktopToolSettings,
 ): Promise<NodeJS.ProcessEnv> => {
   reloadLocalEnvironment(localEnvironmentPath);
   const storedSettings = services ?? (await readStoredServiceSettings());
   const storedCredentials = credentials ?? (await readStoredServiceCredentials());
-  return applyDesktopServiceSettings(
+  const environment = applyDesktopServiceSettings(
     process.env,
     getInheritedEnvironment(),
     storedSettings ?? defaultDesktopServiceSettings,
     storedCredentials,
   );
+  return applyDesktopToolSettings(environment, tools ?? (await readStoredToolSettings()));
+};
+
+const hasEnabledMsfsTools = () =>
+  Object.entries(msfsToolSettings).some(([name, enabled]) => name !== 'searchWeb' && enabled);
+
+const createMsfsCliClient = (config: AppConfig): MsfsCliClient => {
+  const resourcesPath = getPackagedResourcesPath();
+  return new MsfsCliClient({
+    executablePath: resolveMsfsCliPath({
+      ...(config.msfs.cliPath ? { configuredPath: config.msfs.cliPath } : {}),
+      ...(resourcesPath ? { resourcesPath } : {}),
+    }),
+    timeoutMs: config.msfs.timeoutMs,
+    maxConcurrency: config.msfs.maxConcurrency,
+  });
+};
+
+const createMsfsCliClientFromEnvironment = (environment: NodeJS.ProcessEnv): MsfsCliClient => {
+  const configuredPath = environment.MSFS_CLI_PATH?.trim();
+  const timeoutValue = Number(environment.MSFS_CLI_TIMEOUT_MS);
+  const concurrencyValue = Number(environment.MSFS_CLI_MAX_CONCURRENCY);
+  return new MsfsCliClient({
+    executablePath: resolveMsfsCliPath({
+      ...(configuredPath ? { configuredPath } : {}),
+      resourcesPath: getPackagedResourcesPath(),
+    }),
+    timeoutMs: Number.isInteger(timeoutValue) && timeoutValue >= 500 ? timeoutValue : 15_000,
+    maxConcurrency:
+      Number.isInteger(concurrencyValue) && concurrencyValue >= 1 ? concurrencyValue : 2,
+  });
+};
+
+const createMsfsConfigurationChecker = async (): Promise<MsfsConfigurationChecker> => {
+  const environment = await getEffectiveServiceEnvironment();
+  const client = createMsfsCliClientFromEnvironment(environment);
+  const configuredPath = environment.MSFS_CLI_PATH?.trim();
+  const executablePath = resolveMsfsCliPath({
+    ...(configuredPath ? { configuredPath } : {}),
+    resourcesPath: getPackagedResourcesPath(),
+  });
+  const timeoutValue = Number(environment.MSFS_CLI_TIMEOUT_MS);
+  const concurrencyValue = Number(environment.MSFS_CLI_MAX_CONCURRENCY);
+  return new MsfsConfigurationChecker({
+    executablePath,
+    timeoutMs: Number.isInteger(timeoutValue) && timeoutValue >= 500 ? timeoutValue : 15_000,
+    maxConcurrency:
+      Number.isInteger(concurrencyValue) && concurrencyValue >= 1 ? concurrencyValue : 2,
+    client,
+    packageSourcePath: join(
+      getPackagedResourcesPath(),
+      'msfs',
+      'community',
+      'msfs-native-cli-route-bridge',
+    ),
+  });
+};
+
+const getMsfsConnectionStatus = async (): Promise<MsfsConnectionStatus> => {
+  if (!hasEnabledMsfsTools()) {
+    return msfsConnectionStatusSchema.parse({
+      visible: false,
+      connected: false,
+      message: 'MSFS 工具已关闭。',
+      timestamp: new Date().toISOString(),
+    });
+  }
+  const environment = await getEffectiveServiceEnvironment();
+  const client = createMsfsCliClientFromEnvironment(environment);
+  const result = await client.execute(['status'], statusDataSchema);
+  const simulatorState = await client.execute(
+    ['system', 'state', '--name', 'AircraftLoaded'],
+    systemStateDataSchema,
+  );
+  const connected =
+    (result.status === 'ok' && result.data.simconnect.connected) || simulatorState.status === 'ok';
+  return msfsConnectionStatusSchema.parse({
+    visible: true,
+    connected,
+    message: connected ? 'MSFS 游戏已连接。' : 'MSFS 游戏未连接。',
+    timestamp: new Date().toISOString(),
+  });
+};
+
+const publishMsfsConnectionStatus = (status: MsfsConnectionStatus) => {
+  latestMsfsConnectionStatus = status;
+  if (isLiveWindow(assistantWindow) && !assistantWindow.webContents.isDestroyed()) {
+    assistantWindow.webContents.send('msfs:connection-status', status);
+  }
+};
+
+const startMsfsConnectionMonitor = async () => {
+  if (msfsConnectionMonitor) return;
+  const environment = await getEffectiveServiceEnvironment();
+  msfsConnectionMonitor = new MsfsConnectionMonitor({
+    client: createMsfsCliClientFromEnvironment(environment),
+    isVisible: hasEnabledMsfsTools,
+    onStatus: publishMsfsConnectionStatus,
+  });
+  msfsConnectionMonitor.start();
+};
+
+const stopMsfsConnectionMonitor = () => {
+  msfsConnectionMonitor?.stop();
+  msfsConnectionMonitor = null;
+};
+
+const runMsfsConfigurationDiagnostic = async (): Promise<MsfsConfigurationDiagnostic> => {
+  try {
+    return await (await createMsfsConfigurationChecker()).check();
+  } catch {
+    return msfsConfigurationDiagnosticSchema.parse({
+      status: 'needs_setup',
+      message: 'MSFS CLI 检测失败，请稍后重试。',
+      checks: [
+        {
+          id: 'cli_runtime',
+          status: 'error',
+          message: '无法完成 MSFS CLI 检测。',
+        },
+      ],
+      checkedAt: new Date().toISOString(),
+    });
+  }
 };
 
 const readStoredGuideLocale = async (): Promise<GuideLocale> => {
@@ -610,6 +772,7 @@ const applyDesktopSettings = async (
   const previousLocale = guideLocale;
   const previousServices = await readStoredServiceSettings();
   const previousCredentials = await readStoredServiceCredentials();
+  const previousTools = await readStoredToolSettings();
   const credentials = mergeCredentialUpdates(previousCredentials, request.credentials);
   const services: DesktopServiceSettings = {
     ...request.services,
@@ -621,19 +784,23 @@ const applyDesktopSettings = async (
 
   try {
     await writeStoredServiceSettings(services);
+    await writeStoredToolSettings(request.tools);
     if (hasCredentialUpdate) await writeStoredServiceCredentials(credentials);
   } catch {
     await restoreStoredServiceSettings(previousServices);
+    await writeStoredToolSettings(previousTools);
     if (hasCredentialUpdate) await writeStoredServiceCredentials(previousCredentials);
     return desktopSettingsFailure('无法安全保存服务配置，未保存任何内容。');
   }
 
   guideLocale = request.locale;
+  msfsToolSettings = request.tools;
   const result = await startConfiguredAgent(true);
   if ('config' in result && result.readiness.status === 'ready') {
     try {
       await saveGuideLocale(guideLocale);
       notifyLocaleSaved(guideLocale);
+      await msfsConnectionMonitor?.refresh();
       void getDiagnosticsLogger().append('main', { event: 'settings_save_succeeded' });
       return { ok: true, readiness: result.readiness };
     } catch {
@@ -642,10 +809,12 @@ const applyDesktopSettings = async (
   }
 
   await restoreStoredServiceSettings(previousServices);
+  await writeStoredToolSettings(previousTools);
   if (hasCredentialUpdate) {
     await writeStoredServiceCredentials(previousCredentials);
   }
   guideLocale = previousLocale;
+  msfsToolSettings = previousTools;
   const rollback = await startConfiguredAgent(true);
   void getDiagnosticsLogger().append('main', { event: 'settings_save_rolled_back' });
   return {
@@ -721,21 +890,10 @@ const getExploreMsfsContext = async (signal: AbortSignal) => {
   const configuration = checkDesktopConfiguration(environment);
   if (!configuration.ok) return undefined;
   const config = configuration.config;
-  const resourcesPath = getPackagedResourcesPath();
-  const service = new MsfsGuideService(
-    new MsfsCliClient({
-      executablePath: resolveMsfsCliPath({
-        ...(config.msfs.cliPath ? { configuredPath: config.msfs.cliPath } : {}),
-        ...(resourcesPath ? { resourcesPath } : {}),
-      }),
-      timeoutMs: config.msfs.timeoutMs,
-      maxConcurrency: config.msfs.maxConcurrency,
-    }),
-    {
-      trackIntervalMs: config.msfs.trackIntervalMs,
-      trackMaximumPoints: config.msfs.trackMaximumPoints,
-    },
-  );
+  const service = new MsfsGuideService(createMsfsCliClient(config), {
+    trackIntervalMs: config.msfs.trackIntervalMs,
+    trackMaximumPoints: config.msfs.trackMaximumPoints,
+  });
   try {
     return await new MsfsExploreContextProvider(service).get(signal);
   } finally {
@@ -1877,6 +2035,39 @@ ipcMain.handle('diagnostics:retry', async (event) => {
   return result.readiness;
 });
 
+ipcMain.handle('msfs:get-connection-status', async (event): Promise<MsfsConnectionStatus> => {
+  if (!isAssistantSender(event.sender) && !isUtilitySender(event.sender)) {
+    return msfsConnectionStatusSchema.parse({
+      visible: false,
+      connected: false,
+      message: '无权读取 MSFS 游戏连接状态。',
+      timestamp: new Date().toISOString(),
+    });
+  }
+  if (isAssistantSender(event.sender)) {
+    await msfsConnectionMonitor?.refresh();
+    return latestMsfsConnectionStatus;
+  }
+  return getMsfsConnectionStatus();
+});
+
+ipcMain.handle('msfs:check-configuration', async (event): Promise<MsfsConfigurationDiagnostic> => {
+  if (!isUtilitySender(event.sender)) {
+    return msfsConfigurationDiagnosticSchema.parse({
+      status: 'needs_setup',
+      message: '无权检测 MSFS 配置。',
+      checks: [],
+      checkedAt: new Date().toISOString(),
+    });
+  }
+  return runMsfsConfigurationDiagnostic();
+});
+
+ipcMain.handle('msfs:get-tool-settings', async (event): Promise<DesktopToolSettings> => {
+  if (!isUtilitySender(event.sender)) return { ...defaultDesktopToolSettings };
+  return readStoredToolSettings();
+});
+
 const diagnosticConfigurationSummary = async () => {
   const services = await readStoredServiceSettings();
   const credentialStatus = await getServiceCredentialStatus();
@@ -1886,6 +2077,7 @@ const diagnosticConfigurationSummary = async () => {
     credentialsConfigured: credentialStatus.configured,
     encryptionAvailable: credentialStatus.encryptionAvailable,
     services: services ?? defaultDesktopServiceSettings,
+    tools: await readStoredToolSettings(),
   };
 };
 
@@ -2314,7 +2506,9 @@ app.whenReady().then(async () => {
   storedWindowState = readStoredWindowState(getWindowStatePath());
   sourceReadingPreferences = storedWindowState.sourceReadingPreferences ?? {};
   guideLocale = await readStoredGuideLocale();
+  msfsToolSettings = await readStoredToolSettings();
   await createAssistantWindow();
+  await startMsfsConnectionMonitor();
   void startConfiguredAgent(false).then(async (result) => {
     if ('config' in result) await agentRuntime.waitUntilReady();
     if (!app.isPackaged) {
@@ -2339,6 +2533,7 @@ app.on('before-quit', (event) => {
     clearTimeout(persistWindowTimer);
     persistWindowTimer = null;
   }
+  stopMsfsConnectionMonitor();
   globalPushToTalk.dispose();
   persistWindowState();
   void agentRuntime

@@ -65,14 +65,20 @@ import type { SearchProviderName } from '../../../shared/search-provider.js';
 import {
   alignTtsSpeakerToLocale,
   defaultDesktopServiceSettings,
+  defaultDesktopToolSettings,
   desktopSettingsSaveRequestSchema,
   serviceCheckRequestSchema,
   type DesktopTtsVoiceSample,
   type DesktopServiceSettings,
+  type DesktopToolSettings,
   type ServiceCheckResult,
   type ServiceCheckTarget,
   type DesktopSettingsSaveRequest,
 } from '../../../shared/desktop-settings.js';
+import type {
+  MsfsConfigurationDiagnostic,
+  MsfsConnectionStatus,
+} from '../../../shared/msfs-desktop.js';
 import {
   globalPushToTalkKeyLabel,
   globalPushToTalkPresetKeys,
@@ -108,10 +114,6 @@ import {
   type GuideVoiceRpcMethod,
   type VoiceInputMode,
 } from '../../../shared/voice-control.js';
-import {
-  msfsReadinessAttributes,
-  type MsfsReadinessStatus,
-} from '../../../shared/msfs-readiness.js';
 import { resolveGuideAvatarExpression } from './avatar-state.js';
 import { GuideExpression, GuideFloatingPortrait } from './guide-avatar.js';
 import { MessageMarkdown } from './message-markdown.js';
@@ -127,7 +129,7 @@ type UtilityDialog = 'settings' | 'quit';
 type BrowserDialog = UtilityDialog | 'end-conversation';
 type ExploreNoticeKind = 'context' | 'error' | 'configuration';
 type ExploreNotice = { kind: ExploreNoticeKind; title: string; description: string };
-type SettingsTab = 'general' | 'services' | 'about';
+type SettingsTab = 'general' | 'services' | 'msfs' | 'about';
 type SupportedLocale = 'zh-CN' | 'en-US';
 
 const visibleGlobalPushToTalkPresetKeys = ['AltLeft', 'F8', 'MouseX1', 'MouseX2'] as const;
@@ -393,6 +395,72 @@ type ServiceTestState = { checking: boolean; result?: ServiceCheckResult };
 type SaveState = 'idle' | 'saving' | 'success' | 'error';
 
 const defaultServiceSettings: ServiceSettings = defaultDesktopServiceSettings;
+const defaultToolSettings: DesktopToolSettings = defaultDesktopToolSettings;
+
+const msfsToolDefinitions = [
+  {
+    key: 'getFlightSnapshot',
+    zh: '飞行状态',
+    en: 'Flight snapshot',
+    zhDescription: '读取当前位置、高度、速度、姿态和飞机信息。',
+    enDescription: 'Read position, altitude, speed, attitude, and aircraft details.',
+  },
+  {
+    key: 'getLocationContext',
+    zh: '地理位置',
+    en: 'Location context',
+    zhDescription: '根据当前飞机位置获取国家、城市和地貌信息。',
+    enDescription: 'Get country, city, terrain, and POI context for the aircraft position.',
+  },
+  {
+    key: 'getRouteBrief',
+    zh: 'EFB 航路',
+    en: 'EFB route',
+    zhDescription: '读取 MSFS 2024 EFB 当前航路概览。',
+    enDescription: 'Read the current MSFS 2024 EFB route overview.',
+  },
+  {
+    key: 'getNextWaypoint',
+    zh: '下一航点',
+    en: 'Next waypoint',
+    zhDescription: '读取当前下一航点及其在航路中的信息。',
+    enDescription: 'Read the next waypoint and its position in the route.',
+  },
+  {
+    key: 'getNearbyFacilities',
+    zh: '附近航空设施',
+    en: 'Nearby facilities',
+    zhDescription: '查询附近机场、航点、NDB 或 VOR。',
+    enDescription: 'Search nearby airports, waypoints, NDBs, or VORs.',
+  },
+  {
+    key: 'getWeatherAndSimTime',
+    zh: '游戏天气与时间',
+    en: 'Simulator weather and time',
+    zhDescription: '读取游戏内环境、天气和模拟器时间。',
+    enDescription: 'Read in-game environment, weather, and simulator time.',
+  },
+  {
+    key: 'getTrackHistory',
+    zh: '本次飞行轨迹',
+    en: 'Session track history',
+    zhDescription: '读取本次 Agent 会话内维护的飞行轨迹。',
+    enDescription: 'Read the bounded flight track from this Agent session.',
+  },
+  {
+    key: 'searchWeb',
+    zh: '网页搜索',
+    en: 'Web search',
+    zhDescription: '允许导游查询公开网页并返回来源链接。',
+    enDescription: 'Allow the guide to search public web pages and return sources.',
+  },
+] as const satisfies ReadonlyArray<{
+  key: keyof DesktopToolSettings;
+  zh: string;
+  en: string;
+  zhDescription: string;
+  enDescription: string;
+}>;
 
 const defaultServiceCredentials: ServiceCredentials = {
   deepseekApiKey: '',
@@ -585,6 +653,7 @@ const SettingsDialog = ({ onClose, preferences, savePreferences }: SettingsDialo
   const [activeTab, setActiveTab] = useState<SettingsTab>('general');
   const [draft, setDraft] = useState<Preferences>(preferences);
   const [services, setServices] = useState<ServiceSettings>(defaultServiceSettings);
+  const [tools, setTools] = useState<DesktopToolSettings>(defaultToolSettings);
   const [credentials, setCredentials] = useState<ServiceCredentials>(defaultServiceCredentials);
   const [credentialUpdates, setCredentialUpdates] = useState<
     DesktopSettingsSaveRequest['credentials']
@@ -604,6 +673,8 @@ const SettingsDialog = ({ onClose, preferences, savePreferences }: SettingsDialo
   const [diagnosticNotice, setDiagnosticNotice] = useState('');
   const [diagnosticReadiness, setDiagnosticReadiness] = useState<DesktopReadiness | null>(null);
   const [diagnosticExporting, setDiagnosticExporting] = useState(false);
+  const [msfsDiagnostic, setMsfsDiagnostic] = useState<MsfsConfigurationDiagnostic | null>(null);
+  const [msfsDiagnosticChecking, setMsfsDiagnosticChecking] = useState(false);
   const [aboutInfo, setAboutInfo] = useState<AboutInfo | null>(null);
   const [globalPushToTalkStatus, setGlobalPushToTalkStatus] =
     useState<GlobalPushToTalkStatus | null>(null);
@@ -623,6 +694,7 @@ const SettingsDialog = ({ onClose, preferences, savePreferences }: SettingsDialo
         subtitle: 'Configure your floating guide',
         general: 'General',
         services: 'Services',
+        msfs: 'MSFS',
         about: 'About',
         save: 'Save',
         saveReconnect: 'Save and reconnect',
@@ -637,6 +709,7 @@ const SettingsDialog = ({ onClose, preferences, savePreferences }: SettingsDialo
         subtitle: '调整悬浮助手的显示方式',
         general: '通用',
         services: '服务配置',
+        msfs: 'MSFS 配置',
         about: '关于',
         save: '保存',
         saveReconnect: '保存并重新连接',
@@ -654,13 +727,15 @@ const SettingsDialog = ({ onClose, preferences, savePreferences }: SettingsDialo
       window.desktop?.getServiceCredentialStatus(),
       window.desktop?.getVisibleLocalServiceCredentials(),
       window.desktop?.getServiceSettings(),
+      window.desktop?.getMsfsToolSettings(),
       window.desktop?.getGlobalPushToTalkStatus(),
       window.desktop?.getReadiness(),
-    ]).then(([status, localCredentials, serviceSettings, pttStatus, readiness]) => {
+    ]).then(([status, localCredentials, serviceSettings, toolSettings, pttStatus, readiness]) => {
       if (!active) return;
       if (status) setCredentialStatus(status as ServiceCredentialStatus);
       if (localCredentials) setCredentials(localCredentials);
       if (serviceSettings) setServices(serviceSettings);
+      if (toolSettings) setTools(toolSettings);
       if (pttStatus) setGlobalPushToTalkStatus(pttStatus);
       if (readiness) setDiagnosticReadiness(readiness);
     });
@@ -759,6 +834,7 @@ const SettingsDialog = ({ onClose, preferences, savePreferences }: SettingsDialo
       locale: nextPreferences.locale,
       services: nextServices,
       credentials: credentialUpdates,
+      tools,
     });
     if (!parsed.success) {
       setNotice(
@@ -769,6 +845,7 @@ const SettingsDialog = ({ onClose, preferences, savePreferences }: SettingsDialo
     if (!window.desktop) {
       savePreferences(nextPreferences);
       setServices(nextServices);
+      setTools(tools);
       return true;
     }
     const result = await window.desktop.saveSettings(parsed.data);
@@ -778,6 +855,7 @@ const SettingsDialog = ({ onClose, preferences, savePreferences }: SettingsDialo
     }
     savePreferences(nextPreferences);
     setServices(nextServices);
+    setTools(parsed.data.tools);
     setCredentialUpdates({});
     return true;
   };
@@ -879,6 +957,18 @@ const SettingsDialog = ({ onClose, preferences, savePreferences }: SettingsDialo
         },
       },
     }));
+  };
+  const checkMsfsConfiguration = async () => {
+    if (!window.desktop) return;
+    setMsfsDiagnosticChecking(true);
+    try {
+      setMsfsDiagnostic(await window.desktop.checkMsfsConfiguration());
+    } finally {
+      setMsfsDiagnosticChecking(false);
+    }
+  };
+  const updateTool = (key: keyof DesktopToolSettings, checked: boolean) => {
+    setTools((current) => ({ ...current, [key]: checked }));
   };
   const updateCredential = <Key extends keyof ServiceCredentials>(
     key: Key,
@@ -999,6 +1089,14 @@ const SettingsDialog = ({ onClose, preferences, savePreferences }: SettingsDialo
           </button>
           <button
             type="button"
+            className={activeTab === 'msfs' ? 'settings-nav-item is-active' : 'settings-nav-item'}
+            onClick={() => selectSettingsTab('msfs')}
+          >
+            <DesktopIcon size={17} weight="duotone" aria-hidden="true" />
+            <span>{copy.msfs}</span>
+          </button>
+          <button
+            type="button"
             className={activeTab === 'about' ? 'settings-nav-item is-active' : 'settings-nav-item'}
             onClick={() => selectSettingsTab('about')}
           >
@@ -1014,7 +1112,9 @@ const SettingsDialog = ({ onClose, preferences, savePreferences }: SettingsDialo
               ? copy.general
               : activeTab === 'services'
                 ? copy.services
-                : copy.about
+                : activeTab === 'msfs'
+                  ? copy.msfs
+                  : copy.about
           }
         >
           {activeTab === 'general' ? (
@@ -1557,6 +1657,80 @@ const SettingsDialog = ({ onClose, preferences, savePreferences }: SettingsDialo
                 />
               </ServiceGroup>
             </>
+          ) : activeTab === 'msfs' ? (
+            <>
+              <div className="settings-section-heading">
+                <strong>{english ? 'MSFS 2024 integration' : 'MSFS 2024 集成'}</strong>
+                <small>
+                  {english
+                    ? 'Check the bundled CLI, SimConnect, UserCfg.opt, and the Community2024 EFB bridge.'
+                    : '检测应用内 CLI、SimConnect、UserCfg.opt 以及 Community2024 中的 EFB Bridge。'}
+                </small>
+              </div>
+              <div className="diagnostics-row msfs-diagnostics-summary">
+                <span>
+                  <strong>{english ? 'Configuration check' : '配置检测'}</strong>
+                  <small>
+                    {msfsDiagnostic?.message ||
+                      (english
+                        ? 'The game can remain closed during the file check.'
+                        : '即使游戏未启动，也可以先检查文件和目录配置。')}
+                  </small>
+                </span>
+                <button
+                  type="button"
+                  className="secondary-settings-button"
+                  disabled={msfsDiagnosticChecking}
+                  onClick={() => void checkMsfsConfiguration()}
+                >
+                  {msfsDiagnosticChecking
+                    ? english
+                      ? 'Checking…'
+                      : '检测中…'
+                    : english
+                      ? 'Check now'
+                      : '立即检测'}
+                </button>
+              </div>
+              {msfsDiagnostic ? (
+                <div className="msfs-diagnostic-list" role="status">
+                  {msfsDiagnostic.checks.map((item) => (
+                    <div className={`msfs-diagnostic-item is-${item.status}`} key={item.id}>
+                      <span className="msfs-diagnostic-item-icon" aria-hidden="true">
+                        {item.status === 'ok' ? (
+                          <CheckIcon size={13} weight="bold" />
+                        ) : (
+                          <WarningCircleIcon size={14} weight="duotone" />
+                        )}
+                      </span>
+                      <span>
+                        <strong>{item.id.replaceAll('_', ' ')}</strong>
+                        <small>{item.message}</small>
+                        {item.detail ? <small>{item.detail}</small> : null}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
+              <div className="settings-section-heading">
+                <strong>{english ? 'Guide tools' : '导游工具'}</strong>
+                <small>
+                  {english
+                    ? 'Disabled tools are removed from the next Agent session. Save and reconnect to apply changes.'
+                    : '关闭后，该工具会从下一次 Agent 会话中完全移除；保存后会重新连接导游。'}
+                </small>
+              </div>
+              {msfsToolDefinitions.map((definition) => (
+                <PreferenceRow
+                  key={definition.key}
+                  checked={tools[definition.key]}
+                  description={english ? definition.enDescription : definition.zhDescription}
+                  icon={<DesktopIcon size={18} weight="duotone" />}
+                  label={english ? definition.en : definition.zh}
+                  onChange={(checked) => updateTool(definition.key, checked)}
+                />
+              ))}
+            </>
           ) : (
             <AboutPanel english={english} info={aboutInfo} onOpenLink={openAboutLink} />
           )}
@@ -1574,9 +1748,13 @@ const SettingsDialog = ({ onClose, preferences, savePreferences }: SettingsDialo
                 ? english
                   ? 'Changes are saved when you press Save.'
                   : '修改将在点击保存后生效。'
-                : english
-                  ? 'Changing a service will reconnect the guide.'
-                  : '保存服务配置后将重新连接导游。')}
+                : activeTab === 'msfs'
+                  ? english
+                    ? 'Tool changes will reconnect the guide.'
+                    : '工具开关保存后会重新连接导游。'
+                  : english
+                    ? 'Changing a service will reconnect the guide.'
+                    : '保存服务配置后将重新连接导游。')}
           </span>
           <button
             type="button"
@@ -1936,6 +2114,7 @@ const EndConversationDialog = ({
 
 type AssistantViewProps = {
   endSession(): Promise<void>;
+  msfsConnectionStatus: MsfsConnectionStatus | null;
   onVoiceChannelChange(connected: boolean): void;
   preferences: Preferences;
   readiness: DesktopReadiness | null;
@@ -1956,9 +2135,25 @@ const Assistant = () => {
   const [starting, setStarting] = useState(true);
   const [startupError, setStartupError] = useState('');
   const [voiceChannelConnected, setVoiceChannelConnected] = useState(true);
+  const [msfsConnectionStatus, setMsfsConnectionStatus] = useState<MsfsConnectionStatus | null>(
+    null,
+  );
   const connectAbortRef = useRef<AbortController | null>(null);
 
   useEffect(() => window.desktop?.onLocaleChanged(() => window.location.reload()), []);
+  useEffect(() => {
+    let active = true;
+    void window.desktop?.getMsfsConnectionStatus().then((status) => {
+      if (active) setMsfsConnectionStatus(status);
+    });
+    const unsubscribe = window.desktop?.onMsfsConnectionStatus((status) => {
+      if (active) setMsfsConnectionStatus(status);
+    });
+    return () => {
+      active = false;
+      unsubscribe?.();
+    };
+  }, []);
 
   const tokenSource = useMemo(
     () =>
@@ -2023,6 +2218,7 @@ const Assistant = () => {
       <RoomAudioRenderer volume={voiceChannelConnected ? preferences.agentVolume : 0} />
       <AssistantView
         endSession={endSession}
+        msfsConnectionStatus={msfsConnectionStatus}
         onVoiceChannelChange={setVoiceChannelConnected}
         preferences={preferences}
         readiness={readiness}
@@ -2040,6 +2236,7 @@ const Assistant = () => {
 
 const AssistantView = ({
   endSession,
+  msfsConnectionStatus,
   onVoiceChannelChange,
   preferences,
   readiness,
@@ -2099,6 +2296,8 @@ const AssistantView = ({
   const copy = english
     ? {
         collapse: 'Collapse',
+        gameConnected: 'Game connected',
+        gameDisconnected: 'Game not connected',
         connectVoice: 'Connect voice',
         connectionIssue: 'Voice service is temporarily unavailable',
         continuousConversation: 'Continuous conversation',
@@ -2135,6 +2334,8 @@ const AssistantView = ({
       }
     : {
         collapse: '收起',
+        gameConnected: '游戏已连接',
+        gameDisconnected: '游戏未连接',
         connectVoice: '连接语音',
         connectionIssue: '语音服务暂时不可用',
         continuousConversation: '连续对话',
@@ -2328,9 +2529,6 @@ const AssistantView = ({
   );
 
   const agentFailure = agent.state === 'failed' ? agent.failureReasons.join('；') : '';
-  const msfsStatus = agent.attributes[msfsReadinessAttributes.status] as
-    MsfsReadinessStatus | undefined;
-  const msfsMessage = agent.attributes[msfsReadinessAttributes.message];
   const errorMessage = microphoneError || controlError || startupError || agentFailure;
   const userStateValue = agent.attributes[guideVoiceAttributes.userState];
   const userState = isGuideUserState(userStateValue) ? userStateValue : undefined;
@@ -3019,6 +3217,18 @@ const AssistantView = ({
           <GuideExpression state={avatarExpression} />
         </span>
         <span className="header-actions no-drag">
+          {msfsConnectionStatus?.visible ? (
+            <span
+              className={`msfs-connection-status ${msfsConnectionStatus.connected ? 'is-connected' : 'is-disconnected'}`}
+              title={msfsConnectionStatus.message}
+              role="status"
+            >
+              <span className="msfs-connection-dot" aria-hidden="true" />
+              <span>
+                {msfsConnectionStatus.connected ? copy.gameConnected : copy.gameDisconnected}
+              </span>
+            </span>
+          ) : null}
           <button
             type="button"
             className="header-icon-button"
@@ -3041,14 +3251,6 @@ const AssistantView = ({
           </button>
         </span>
       </header>
-      {msfsStatus && msfsStatus !== 'ready' ? (
-        <div className="msfs-readiness-note" role="status" data-msfs-status={msfsStatus}>
-          {msfsMessage ||
-            (english
-              ? 'Flight data is temporarily unavailable. You can still chat normally.'
-              : '模拟器飞行数据暂不可用，普通对话仍可继续。')}
-        </div>
-      ) : null}
       <div className="messages-shell">
         <section
           ref={messagesRef}

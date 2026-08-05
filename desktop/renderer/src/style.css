@@ -224,6 +224,36 @@ button {
   align-items: center;
   gap: 2px;
 }
+.msfs-connection-status {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 4px;
+  margin-right: 3px;
+  color: #7a8494;
+  font-size: 9px;
+  line-height: 1;
+  white-space: nowrap;
+}
+.msfs-connection-dot {
+  width: 6px;
+  height: 6px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: #aab4c2;
+}
+.msfs-connection-status.is-connected {
+  color: #2e8c5a;
+}
+.msfs-connection-status.is-connected .msfs-connection-dot {
+  background: #35a267;
+}
+.msfs-connection-status.is-disconnected {
+  color: #8b6a3d;
+}
+.msfs-connection-status.is-disconnected .msfs-connection-dot {
+  background: #d5a24e;
+}
 .header-close-button:hover:not(:disabled) {
   background: #fff1f1;
   color: #bf3d38;
@@ -321,16 +351,6 @@ button {
   text-align: center;
 }
 
-.msfs-readiness-note {
-  margin: 8px 12px 0;
-  padding: 7px 10px;
-  border: 1px solid rgb(213 169 83 / 35%);
-  border-radius: 9px;
-  background: rgb(255 246 225 / 88%);
-  color: #76551d;
-  font-size: 11px;
-  line-height: 1.35;
-}
 .empty-conversation-icon {
   display: grid;
   width: 38px;
@@ -1631,6 +1651,60 @@ button {
   color: #7a8494;
   font-size: 10px;
   line-height: 1.4;
+}
+.msfs-diagnostic-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.msfs-diagnostic-item {
+  display: flex;
+  min-width: 0;
+  align-items: flex-start;
+  gap: 7px;
+  padding: 8px 9px;
+  border: 1px solid rgba(33, 58, 96, 0.09);
+  border-radius: 9px;
+  background: rgba(246, 249, 253, 0.78);
+}
+.msfs-diagnostic-item-icon {
+  display: grid;
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 50%;
+  background: rgba(122, 132, 148, 0.12);
+  color: #7a8494;
+}
+.msfs-diagnostic-item > span:last-child {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+.msfs-diagnostic-item strong {
+  color: #3b4656;
+  font-size: 10px;
+  text-transform: capitalize;
+}
+.msfs-diagnostic-item small {
+  color: #7a8494;
+  font-size: 9px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+.msfs-diagnostic-item.is-ok .msfs-diagnostic-item-icon {
+  background: rgba(53, 162, 103, 0.12);
+  color: #2e8c5a;
+}
+.msfs-diagnostic-item.is-warning .msfs-diagnostic-item-icon {
+  background: rgba(213, 162, 78, 0.14);
+  color: #9a6d27;
+}
+.msfs-diagnostic-item.is-error .msfs-diagnostic-item-icon {
+  background: rgba(216, 83, 76, 0.12);
+  color: #bf3d38;
 }
 .secondary-settings-button {
   flex: 0 0 auto;

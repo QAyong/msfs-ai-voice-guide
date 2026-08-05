@@ -1,7 +1,7 @@
 # MSFS CLI 发布物集成
 
-**最后更新：** 2026-08-04
-**状态：** 当前发布约定；开发态实机验证通过，Electron 正式安装包实现待完成
+**最后更新：** 2026-08-05
+**状态：** 当前发布约定；开发态实机验证通过，Electron 资源暂存与配置检测已实现，正式安装器实现待完成
 
 ## 目的
 
@@ -42,7 +42,16 @@ CLI 仓库负责：
 | 本地 Electron 构建       | 已验证的 CLI 发行目录或相邻 CLI 项目 `build/` | `MSFS_CLI_DISTRIBUTION_DIR` 优先；未设置时暂存脚本可使用开发用相邻目录 | 相邻目录回退仅是开发便利，不构成发布输入。                             |
 | CI / 候选发布 / 正式发布 | 明确提供的、已验证的 CLI 发布目录             | 必须设置 `MSFS_CLI_DISTRIBUTION_DIR`                                   | 不得依赖 `D:\code\微软模拟飞行cli`、开发机 SDK 或未版本化的 `build/`。 |
 
-现有 `scripts/stage-msfs-cli.mjs` 负责将 CLI 运行时文件暂存到 `resources/msfs/` 与构建输出目录。它只解决 CLI/daemon 的资源复制；正式安装器还必须处理 Community Package 的携带、目标目录发现、升级与卸载。
+现有 `scripts/stage-msfs-cli.mjs` 负责将 CLI 运行时文件和 Community Package 暂存到 `resources/msfs/` 与构建输出目录。它不向用户的 MSFS 目录安装文件；正式安装器仍必须处理 Community Package 的携带、目标目录发现、安装、升级与卸载。
+
+### 桌面端连接状态与配置检测
+
+桌面主进程通过受控 CLI 调用提供两类状态：
+
+- 聊天标题栏状态：每 5 秒探测 `status` 与 `system state --name AircraftLoaded`，只显示“游戏已连接/未连接”两种结果；所有 MSFS 工具关闭时隐藏。
+- 设置页检测：只读检查 CLI 运行文件、SimConnect、`UserCfg.opt`、`Community2024\msfs-native-cli-route-bridge` 的 `manifest.json`/`layout.json`/WASM，以及已连接游戏中的 `route get --source efb`。
+
+设置页不提供 CLI 路径选择，不执行安装、复制、删除或修改游戏配置。Bridge 是否已安装必须以用户实际 `InstalledPackagesPath\Community2024` 目录为准，应用资源目录仅作为随包发布输入。
 
 ### Electron 开发态资源路径注意事项
 
@@ -63,6 +72,15 @@ pnpm msfs:stage
 pnpm desktop:dev
 pnpm msfs:smoke
 ```
+
+如果需要确认打包结果没有漏掉 Community Package，可启用严格校验：
+
+```powershell
+$env:MSFS_CLI_REQUIRE_COMMUNITY_PACKAGE = 'true'
+pnpm build
+```
+
+严格构建必须在 `resources/msfs/community/msfs-native-cli-route-bridge/` 和 `out/msfs/community/msfs-native-cli-route-bridge/` 中包含 `manifest.json`、`layout.json` 与 `modules/msfs-route-bridge.wasm`。
 
 正式构建必须通过 `MSFS_CLI_DISTRIBUTION_DIR` 提供已验证的 CLI 发布目录，并由打包脚本校验必需文件；不能把本机 `D:\code\微软模拟飞行cli` 或未版本化的相邻 `build/` 作为发布输入。
 

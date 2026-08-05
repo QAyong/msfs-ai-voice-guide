@@ -1,6 +1,6 @@
 # 本地语音与文字 Agent 冒烟测试
 
-**最近一次通过：** 2026-08-04，已完成豆包/博查搜索服务商切换、英文搜索结果标准化和通用工具调用前中间话术模拟；桌面设置中的 TTS 音色筛选、试听、自定义 speaker、保存反馈和构建资源清理已完成验收；开发态 Electron 默认自动启动本地 LiveKit。2026-07-19 已在 Electron 中完成语音与文字两条真实链路：连续对话可自动检测轮次结束并经过豆包 STT、DeepSeek 与豆包 TTS；文字输入可通过 LiveKit `lk.chat` 进入同一 AgentSession，显示并播放回答，且回答中发送新文字可以触发打断。用户确认测试没有问题。2026-07-16 已另行验证 `searchWeb` 的真实搜索链路。
+**最近一次通过：** 2026-08-05，已完成 MSFS 标题栏连接状态、MSFS 配置检测、Community Package 暂存和 8 个工具独立开关的真实 Electron 验收；同时完成豆包/博查搜索服务商切换、英文搜索结果标准化和通用工具调用前中间话术模拟，桌面设置中的 TTS 音色筛选、试听、自定义 speaker、保存反馈和构建资源清理已完成验收；开发态 Electron 默认自动启动本地 LiveKit。2026-07-19 已在 Electron 中完成语音与文字两条真实链路：连续对话可自动检测轮次结束并经过豆包 STT、DeepSeek 与豆包 TTS；文字输入可通过 LiveKit `lk.chat` 进入同一 AgentSession，显示并播放回答，且回答中发送新文字可以触发打断。用户确认测试没有问题。2026-07-16 已另行验证 `searchWeb` 的真实搜索链路。
 
 ## 前置条件
 
@@ -54,6 +54,17 @@ MSFS_AUTO_START_LIVEKIT=true
 8. 构建完成后检查 `out/tts/confirmed-voices/` 与 `resources/tts/confirmed-voices/` 内容一致，确认已删除的 Tim 样例不会残留在 `out/tts`。
 
 通过标准：音色列表没有目录外或旧构建残留音色；语言过滤、试听、保存重连和旧配置迁移均符合预期，失败状态不会误报保存成功。
+
+## MSFS 连接与配置检测
+
+1. 确认 MSFS 2024 的 `Community2024\msfs-native-cli-route-bridge` 已安装，并包含 `manifest.json`、`layout.json` 和 `modules\msfs-route-bridge.wasm`。
+2. 执行 `pnpm desktop:build`，再执行 `pnpm desktop:preview` 打开 Electron 桌面窗口。
+3. MSFS 未启动时确认聊天标题栏显示“游戏未连接”。
+4. 启动 MSFS 2024 并加载飞行，确认标题栏自动变为“游戏已连接”。
+5. 打开设置 → MSFS，点击“立即检测”，确认 CLI 运行文件、UserCfg、Community Package 和 Route Bridge 均能得到对应结果。
+6. 关闭一个 MSFS 工具并保存，确认 Agent 重启后该工具不再注册；关闭全部 MSFS 工具时，标题栏连接状态隐藏。
+
+通过标准：检测只读、不安装或修改游戏文件；游戏关闭时不误报已连接；`ROUTE_NOT_FOUND` 被识别为 Bridge 已响应但没有当前航路；工具开关和保存重连状态一致。
 
 ## 桌面语音闭环
 

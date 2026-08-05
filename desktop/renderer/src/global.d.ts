@@ -14,10 +14,15 @@ import type { SourceWindowState } from '../../../shared/source-preview.js';
 import type {
   DesktopSettingsSaveRequest,
   DesktopServiceSettings,
+  DesktopToolSettings,
   DesktopTtsVoiceSample,
   ServiceCheckRequest,
   ServiceCheckResult,
 } from '../../../shared/desktop-settings.js';
+import type {
+  MsfsConfigurationDiagnostic,
+  MsfsConnectionStatus,
+} from '../../../shared/msfs-desktop.js';
 import type {
   GlobalPushToTalkConfiguration,
   GlobalPushToTalkEvent,
@@ -32,6 +37,8 @@ declare global {
       getAssistantState(): Promise<{ collapsed: boolean }>;
       setBallMenuOpen(open: boolean): Promise<'up' | 'down'>;
       openSettings(): Promise<boolean>;
+      getMsfsConnectionStatus(): Promise<MsfsConnectionStatus>;
+      onMsfsConnectionStatus(callback: (status: MsfsConnectionStatus) => void): () => void;
       getAboutInfo(): Promise<AboutInfo | null>;
       openAboutLink(id: AboutLinkId): Promise<boolean>;
       getGlobalPushToTalkStatus(): Promise<GlobalPushToTalkStatus>;
@@ -55,6 +62,8 @@ declare global {
         bochaSearchApiKey: string;
       }>;
       getServiceSettings(): Promise<DesktopServiceSettings>;
+      getMsfsToolSettings(): Promise<DesktopToolSettings>;
+      checkMsfsConfiguration(): Promise<MsfsConfigurationDiagnostic>;
       getTtsVoiceSamples(): Promise<DesktopTtsVoiceSample[]>;
       saveSettings(
         request: DesktopSettingsSaveRequest,

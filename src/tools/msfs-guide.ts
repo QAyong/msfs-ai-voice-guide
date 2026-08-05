@@ -1,6 +1,10 @@
 import { llm } from '@livekit/agents';
 import { z } from 'zod';
 import type { MsfsGuideService } from '../msfs/guide-service.js';
+import {
+  defaultDesktopToolSettings,
+  type DesktopToolSettings,
+} from '../../shared/desktop-settings.js';
 
 const noParameters = z.object({}).strict();
 
@@ -21,8 +25,11 @@ const trackParameters = z.object({
   limit: z.number().int().min(2).max(120).default(30).describe('返回最近多少个低频轨迹点。'),
 });
 
-export function createMsfsGuideTools(service: MsfsGuideService): readonly llm.ToolContextEntry[] {
-  return [
+export function createMsfsGuideTools(
+  service: MsfsGuideService,
+  enabledTools: DesktopToolSettings = defaultDesktopToolSettings,
+): readonly llm.ToolContextEntry[] {
+  const tools: readonly llm.ToolContextEntry[] = [
     llm.tool({
       name: 'getFlightSnapshot',
       description:
@@ -74,4 +81,7 @@ export function createMsfsGuideTools(service: MsfsGuideService): readonly llm.To
       execute: async ({ limit }) => service.getTrackHistory(limit),
     }),
   ];
+  return tools.filter(
+    (tool) => !('name' in tool) || enabledTools[tool.name as keyof DesktopToolSettings] !== false,
+  );
 }

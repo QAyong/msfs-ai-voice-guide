@@ -1,7 +1,9 @@
 import type { AppConfig } from '../../src/config/schema.js';
 import {
   defaultDesktopServiceSettings,
+  desktopToolSettingsEnvironmentKey,
   type DesktopServiceSettings,
+  type DesktopToolSettings,
   type ServiceCredentialKey,
   type StoredServiceCredentials,
 } from '../../shared/desktop-settings.js';
@@ -93,6 +95,16 @@ export function applyDesktopServiceSettings(
     if (inheritedEnvironment[environmentKey] === undefined) next[environmentKey] = value;
   }
   return next;
+}
+
+export function applyDesktopToolSettings(
+  baseEnvironment: NodeJS.ProcessEnv,
+  settings: DesktopToolSettings,
+): NodeJS.ProcessEnv {
+  return {
+    ...baseEnvironment,
+    [desktopToolSettingsEnvironmentKey]: JSON.stringify(settings),
+  };
 }
 
 export function mergeCredentialUpdates(

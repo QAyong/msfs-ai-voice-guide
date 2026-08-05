@@ -2,7 +2,7 @@
 
 这是一个使用 TypeScript 与 LiveKit Agents 构建的实时语音与文字导游助手。第一版目标是尽快在本地跑通“一名用户进入一间房间，与导游 Agent 自然对话”的闭环。
 
-第一版已在本机完成真实语音对话联调。当前使用 DeepSeek LLM（大语言模型）、豆包 STT（语音转文字）和豆包 TTS（文字转语音），并可选接入豆包搜索 Custom API 或博查 Web Search API。Agent 已通过随应用分发的原生 MSFS CLI 接入只读飞行快照、地理上下文、EFB 航路、下一航点、附近航空设施、游戏内天气/时间和本次会话轨迹；开发态已在运行中的 MSFS 2024 内完成 CLI、SimConnect 和桌面对话冒烟验证，正式安装包仍待完成。
+第一版已在本机完成真实语音对话联调。当前使用 DeepSeek LLM（大语言模型）、豆包 STT（语音转文字）和豆包 TTS（文字转语音），并可选接入豆包搜索 Custom API 或博查 Web Search API。Agent 已通过随应用分发的原生 MSFS CLI 接入只读飞行快照、地理上下文、EFB 航路、下一航点、附近航空设施、游戏内天气/时间和本次会话轨迹；开发态已在运行中的 MSFS 2024 内完成 CLI、SimConnect 和桌面对话冒烟验证，桌面端现已支持游戏连接状态、MSFS 配置检测和工具开关，正式安装器仍待完成。
 
 桌面前端已接通真实 LiveKit Room：应用自动校验配置并启动隔离的 Agent Worker，主进程签发短期 Token；Renderer 使用 LiveKit 官方 React Session 组件管理房间、麦克风、消息和回答音频，同时支持鼠标/空格键按住说话与连续自然对话。开发与安装态均使用官方 Windows `livekit-server.exe` 的本地运行方式，不使用 Docker；正式 `.exe` 安装包与自动运行时管理仍待实现，见 [Spec-011](docs/specs/spec-011-packaged-local-livekit-runtime.md)。
 
@@ -16,6 +16,7 @@
 - [用户触发的探索模式](docs/specs/spec-015-user-triggered-explore-mode.md)
 - [来源预览面板轻量浏览器能力](docs/specs/spec-016-source-preview-lightweight-browser.md)
 - [原生 MSFS CLI 导游工具接入](docs/specs/spec-008-native-msfs-cli-guide-tools.md)
+- [MSFS 桌面连接状态、配置检测与工具开关](docs/specs/spec-017-msfs-desktop-connection-and-tool-settings.md)
 - [MSFS CLI 发布物集成](docs/architecture/msfs-cli-release-integration.md)
 - [MSFS CLI 就绪误判与开发态资源路径 Bug](docs/bugs/bug-20260804-msfs-cli-readiness-and-dev-resource-path.md)
 - [桌面安装包的本地 LiveKit 运行时](docs/specs/spec-011-packaged-local-livekit-runtime.md)
@@ -42,7 +43,7 @@ pnpm install
 pnpm run verify
 ```
 
-当前已完成工程工具链、LiveKit SDK 类型契约、火山 Provider 适配器、LiveKit 会话入口、`searchWeb` 和 7 个只读 MSFS 工具。
+当前已完成工程工具链、LiveKit SDK 类型契约、火山 Provider 适配器、LiveKit 会话入口、`searchWeb` 和 7 个只读 MSFS 工具；桌面端还提供 MSFS 游戏连接状态、Community2024 配置检测和 8 个工具的独立开关。
 
 开发态可在 `.env` 中通过 `MSFS_CLI_PATH` 指向本地 `msfs.exe`；未配置时，Electron Worker 使用项目根目录的 `resources/msfs/msfs.exe`。执行 `pnpm msfs:stage` 会将 `msfs.exe`、`msfsd.exe` 和本机可用的运行时文件暂存到 Electron 资源目录。安装态默认从应用私有资源目录解析。CLI 只连接真实的 MSFS 2024 SimConnect；游戏未启动或未加载飞行时，前端会显示不可读取状态而不会返回模拟数据。EFB 航路还要求在 MSFS 2024 的 `Community2024` 中安装配套 route bridge。CLI 是独立发布依赖：正式打包必须使用经校验的发布目录，不得依赖开发机上的 `D:\code\微软模拟飞行cli`；完整约定见 [MSFS CLI 发布物集成](docs/architecture/msfs-cli-release-integration.md)。
 
@@ -63,6 +64,8 @@ pnpm run verify
 - AI 回答中的真实搜索来源卡片和搜索结果入口。
 - 自动启动/检查 Agent Worker、首次配置引导、脱敏故障提示、重试、音量/置顶/窗口状态保存。
 - 设置中心支持中英文项目语言、DeepSeek/STT/TTS/搜索服务配置、按项目语言过滤的本地豆包 TTS 音色、音色试听和自定义 speaker ID；保存服务配置后会重启 Agent 并重新连接 LiveKit。
+- 设置中心的 MSFS 页面可以检测 CLI 运行文件、SimConnect、`UserCfg.opt`、`Community2024\msfs-native-cli-route-bridge` 和 EFB Route Bridge；检测只读，不会安装或修改游戏文件。MSFS 7 个工具与 `searchWeb` 可分别关闭，关闭后对应工具不会注册到 Agent。
+- 聊天标题栏在最小化按钮左侧显示“游戏已连接/未连接”两种状态；MSFS 工具全部关闭时隐藏该标识，游戏启停后自动刷新。
 - TTS 本地样例来自 `resources/tts/confirmed-voices/`；中文默认 Vivi，英文默认 Dacey，Stokie 可选，旧 Tim 配置会自动迁移且不会出现在新列表中。
 - 独立伴随来源浏览窗，通过隔离的 `WebContentsView` 加载经过校验的 HTTPS 页面，并始终跟随聊天面板定位。
 - 探索结果在伴随窗中以“浏览建议 → 接续问题 → 话题分组 → 行式来源卡”呈现；它与普通搜索来源共用站点、日期、摘要和可选缩略图的视觉层级，主题描述保留紧凑行式布局并使用浅色填充突出显示。Planner 面向宽泛主题生成 3～5 个具体且不重复的词条，百科来源按规范化 URL 去重并优先解析真实词条。

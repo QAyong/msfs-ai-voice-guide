@@ -21,6 +21,7 @@ import { SearchService } from '../search/service.js';
 import { createMsfsGuideTools } from '../tools/msfs-guide.js';
 import { createSearchWebTool } from '../tools/search-web.js';
 import { extractGuideSources } from './search-source-events.js';
+import { parseDesktopToolSettingsEnvironment } from '../../shared/desktop-settings.js';
 
 export function createGuideAgent(
   tools: readonly llm.ToolContextEntry[] = [],
@@ -69,6 +70,7 @@ function observeToolActivity(
 export default defineAgent({
   entry: async (ctx) => {
     const config = loadConfig();
+    const enabledTools = parseDesktopToolSettingsEnvironment(process.env.GUIDE_ENABLED_TOOLS);
     const locale: GuideLocale = process.env.GUIDE_LOCALE === 'en-US' ? 'en-US' : 'zh-CN';
     const providers = createVoiceProviders({
       ...config,
@@ -215,19 +217,20 @@ export default defineAgent({
         })
         .catch(() => undefined);
     });
-    const searchTool = config.search.apiKey
-      ? createSearchWebTool(
-          new SearchService({
-            provider: config.search.provider,
-            apiKey: config.search.apiKey,
-            endpoint: config.search.endpoint,
-            timeoutMs: config.search.timeoutMs,
-          }),
-          locale,
-        )
-      : undefined;
+    const searchTool =
+      config.search.apiKey && enabledTools.searchWeb
+        ? createSearchWebTool(
+            new SearchService({
+              provider: config.search.provider,
+              apiKey: config.search.apiKey,
+              endpoint: config.search.endpoint,
+              timeoutMs: config.search.timeoutMs,
+            }),
+            locale,
+          )
+        : undefined;
     const tools = observeToolActivity(
-      composeGuideTools(createMsfsGuideTools(msfsService), searchTool),
+      composeGuideTools(createMsfsGuideTools(msfsService, enabledTools), searchTool),
       {
         started: (toolName) => {
           activeTools.add(toolName);

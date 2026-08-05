@@ -18,12 +18,25 @@ const sourceDirectory = process.env.MSFS_CLI_DISTRIBUTION_DIR?.trim()
           : resolve(projectRoot, configuredExecutable),
       )
     : resolve(projectRoot, '..', '微软模拟飞行cli', 'build');
+const configuredCommunityPackage = process.env.MSFS_CLI_COMMUNITY_PACKAGE_DIR?.trim();
+const communityPackageSource = configuredCommunityPackage
+  ? resolve(configuredCommunityPackage)
+  : resolve(
+      projectRoot,
+      '..',
+      '微软模拟飞行cli',
+      'wasm-route-bridge',
+      'build',
+      'package-tool',
+      'msfs-native-cli-route-bridge',
+    );
 const targets =
   process.argv.slice(2).length > 0
     ? process.argv.slice(2).map((target) => resolve(projectRoot, target))
     : [resolve(projectRoot, 'resources', 'msfs')];
 const requiredFiles = ['msfs.exe', 'msfsd.exe'];
 const optionalFiles = ['SimConnect.dll'];
+const communityFiles = ['manifest.json', 'layout.json', 'modules/msfs-route-bridge.wasm'];
 
 for (const file of requiredFiles) {
   await access(resolve(sourceDirectory, file)).catch(() => {
@@ -42,6 +55,29 @@ for (const target of targets) {
     } catch {
       // SimConnect.dll 是否可再分发需按 SDK 许可决定；开发构建允许由本机 SDK 提供。
     }
+  }
+
+  const targetCommunityPackage = resolve(target, 'community', 'msfs-native-cli-route-bridge');
+  let communityPackageReady = true;
+  for (const file of communityFiles) {
+    try {
+      await access(resolve(communityPackageSource, file));
+    } catch {
+      communityPackageReady = false;
+      break;
+    }
+  }
+  if (communityPackageReady) {
+    await mkdir(targetCommunityPackage, { recursive: true });
+    for (const file of communityFiles) {
+      const destination = resolve(targetCommunityPackage, file);
+      await mkdir(dirname(destination), { recursive: true });
+      await copyFile(resolve(communityPackageSource, file), destination);
+    }
+  } else if (process.env.MSFS_CLI_REQUIRE_COMMUNITY_PACKAGE === 'true') {
+    throw new Error(`缺少 MSFS 2024 Community Package：${communityPackageSource}`);
+  } else {
+    process.stdout.write(`Warning: Community Package not staged from ${communityPackageSource}\n`);
   }
 }
 

@@ -125,7 +125,7 @@ CLI 只连接真实的 MSFS 2024 SimConnect。本地未启动游戏或飞行未�
 - [x] 默认注册集合只包含 7 个 MSFS 工具与现有 `searchWeb`；不注册任何写操作。
 - [x] 覆盖单元、集成和模拟器未就绪场景的自动化测试。
 
-2026-08-04 验证：修复 `AircraftLoaded` 字符串状态判断和 Electron 开发态 CLI 资源路径后，运行中的 MSFS 2024 已通过 `pnpm msfs:smoke`，返回 `ready` 并读取真实飞行快照；桌面 Agent 实际调用 `getFlightSnapshot` 和 EFB 航路正常。正式安装包中的 CLI 发布物校验、Community Package 安装以及安装态完整验收仍待完成。
+2026-08-04 验证：修复 `AircraftLoaded` 字符串状态判断和 Electron 开发态 CLI 资源路径后，运行中的 MSFS 2024 已通过 `pnpm msfs:smoke`，返回 `ready` 并读取真实飞行快照；桌面 Agent 实际调用 `getFlightSnapshot` 和 EFB 航路正常。2026-08-05 进一步完成 Electron 标题栏连接状态、设置页配置检测、Community Package 暂存和工具开关的真实验收；正式安装器中的 Community Package 自动安装、升级、卸载以及安装态完整验收仍待完成。
 
 ## 相关测试
 
