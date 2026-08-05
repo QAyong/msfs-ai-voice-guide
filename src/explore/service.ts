@@ -55,6 +55,7 @@ export class ExploreService {
         cards: cardsByTopic.get(topic.id) ?? [],
       })),
       suggestedPrompts: plan.suggestedPrompts,
+      introduction: plan.introduction,
       unavailableProviders: [
         ...(encyclopedia.unavailable ? [input.preferences.encyclopedia] : []),
         ...video.unavailable,

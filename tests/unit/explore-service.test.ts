@@ -71,6 +71,7 @@ describe('ExploreService', () => {
     await expect(result).resolves.toEqual(
       expect.objectContaining({
         topics: expect.arrayContaining([expect.objectContaining({ id: 'paris' })]),
+        introduction: '',
       }),
     );
   });

@@ -11,7 +11,7 @@ const input: ExplorePlannerInput = {
 };
 
 describe('DeepSeek explore planner', () => {
-  it('runs topic, encyclopedia, video, and prompt roles with non-thinking mode', async () => {
+  it('runs topic, source, prompt, and introduction roles in parallel with non-thinking mode', async () => {
     let activeRequests = 0;
     let maximumActiveRequests = 0;
     const roles: string[] = [];
@@ -40,8 +40,18 @@ describe('DeepSeek explore planner', () => {
           ? 'encyclopedia'
           : systemPrompt.includes('video search')
             ? 'video'
-            : 'suggested-prompts';
+            : systemPrompt.includes('晓晓')
+              ? 'browsing-introduction'
+              : 'suggested-prompts';
       roles.push(role);
+
+      if (role === 'browsing-introduction') {
+        const introductionInput = JSON.parse(body.messages?.[1]?.content ?? '{}') as Record<
+          string,
+          unknown
+        >;
+        expect(Object.keys(introductionInput).sort()).toEqual(['recentConversation', 'topics']);
+      }
 
       try {
         if (role === 'topics') {
@@ -63,7 +73,7 @@ describe('DeepSeek explore planner', () => {
           });
         }
 
-        if (roles.filter((value) => value !== 'topics').length === 3) {
+        if (roles.filter((value) => value !== 'topics').length === 4) {
           resolveAllParallelRequests?.();
         }
         await parallelRequestsReleased;
@@ -100,13 +110,18 @@ describe('DeepSeek explore planner', () => {
                     { topicId: 'orange-island', videoQuery: '橘子洲 介绍' },
                   ],
                 }
-              : {
-                  suggestedPrompts: [
-                    '长沙有哪些历史遗迹？',
-                    '岳麓山有什么文化故事？',
-                    '橘子洲值得怎么游览？',
-                  ],
-                };
+              : role === 'suggested-prompts'
+                ? {
+                    suggestedPrompts: [
+                      '长沙有哪些历史遗迹？',
+                      '岳麓山有什么文化故事？',
+                      '橘子洲值得怎么游览？',
+                    ],
+                  }
+                : {
+                    introduction:
+                      '结合你对长沙历史、景点和文化的兴趣，我给你推荐下面这些内容：从长沙本身到岳麓山和橘子洲，带你看看这座城市的历史底蕴、自然风光与城市记忆。',
+                  };
         return Response.json({ choices: [{ message: { content: JSON.stringify(content) } }] });
       } finally {
         activeRequests -= 1;
@@ -121,11 +136,12 @@ describe('DeepSeek explore planner', () => {
 
     await allParallelRequests;
     expect(roles.filter((value) => value !== 'topics').sort()).toEqual([
+      'browsing-introduction',
       'encyclopedia',
       'suggested-prompts',
       'video',
     ]);
-    expect(maximumActiveRequests).toBe(3);
+    expect(maximumActiveRequests).toBe(4);
     releaseParallelRequests?.();
 
     await expect(resultPromise).resolves.toMatchObject({
@@ -140,7 +156,9 @@ describe('DeepSeek explore planner', () => {
         { id: 'orange-island', encyclopediaQuery: '橘子洲', videoQuery: '橘子洲 介绍' },
       ],
       suggestedPrompts: ['长沙有哪些历史遗迹？', '岳麓山有什么文化故事？', '橘子洲值得怎么游览？'],
+      introduction:
+        '结合你对长沙历史、景点和文化的兴趣，我给你推荐下面这些内容：从长沙本身到岳麓山和橘子洲，带你看看这座城市的历史底蕴、自然风光与城市记忆。',
     });
-    expect(fetchMock).toHaveBeenCalledTimes(4);
+    expect(fetchMock).toHaveBeenCalledTimes(5);
   });
 });

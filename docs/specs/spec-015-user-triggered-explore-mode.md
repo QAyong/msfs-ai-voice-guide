@@ -1,7 +1,7 @@
 # Spec-015：用户触发的探索模式
 
 **日期：** 2026-07-30<br />
-**最后更新：** 2026-08-04<br />
+**最后更新：** 2026-08-05<br />
 **状态：** 已实现；真实链路已验证，待人工验收<br />
 **前置决策：** [ADR-006](../adr/adr-006-search-access-boundary.md)、[ADR-008](../adr/adr-008-native-msfs-cli-agent-boundary.md)、[ADR-010](../adr/adr-010-secure-desktop-settings-global-ptt-and-diagnostics.md)<br />
 **关联规格：** [Spec-007](spec-007-desktop-text-input.md)、[Spec-008](spec-008-native-msfs-cli-guide-tools.md)、[Spec-012](spec-012-desktop-settings-localization-global-ptt-and-diagnostics.md)、[Spec-014](spec-014-source-window-adaptive-reading-and-site-preferences.md)、[Spec-016](spec-016-source-preview-lightweight-browser.md)
@@ -10,10 +10,10 @@
 
 增加一项由用户主动发起的“探索”能力。用户在聊天面板点击“探索”后，应用以最近已提交的对话为主要线索，并在可用时以当前 MSFS 人文地理与航路信息增强，规划 3～5 个值得继续了解的具体词条；宽泛主题优先规划 5 个，聚焦问题规划 3～4 个。随后从用户已选择的百科与视频平台取得**真实**网页资源，展示为可浏览卡片，并提供 3 条可回填至文字输入框的接续问题。
 
-## 当前实现状态（2026-08-04）
+## 当前实现状态（2026-08-05）
 
-- Explore Planner、百科/视频 Provider 编排、3～5 个具体词条约束和探索结果契约已接入。Planner 拆成 4 个关闭推理模式的 DeepSeek 角色：主题标题与理由、百科查询、视频查询、推荐问题。
-- 主题角色先串行生成 3～5 个主题；百科查询、视频查询和推荐问题三个角色随后并行生成。每个 DeepSeek 请求均显式使用 `thinking: { type: 'disabled' }`，结果按 `topicId` 合并并再次经过 Schema 校验。
+- Explore Planner、百科/视频 Provider 编排、3～5 个具体词条约束和探索结果契约已接入。Planner 使用 5 个关闭推理模式的 DeepSeek 角色：主题标题与理由、百科查询、视频查询、推荐问题和 AI 导览介绍。
+- 主题角色先串行生成 3～5 个主题；百科查询、视频查询、推荐问题和 AI 导览介绍四个角色随后并行生成。所有角色复用同一结构化 `requestJson` 调用机制，并显式使用 `thinking: { type: 'disabled' }`；导览介绍角色只接收最近对话与已生成主题，输出 100 字以内的一段主动推荐式介绍。介绍角色失败或 6 秒超时返回空值并隐藏，不阻塞其它探索结果；其余结果按 `topicId` 合并并再次经过 Schema 校验。
 - Planner 会拒绝重复的 `encyclopediaQuery`、topic id 和重复语义的词条；百科服务会按规范化 URL 去重，并在可用时优先返回真实词条，无法确认时保留受控搜索页兜底。
 - 当前可选百科为 Wikipedia 和百度百科；两者均使用各自的公开搜索页，不由后端抓取百科 API，也不伪造具体词条 URL。当前可选视频为哔哩哔哩和 YouTube；国内默认哔哩哔哩，英文环境默认 YouTube；两者均使用各自的公开搜索页，不依赖后端搜索服务发现视频。
 - 百科主题默认最多 5 路并行；同一主题的主查询与备用查询仍保持串行，最终按主题顺序合并并按 URL 去重。搜索页 Provider 本身不发起百科网络请求，因此不会因批量调用触发 Wikipedia 或百度百科 API 限流。
@@ -21,8 +21,8 @@
 - 抖音百科、抖音视频和 TikTok 不在当前可选平台中，不作为已支持的探索 Provider 对外承诺。
 - Electron 主进程启动时的路径变量命名冲突已修复，避免打包注入的 `__dirname` 与源码重复声明。
 - 对话驱动探索不等待 MSFS：Planner 立即使用对话开始，MSFS 在后台刷新同会话缓存；相同对话直接恢复上一份结果。百科与视频发现并行执行，单个 Provider 失败只标记该来源不可用，不阻塞其它结果。
-- 真实长沙样例已验证：4 个 DeepSeek 请求均返回 HTTP 200 且 `thinking` 已关闭；主题、百科查询、视频查询、推荐问题耗时分别约 2526 ms、2324 ms、1937 ms、2004 ms，总耗时约 4862 ms，最终生成 5 个主题和 15 张来源卡片。
-- 自动化验证已通过：`pnpm test`（162 passed、8 skipped）、桌面 TypeScript 检查、Lint 与格式检查。上述结果不等同于人工验收；真实 Electron 窗口、目标网络和真实 LiveKit/MSFS 场景仍待人工确认。
+- 真实长沙样例已验证：5 个 DeepSeek 请求均返回 HTTP 200 且 `thinking` 已关闭；主题、百科查询、视频查询、推荐问题和 AI 导览介绍耗时分别约 2950 ms、2246 ms、1427 ms、1581 ms、1389 ms，四个后置角色并行，总耗时约 5305 ms；导览介绍返回 77 个字符。
+- 自动化验证已通过：`pnpm test`（170 passed、8 skipped）、桌面 TypeScript 检查、Lint 与格式检查。上述结果不等同于人工验收；真实 Electron 窗口、目标网络和真实 LiveKit/MSFS 场景仍待人工确认。
 
 探索模式是“发现与规划”，不是第二个导游 Agent，也不是现有 `searchWeb` 回答来源的另一种外观。它不得替换、写入或阻塞 LiveKit `AgentSession`，也不得让模型编造网页、视频或元数据。
 
@@ -128,6 +128,7 @@ type ExplorePlan = {
     alternateNames: string[]; // 最多 4 个
   }>;
   suggestedPrompts: [string, string, string]; // 每项 2..160
+  introduction?: string; // AI 导览介绍，0..100；生成失败时为空并隐藏
 };
 ```
 
@@ -162,6 +163,8 @@ type MsfsExploreContext = {
 `ExploreResult` 由 Planner 输出和 Provider 返回的可信资源组合而成。每张卡片至少包含经校验的 `kind`（`encyclopedia` 或 `video`）、`topicId`、`title`、`siteName` 与 `url`；缩略图、作者、发布时间只有 Provider 实际返回且校验通过时才可选加入。不可确认 URL 的结果必须丢弃。
 
 模型不能补足空卡片。一个主题可没有百科卡片或没有视频卡片，但保留该主题和接续问题；结果可带去敏的 `unavailableProviders` 供 UI 显示“部分来源暂不可用”。
+
+探索结果还可携带 `introduction`，它是独立 DeepSeek 导览角色根据最近对话与已生成主题生成的 100 字以内自然段；字段为空时，来源窗口隐藏该介绍，不影响主题、来源卡片和接续问题。
 
 ## 5. 上下文变化门控
 
@@ -218,15 +221,17 @@ flowchart TD
   S --> P["独立 Explore Planner"]
   P --> E["单选 EncyclopediaProvider"]
   P --> V["多选 VideoProvider"]
+  P --> G["AI 导览介绍\n独立 DeepSeek 角色"]
   E --> X["ExploreResult"]
   V --> X
+  G --> X
   X --> W["既有 Source BrowserWindow\n探索预览"]
   W --> T["隔离 WebContentsView\n真实 HTTP(S) 网页"]
   W --> F["explore:prefill-suggestion"]
   F --> D["Assistant Renderer textDraft"]
 ```
 
-`ExploreService` 不导入 Electron、LiveKit、`BrowserWindow` 或 Renderer 代码。Main 创建整次请求的 `AbortController`，同一桌面会话同时最多运行一个请求；按钮执行期间禁用。对话存在时 Planner 不等待 MSFS；主题角色完成后，百科查询、视频查询和推荐问题三个 DeepSeek 角色并行，随后百科与视频 Provider 并行。百科服务默认最多 5 个主题并行处理；同一主题内部的备用查询保持串行。Wikipedia 与百度百科当前只构造受控站内搜索页 URL，不在后端请求百科 API，因此不设置百科 API 抓取超时，也不触发百科 API 限流。超时或异常仅返回部分结果。关闭探索窗口不影响 LiveKit 会话；用户取消或开始新的探索时中止未完成的模型请求。
+`ExploreService` 不导入 Electron、LiveKit、`BrowserWindow` 或 Renderer 代码。Main 创建整次请求的 `AbortController`，同一桌面会话同时最多运行一个请求；按钮执行期间禁用。对话存在时 Planner 不等待 MSFS；主题角色完成后，百科查询、视频查询、推荐问题和 AI 导览介绍四个 DeepSeek 角色并行，随后百科与视频 Provider 并行。百科服务默认最多 5 个主题并行处理；同一主题内部的备用查询保持串行。Wikipedia 与百度百科当前只构造受控站内搜索页 URL，不在后端请求百科 API，因此不设置百科 API 抓取超时，也不触发百科 API 限流。超时或异常仅返回部分结果；导览介绍为空时不渲染介绍段落。关闭探索窗口不影响 LiveKit 会话；用户取消或开始新的探索时中止未完成的模型请求。
 
 ## 7. Provider 约束与分阶段范围
 
@@ -252,7 +257,7 @@ flowchart TD
 
 ### 8.2 探索预览
 
-来源窗口的本地可信预览顶部先展示“浏览建议”、结果数与“继续聊”问题，之后按 Planner 话题分组显示百科与视频来源。每张来源卡与普通搜索来源共用行式层级：来源或内容类型图标、站点名、可选日期、低调类型标签、标题、摘要与可选缩略图；缩略图只使用 Provider/搜索接口实际返回的 URL，加载失败时隐藏，不额外抓取网页。Planner 负责生成 3～5 个不同的具体词条，百科服务负责按规范化 URL 去重；来源列表仍保留 Provider 返回顺序，全局相关性排序和跨 Provider 语义去重仍待后续重构。
+来源窗口的本地可信预览顶部先展示 AI 导览介绍（生成失败时隐藏）、结果数与“继续聊”问题，之后按 Planner 话题分组显示百科与视频来源。每张来源卡与普通搜索来源共用行式层级：来源或内容类型图标、站点名、可选日期、低调类型标签、标题、摘要与可选缩略图；缩略图只使用 Provider/搜索接口实际返回的 URL，加载失败时隐藏，不额外抓取网页。Planner 负责生成 3～5 个不同的具体词条，百科服务负责按规范化 URL 去重；来源列表仍保留 Provider 返回顺序，全局相关性排序和跨 Provider 语义去重仍待后续重构。
 
 卡片点击仍走现有 `source:select` 等价的受控选择流程，随后由无 Node、开启 sandbox 与 context isolation 的 `WebContentsView` 打开真实页面。网页阅读模式、站点缩放、返回列表、加载、重试、外部浏览器打开和关闭逻辑完全沿用 Spec-014。
 

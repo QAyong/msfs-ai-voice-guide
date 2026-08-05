@@ -527,8 +527,14 @@ button {
 }
 .guide-reply {
   display: flex;
+  align-self: flex-start;
+  max-width: 92%;
   flex-direction: column;
   gap: 7px;
+}
+.guide-reply .bubble {
+  width: fit-content;
+  align-self: flex-start;
 }
 .assistant-activity {
   display: inline-flex;

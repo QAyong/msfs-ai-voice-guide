@@ -4,6 +4,7 @@ import {
   type ExplorePlanner,
   type ExplorePlannerInput,
 } from '../../explore/planner.js';
+import { runWithProviderTimeout } from '../../explore/provider-timeout.js';
 
 export type DeepSeekExploreConfig = {
   apiKey: string;
@@ -60,6 +61,10 @@ const suggestedPromptsSchema = z.object({
   suggestedPrompts: z.array(z.string().trim().min(2).max(160)).min(3).max(6),
 });
 
+const browsingIntroductionSchema = z.object({
+  introduction: z.string().trim().min(1).max(100),
+});
+
 const topicSystemPrompt = `You are the topic planner for a flight guide. Return JSON only.
 Based on the conversation and optional flight context, choose 3 to 5 concrete encyclopedia entities worth exploring.
 Return exactly {topics:[{id,title,reason}]}.
@@ -83,6 +88,15 @@ Return exactly {suggestedPrompts:[string,string,string]}.
 Use the conversation and selected topics. Each question must be a complete natural user question.
 Do not return URLs, answers, search queries, IDs, or resource metadata.`;
 
+const browsingIntroductionSystemPrompt = `你是“晓晓”，一位亲切、自然、会陪用户探索世界的飞行导游。
+请根据 recentConversation 和 topics，写一段主动推荐式的导游介绍，介绍下方即将展示的探索内容。
+只返回 JSON：{"introduction":"..."}。
+introduction 必须是一整段自然文字，控制在 100 个中文字符以内。
+优先承接用户刚才提到的兴趣；没有明确兴趣时，从本次探索主题自然开场。
+简要介绍主题是什么、有什么看点，并自然引导用户查看下方内容。
+语气亲切、主动、有陪伴感；不要使用“如果你想”“如果你感兴趣”等条件式开头。
+不要写列表、编号、浏览路线、网址、数据或主题之外的具体事实。`;
+
 const withoutTrailingSlash = (value: string) => value.replace(/\/+$/u, '');
 
 const parseJson = (content: string) => {
@@ -100,7 +114,7 @@ const assertNoResourceMetadata = (value: unknown) => {
   }
 };
 
-type JsonRole = 'topics' | 'encyclopedia' | 'video' | 'suggested-prompts';
+type JsonRole = 'topics' | 'encyclopedia' | 'video' | 'suggested-prompts' | 'browsing-introduction';
 
 export class DeepSeekExplorePlanner implements ExplorePlanner {
   constructor(private readonly config: DeepSeekExploreConfig) {}
@@ -177,25 +191,44 @@ export class DeepSeekExplorePlanner implements ExplorePlanner {
       topics: topicDraft.topics,
     };
 
-    // The three post-topic roles are independent and run concurrently.
-    const [encyclopediaQueries, videoQueries, suggestedPrompts] = await Promise.all([
-      this.requestJson(
-        'encyclopedia',
-        encyclopediaSystemPrompt,
-        sharedQueryInput,
-        encyclopediaQuerySchema,
-        signal,
-      ),
-      this.requestJson('video', videoSystemPrompt, sharedQueryInput, videoQuerySchema, signal),
-      this.requestJson(
-        'suggested-prompts',
-        suggestedPromptsSystemPrompt,
-        sharedQueryInput,
-        suggestedPromptsSchema,
-        signal,
-        768,
-      ),
-    ]);
+    const introductionInput = {
+      recentConversation: input.recentConversation ?? [],
+      topics: topicDraft.topics,
+    };
+
+    // The four post-topic roles are independent and run concurrently.
+    const [encyclopediaQueries, videoQueries, suggestedPrompts, browsingIntroduction] =
+      await Promise.all([
+        this.requestJson(
+          'encyclopedia',
+          encyclopediaSystemPrompt,
+          sharedQueryInput,
+          encyclopediaQuerySchema,
+          signal,
+        ),
+        this.requestJson('video', videoSystemPrompt, sharedQueryInput, videoQuerySchema, signal),
+        this.requestJson(
+          'suggested-prompts',
+          suggestedPromptsSystemPrompt,
+          sharedQueryInput,
+          suggestedPromptsSchema,
+          signal,
+          768,
+        ),
+        runWithProviderTimeout(6_000, signal, (introductionSignal) =>
+          this.requestJson(
+            'browsing-introduction',
+            browsingIntroductionSystemPrompt,
+            introductionInput,
+            browsingIntroductionSchema,
+            introductionSignal,
+            512,
+          ),
+        ).catch((error: unknown) => {
+          if (signal?.aborted) throw error;
+          return { introduction: '' };
+        }),
+      ]);
 
     const encyclopediaByTopic = new Map(
       encyclopediaQueries.topics.map((topic) => [topic.topicId, topic]),
@@ -217,6 +250,7 @@ export class DeepSeekExplorePlanner implements ExplorePlanner {
         ...videoByTopic.get(topic.id),
       })),
       suggestedPrompts: suggestedPrompts.suggestedPrompts.slice(0, 3),
+      introduction: browsingIntroduction.introduction,
     });
   }
 }

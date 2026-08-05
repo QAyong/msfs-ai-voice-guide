@@ -3668,7 +3668,6 @@ type SourceCopy = {
   errorRenderer: string;
   errorTimeout: string;
   explore: string;
-  exploreAdvice(firstTopic: string, secondTopic?: string): string;
   exploreResultCount(count: number): string;
   exploreEncyclopedia: string;
   exploreGuidance: string;
@@ -3720,10 +3719,6 @@ const getSourceCopy = (english: boolean): SourceCopy =>
         errorTimeout:
           'The page did not show a first view within 15 seconds. Try again or open it in your system browser.',
         explore: 'Explore',
-        exploreAdvice: (firstTopic, secondTopic) =>
-          secondTopic
-            ? `Start with ${firstTopic}, then use ${secondTopic} to broaden the view.`
-            : `Start with ${firstTopic} to build a clear picture.`,
         exploreResultCount: (count) => `${count} sources selected for your route`,
         exploreEncyclopedia: 'Encyclopedia',
         exploreGuidance: 'Browsing suggestion',
@@ -3770,10 +3765,6 @@ const getSourceCopy = (english: boolean): SourceCopy =>
         errorRenderer: '网页渲染进程意外退出，请重试。',
         errorTimeout: '网页在 15 秒内没有显示首屏，请重试或改用系统浏览器打开。',
         explore: '探索',
-        exploreAdvice: (firstTopic, secondTopic) =>
-          secondTopic
-            ? `建议先从「${firstTopic}」开始，再通过「${secondTopic}」扩展了解。`
-            : `建议先浏览「${firstTopic}」，建立整体认识。`,
         exploreResultCount: (count) => `已为你的探索路线整理 ${count} 个来源`,
         exploreEncyclopedia: '百科',
         exploreGuidance: '浏览建议',
@@ -3879,9 +3870,7 @@ const Source = () => {
       ? state.preview.result
       : null;
   const exploreCards = explorePreview?.topics.flatMap((topic) => topic.cards) ?? [];
-  const exploreAdvice = explorePreview
-    ? copy.exploreAdvice(explorePreview.topics[0]?.title ?? '', explorePreview.topics[1]?.title)
-    : null;
+  const exploreIntroduction = explorePreview?.introduction.trim() || null;
 
   return (
     <main className="source-shell">
@@ -4091,7 +4080,7 @@ const Source = () => {
                 </span>
                 <small>{copy.exploreResultCount(exploreCards.length)}</small>
               </div>
-              <p>{exploreAdvice}</p>
+              {exploreIntroduction ? <p>{exploreIntroduction}</p> : null}
               <div className="explore-suggestions">
                 <b>{copy.exploreSuggestions}</b>
                 {explorePreview.suggestedPrompts.map((prompt) => (
