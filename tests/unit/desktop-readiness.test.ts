@@ -15,6 +15,7 @@ describe('desktop readiness diagnostics', () => {
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.readiness.status).toBe('setup_required');
+    expect(result.readiness.message).toBe('未配置服务，请配置服务。');
     expect(result.readiness.issues.join(' ')).toContain('LIVEKIT_URL');
     expect(JSON.stringify(result.readiness)).not.toContain('must-never-appear');
   });

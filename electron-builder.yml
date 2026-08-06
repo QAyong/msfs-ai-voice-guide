@@ -1,0 +1,63 @@
+appId: com.msfs.ai.voice.guide
+productName: 晓晓飞行导游
+artifactName: ${productName}-${version}-win-${arch}.${ext}
+directories:
+  app: release-v2/app
+  output: release-v2/artifacts
+  buildResources: resources
+files:
+  - out/main/**/*
+  - out/preload/**/*
+  - out/renderer/**/*
+  - package.json
+  - node_modules/**/*
+  - '!out/main/native/**/*'
+  - '!out/**/*.log'
+  - '!out/**/local-*'
+  - '!node_modules/.cache/**/*'
+  - '!node_modules/**/*.map'
+  - '!node_modules/**/*.md'
+  - '!node_modules/**/*.markdown'
+  - '!node_modules/**/*.d.ts'
+extraResources:
+  - from: resources/app-icon.ico
+    to: app-icon.ico
+  - from: resources/app-icon.png
+    to: app-icon.png
+  - from: .env.example
+    to: .env.example
+  - from: out/release-manifest.json
+    to: release-manifest.json
+  - from: out/livekit
+    to: livekit
+  - from: out/msfs
+    to: msfs
+  - from: out/tts
+    to: tts
+  - from: out/main/native/global-push-to-talk.node
+    to: native/global-push-to-talk.node
+asar: true
+asarUnpack:
+  - out/main/**/*
+  - '**/*.node'
+  - '**/*.dll'
+npmRebuild: false
+buildDependenciesFromSource: false
+win:
+  target:
+    - nsis
+  icon: app-icon.ico
+  forceCodeSigning: false
+  # 当前开发机没有创建符号链接的权限，electron-builder 的内置资源编辑会因此失败。
+  # 打包完成后由 scripts/patch-windows-executable-icon.mjs 使用缓存中的 rcedit 写入图标。
+  signAndEditExecutable: false
+nsis:
+  include: installer.nsh
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: always
+  createStartMenuShortcut: true
+  shortcutName: 晓晓飞行导游
+  artifactName: ${productName}-${version}-win-${arch}-setup.${ext}
+compression: normal

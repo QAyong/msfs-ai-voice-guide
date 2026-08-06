@@ -2,7 +2,7 @@
 
 ## 项目简介
 
-面向单个模拟飞行用户的实时语音导游助手。当前版本提供由 Electron 自动启动 Worker 的 LiveKit 房间语音对话，通过 `searchWeb` 查询公开网页，并通过原生 MSFS CLI 的 7 个只读高层工具读取飞行快照、地理上下文、EFB 航路、下一航点、附近航空设施、游戏内天气/时间和本次会话轨迹；桌面端已完成悬浮窗口、Room 连接、语音发布/播放、真实转写、来源浏览、启动诊断、MSFS 游戏连接状态、配置检测和工具开关，正式安装器仍待完成。
+面向单个模拟飞行用户的实时语音导游助手。当前版本提供由 Electron 自动启动 Worker 的 LiveKit 房间语音对话，通过 `searchWeb` 查询公开网页，并通过原生 MSFS CLI 的 7 个只读高层工具读取飞行快照、地理上下文、EFB 航路、下一航点、附近航空设施、游戏内天气/时间和本次会话轨迹；桌面端已完成悬浮窗口、Room 连接、语音发布/播放、真实转写、来源浏览、启动诊断、MSFS 游戏连接状态、配置检测、工具开关和 Windows x64 NSIS 候选安装包。
 
 ## 开发前必读
 
@@ -35,14 +35,16 @@ desktop/          # Electron 主进程、Preload 与 React Renderer
 
 ## 文档索引
 
-| 类型     | 路径                            | 说明                         |
-| -------- | ------------------------------- | ---------------------------- |
-| 架构决策 | `docs/adr/`                     | 长期有效、不可随意违背的约束 |
-| 功能需求 | `docs/specs/`                   | 功能边界与可验证验收标准     |
-| 架构概览 | `docs/architecture/overview.md` | 模块关系、数据流和外部依赖   |
-| Bug 记录 | `docs/bugs/`                    | 非微小问题的 Issue 化记录    |
-| 框架登记 | `docs/frameworks/registry.md`   | 实际依赖版本与官方依据       |
-| 框架合规 | `docs/frameworks/compliance/`   | 功能实施前后的复用与验证证据 |
+| 类型     | 路径                                        | 说明                                       |
+| -------- | ------------------------------------------- | ------------------------------------------ |
+| 架构决策 | `docs/adr/`                                 | 长期有效、不可随意违背的约束               |
+| 功能需求 | `docs/specs/`                               | 功能边界与可验证验收标准                   |
+| 架构概览 | `docs/architecture/overview.md`             | 模块关系、数据流和外部依赖                 |
+| 打包架构 | `docs/architecture/windows-packaging-v2.md` | Windows x64 生产运行时、CLI 快照和回退约定 |
+| 候选发布 | `docs/releases/`                            | 候选安装包内容、校验值、已知限制与回退说明 |
+| Bug 记录 | `docs/bugs/`                                | 非微小问题的 Issue 化记录                  |
+| 框架登记 | `docs/frameworks/registry.md`               | 实际依赖版本与官方依据                     |
+| 框架合规 | `docs/frameworks/compliance/`               | 功能实施前后的复用与验证证据               |
 
 ## 代码组织原则
 
@@ -54,11 +56,11 @@ desktop/          # Electron 主进程、Preload 与 React Renderer
 - `src/tools/` 只负责将共享业务能力包装成 LiveKit Tool（工具）；`src/cli/` 只负责命令行参数、输出和退出码。
 - `searchWeb` 是模型获取公开网页外部信息的通用入口，可用于天气、新闻、活动、规则和知识查询；时效性结果必须保留并关注来源时间。
 - Agent 不得通过 `child_process` 启动 CLI 执行搜索；CLI 是共享服务的入口，不是实时 Agent 的运行时依赖。
-- 桌面前端需求以 Spec-004 与 Spec-006 为准；`desktop/` 是生产实现入口，不得被描述为 `.exe` 安装包。
+- 桌面前端需求以 Spec-004 与 Spec-006 为准；`desktop/` 是生产源码入口，`.exe` 是由 V2 打包链路生成的发布物，二者不得混为同一目录或概念。
 - 未来加载第三方网页时，必须放入独立、无 Node 权限的 `WebContentsView`（隔离网页视图）；远程网页不得获得 Preload、IPC、文件系统或 Agent 密钥。
 - Provider 的具体实现只能出现在 `src/providers/`；`registry.ts`（Provider 工厂注册表）是唯一创建入口，其他模块不得散落引用火山 SDK 或 WebSocket。
 - 遵循参考项目 `[reference project]` 的“按 STT/LLM/TTS 分类 + 集中注册表 + 启动前自检”规范；只继承职责边界，不复制 Python/Pipecat 实现。
-- 所有密钥均从环境变量读取；`.env`、`.env.local` 等含密钥文件永不提交。提供不含值的 `.env.example`。
+- 开发态凭据可来自进程环境变量或本地 `.env`；安装态用户凭据由主进程写入 Electron `safeStorage` 加密 blob。业务模块只能消费经 `src/config/` 校验后的配置，不得直接读取凭据存储；`.env`、`.env.local`、加密 blob 和任何真实密钥永不提交，`.env.example` 必须保持空值。
 - LiveKit 开发与安装态均使用官方 Windows `livekit-server.exe` 的本地运行方式；Docker 不属于本项目的开发、测试或发行路径。开发者从受忽略的 `resources/livekit/livekit-server.exe` 以 `--dev` 启动回环服务，安装态由 Electron 以私有配置启动随包二进制，详见 ADR-009 与 Spec-011。
 - 优先使用 LiveKit SDK、Zod、Vitest 和 Provider 官方 SDK 已有能力，不重新实现协议、音频管线、校验器或测试运行器。
 - 修改前先阅读关联 ADR；任何与 ADR 冲突的需求必须先新增或修订 ADR。
@@ -73,7 +75,7 @@ desktop/          # Electron 主进程、Preload 与 React Renderer
 
 ## 当前已确认不做的事项
 
-- Web 与移动端客户端；Windows Electron 客户端已进入实现阶段，但正式安装包、自动更新和代码签名不在当前范围内。
+- Web 与移动端客户端；Windows Electron 客户端已进入实现与 x64 候选打包阶段，但自动更新和代码签名不在当前范围内。
 - 多用户共用一个 Agent 房间、房间级群聊策略。
 - 任何会改变模拟器状态的 MSFS 写操作，包括自动驾驶、航班加载、AI 飞机、相机和 Input Event 控制。
 - 专用天气 API、新闻 API 或其他独立业务数据 Provider；通用网页查询统一走现有 `searchWeb`。

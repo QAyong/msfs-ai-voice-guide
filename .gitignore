@@ -1,9 +1,11 @@
 # Dependencies and build output
 node_modules/
 .pnpm-store/
+dev-runtime/
 dist/
 out/
 coverage/
+/release*/
 resources/msfs/
 out/msfs/
 resources/livekit/

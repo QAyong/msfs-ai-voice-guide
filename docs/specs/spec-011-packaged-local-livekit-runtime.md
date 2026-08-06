@@ -1,7 +1,7 @@
 # Spec-011：桌面安装包的本地 LiveKit 运行时
 
 **日期：** 2026-07-25
-**状态：** 开发态本地二进制与桌面运行时已实现；安装器打包与干净环境验收待完成
+**状态：** 开发态与 Windows x64 安装态已实现；本机安装验证通过，其他干净 Windows 机器验收待完成
 
 ## 1. 目标
 
@@ -68,7 +68,7 @@ Electron Main Process
 - 发行态不得要求或读取开发者的 `.env`；`.env` 仅保留开发态。
 - LiveKit 本地 API Key/Secret 每个应用用户数据目录独立生成，永不进入 Renderer、日志、崩溃报告或分析事件。
 - 主进程和 Agent Worker 只在运行期间获得必要配置；远程网页 `WebContentsView` 永远不能获得本地运行时配置。
-- DeepSeek、豆包及搜索 Provider 的密钥不能随安装包硬编码或共享。用户密钥录入、授权与 Windows 凭据保护属于后续独立规格；在其完成前，发行包不得声称“开箱即用的云端模型服务”。
+- DeepSeek、豆包及搜索 Provider 的密钥不能随安装包硬编码或共享。用户在可信设置 Utility Window 中录入，主进程使用 Windows `safeStorage` 加密保存；默认遮罩，只有用户点击眼睛才显示真实值。主助手和远程网页不得读取这些凭据。
 - MSFS 数据只在本机 CLI 边界内读取。模型 Provider 实际收到哪些工具结果仍由 Agent 工具调用和 Provider 协议决定，产品设置与隐私声明必须如实说明。
 
 ## 6. 故障处理
@@ -97,7 +97,7 @@ Electron Main Process
 - [ ] 在无 Docker、无 Node.js、无 pnpm、无全局 LiveKit 安装的干净 Windows 用户环境中，可从安装包启动并完成文字与语音 Room 连接。
 - [ ] 发行态不调用 `livekit-server --dev`，不使用 `devkey` / `secret`，并且每个新应用数据目录获得不同的 LiveKit 凭据。
 - [ ] Server 只监听 `127.0.0.1`；局域网和公网地址不能加入本地 Room。
-- [ ] Renderer 无法通过 Preload、IPC、DevTools 可见数据或日志读取 LiveKit API Secret、Provider 密钥或完整环境配置。
+- [ ] 任何 Renderer 都无法读取 LiveKit API Secret；只有可信设置 Utility Window 能通过白名单 IPC 读取 Provider 凭据，主助手、来源网页、日志和诊断包均无法读取。
 - [ ] 主进程只在 Server 健康检查和 Worker 注册成功后签发短期 Token；每次会话的 Room、用户 identity 和 Agent dispatch 均唯一。
 - [ ] 正常关闭、崩溃恢复与升级均不会留下 `livekit-server.exe`、Agent Worker 或孤立监听端口。
 - [ ] 端口占用、资源损坏、Server 退出、Worker 未注册、Room 断连均显示脱敏且可重试的诊断。

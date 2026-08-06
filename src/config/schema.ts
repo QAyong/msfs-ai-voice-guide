@@ -8,6 +8,7 @@ const optionalNonEmpty = z.preprocess(
 );
 
 const requiredText = z.string().trim().min(1);
+const defaultLiveKitAgentName = 'msfs-voice-guide';
 const webSocketUrl = z
   .string()
   .url()
@@ -41,11 +42,25 @@ const searchEnvironmentSchema = z.object({
   BOCHA_SEARCH_TIMEOUT_MS: positiveInteger(defaultSearchTimeoutMs),
 });
 
+const llmEnvironmentSchema = z.object({
+  DEEPSEEK_API_KEY: requiredText,
+  DEEPSEEK_BASE_URL: z.string().url().default('https://api.deepseek.com'),
+  DEEPSEEK_LLM_MODEL: requiredText.default('deepseek-v4-flash'),
+});
+
+const msfsEnvironmentSchema = z.object({
+  MSFS_CLI_PATH: optionalNonEmpty,
+  MSFS_CLI_TIMEOUT_MS: boundedInteger(15_000, 500, 60_000),
+  MSFS_CLI_MAX_CONCURRENCY: boundedInteger(2, 1, 4),
+  MSFS_TRACK_INTERVAL_MS: boundedInteger(3_000, 1_000, 60_000),
+  MSFS_TRACK_MAX_POINTS: boundedInteger(120, 10, 120),
+});
+
 const envSchema = z.object({
   LIVEKIT_URL: webSocketUrl,
   LIVEKIT_API_KEY: requiredText,
   LIVEKIT_API_SECRET: requiredText,
-  LIVEKIT_AGENT_NAME: requiredText,
+  LIVEKIT_AGENT_NAME: requiredText.default(defaultLiveKitAgentName),
   DEEPSEEK_API_KEY: requiredText,
   DEEPSEEK_BASE_URL: z.string().url().default('https://api.deepseek.com'),
   DEEPSEEK_LLM_MODEL: requiredText.default('deepseek-v4-flash'),
@@ -138,6 +153,9 @@ export type SearchConfig = {
   endpoint: string;
   timeoutMs: number;
 };
+
+export type LlmConfig = AppConfig['llm'];
+export type MsfsConfig = AppConfig['msfs'];
 
 export function formatConfigError(error: z.ZodError): string {
   return error.issues
@@ -235,4 +253,31 @@ export function loadSearchConfig(env: NodeJS.ProcessEnv = process.env): SearchCo
     throw new ConfigError(`环境配置无效：\n${keyName}：Required`);
   }
   return { ...search, apiKey: search.apiKey };
+}
+
+export function loadLlmConfig(env: NodeJS.ProcessEnv = process.env): LlmConfig {
+  const result = llmEnvironmentSchema.safeParse(env);
+  if (!result.success) {
+    throw new ConfigError(`环境配置无效：\n${formatConfigError(result.error)}`);
+  }
+  return {
+    provider: 'deepseek',
+    apiKey: result.data.DEEPSEEK_API_KEY,
+    baseUrl: result.data.DEEPSEEK_BASE_URL,
+    model: result.data.DEEPSEEK_LLM_MODEL,
+  };
+}
+
+export function loadMsfsConfig(env: NodeJS.ProcessEnv = process.env): MsfsConfig {
+  const result = msfsEnvironmentSchema.safeParse(env);
+  if (!result.success) {
+    throw new ConfigError(`环境配置无效：\n${formatConfigError(result.error)}`);
+  }
+  return {
+    ...(result.data.MSFS_CLI_PATH ? { cliPath: result.data.MSFS_CLI_PATH } : {}),
+    timeoutMs: result.data.MSFS_CLI_TIMEOUT_MS,
+    maxConcurrency: result.data.MSFS_CLI_MAX_CONCURRENCY,
+    trackIntervalMs: result.data.MSFS_TRACK_INTERVAL_MS,
+    trackMaximumPoints: result.data.MSFS_TRACK_MAX_POINTS,
+  };
 }

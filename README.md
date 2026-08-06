@@ -2,9 +2,9 @@
 
 这是一个使用 TypeScript 与 LiveKit Agents 构建的实时语音与文字导游助手。第一版目标是尽快在本地跑通“一名用户进入一间房间，与导游 Agent 自然对话”的闭环。
 
-第一版已在本机完成真实语音对话联调。当前使用 DeepSeek LLM（大语言模型）、豆包 STT（语音转文字）和豆包 TTS（文字转语音），并可选接入豆包搜索 Custom API 或博查 Web Search API。Agent 已通过随应用分发的原生 MSFS CLI 接入只读飞行快照、地理上下文、EFB 航路、下一航点、附近航空设施、游戏内天气/时间和本次会话轨迹；开发态已在运行中的 MSFS 2024 内完成 CLI、SimConnect 和桌面对话冒烟验证，桌面端现已支持游戏连接状态、MSFS 配置检测和工具开关，正式安装器仍待完成。
+第一版已在本机完成真实语音对话联调。当前使用 DeepSeek LLM（大语言模型）、豆包 STT（语音转文字）和豆包 TTS（文字转语音），并可选接入豆包搜索 Custom API 或博查 Web Search API。Agent 已通过随应用分发的原生 MSFS CLI 接入只读飞行快照、地理上下文、EFB 航路、下一航点、附近航空设施、游戏内天气/时间和本次会话轨迹；开发态已在运行中的 MSFS 2024 内完成 CLI、SimConnect 和桌面对话冒烟验证，桌面端现已支持游戏连接状态、MSFS 配置检测、工具开关和 x64 候选安装包。
 
-桌面前端已接通真实 LiveKit Room：应用自动校验配置并启动隔离的 Agent Worker，主进程签发短期 Token；Renderer 使用 LiveKit 官方 React Session 组件管理房间、麦克风、消息和回答音频，同时支持鼠标/空格键按住说话与连续自然对话。开发与安装态均使用官方 Windows `livekit-server.exe` 的本地运行方式，不使用 Docker；正式 `.exe` 安装包与自动运行时管理仍待实现，见 [Spec-011](docs/specs/spec-011-packaged-local-livekit-runtime.md)。
+桌面前端已接通真实 LiveKit Room：应用自动校验配置并启动隔离的 Agent Worker，主进程签发短期 Token；Renderer 使用 LiveKit 官方 React Session 组件管理房间、麦克风、消息和回答音频，同时支持鼠标/空格键按住说话与连续自然对话。开发与安装态均使用官方 Windows `livekit-server.exe` 的本地运行方式，不使用 Docker；x64 候选 `.exe` 安装包已生成，代码签名和自动更新尚未实现，见 [Spec-011](docs/specs/spec-011-packaged-local-livekit-runtime.md)。
 
 ## 文档入口
 
@@ -18,6 +18,8 @@
 - [原生 MSFS CLI 导游工具接入](docs/specs/spec-008-native-msfs-cli-guide-tools.md)
 - [MSFS 桌面连接状态、配置检测与工具开关](docs/specs/spec-017-msfs-desktop-connection-and-tool-settings.md)
 - [MSFS CLI 发布物集成](docs/architecture/msfs-cli-release-integration.md)
+- [Windows x64 打包方案 V2](docs/architecture/windows-packaging-v2.md)
+- [1.0.1-rc.2 候选发布说明](docs/releases/1.0.1-rc.2.md)
 - [MSFS CLI 就绪误判与开发态资源路径 Bug](docs/bugs/bug-20260804-msfs-cli-readiness-and-dev-resource-path.md)
 - [桌面安装包的本地 LiveKit 运行时](docs/specs/spec-011-packaged-local-livekit-runtime.md)
 - [本地 LiveKit 运行时架构](docs/architecture/local-livekit-runtime.md)
@@ -32,7 +34,7 @@
 
 使用 pnpm 锁定依赖；LiveKit Agents 的包名、版本和 API 必须以安装当日的官方文档与本地 TypeScript 类型定义为准。不要把未核验的示例或记忆中的 API 直接写入生产代码。
 
-所有本地密钥通过环境变量注入。请复制 [`.env.example`](.env.example) 为本地 `.env` 并填写凭据；绝不提交真实 `.env` 文件。
+开发态可以复制 [`.env.example`](.env.example) 为本地 `.env`，也可以在可信设置页填写服务凭据；安装态由 Electron 主进程使用 Windows `safeStorage` 保存。绝不提交真实 `.env`、加密凭据文件或任何 API Key。
 
 ## 当前开发命令
 
@@ -45,7 +47,35 @@ pnpm run verify
 
 当前已完成工程工具链、LiveKit SDK 类型契约、火山 Provider 适配器、LiveKit 会话入口、`searchWeb` 和 7 个只读 MSFS 工具；桌面端还提供 MSFS 游戏连接状态、Community2024 配置检测和 8 个工具的独立开关。
 
-开发态可在 `.env` 中通过 `MSFS_CLI_PATH` 指向本地 `msfs.exe`；未配置时，Electron Worker 使用项目根目录的 `resources/msfs/msfs.exe`。执行 `pnpm msfs:stage` 会将 `msfs.exe`、`msfsd.exe` 和本机可用的运行时文件暂存到 Electron 资源目录。安装态默认从应用私有资源目录解析。CLI 只连接真实的 MSFS 2024 SimConnect；游戏未启动或未加载飞行时，前端会显示不可读取状态而不会返回模拟数据。EFB 航路还要求在 MSFS 2024 的 `Community2024` 中安装配套 route bridge。CLI 是独立发布依赖：正式打包必须使用经校验的发布目录，不得依赖开发机上的 `D:\code\微软模拟飞行cli`；完整约定见 [MSFS CLI 发布物集成](docs/architecture/msfs-cli-release-integration.md)。
+开发态可在 `.env` 中通过 `MSFS_CLI_PATH` 指向本地 `msfs.exe`；未配置时，Electron Worker 优先使用项目根目录受 Git 忽略的 `dev-runtime/msfs-cli/msfs.exe`，再回退到 `resources/msfs/msfs.exe`。执行 `pnpm msfs:stage:dev` 会刷新开发快照；`pnpm desktop:dev` 还会自动把开发版 bridge 切换为当前 MSFS 生效版本。安装态默认从应用私有资源目录解析。CLI 只连接真实的 MSFS 2024 SimConnect；游戏未启动或未加载飞行时，前端会显示不可读取状态而不会返回模拟数据。EFB 航路还要求在 MSFS 2024 的 `Community2024` 中安装配套 route bridge。CLI 是独立发布依赖：正式打包必须使用经校验的发布目录，不得依赖开发机上的 `D:\code\微软模拟飞行cli`；完整约定见 [MSFS CLI 发布物集成](docs/architecture/msfs-cli-release-integration.md)。
+
+## Windows x64 打包与版本切换
+
+打包命令会先固定当时的 CLI/bridge 文件，再生成候选发布物：
+
+```powershell
+pnpm desktop:package
+```
+
+产物位于 `release-v2/artifacts/`。给普通用户分发时只需要 `*-win-x64-setup.exe`；`SHA256SUMS.txt` 可同时提供给需要校验完整性的用户。不要分发 `.blockmap`、`latest.yml`、`release-report.json` 或 `win-unpacked/`，也不提供 ZIP 便携包。开发机安装候选包时，应用版本会写入 `Community2024\_晓晓飞行导游版本库\应用版本`；开发版本仍保留在 `开发版本` 中。普通用户没有版本库，安装包会直接更新自己的 `Community2024\msfs-native-cli-route-bridge`。
+
+V2 不复制开发目录的 `node_modules`，也不在 `win-unpacked` 生成后追加依赖。构建先用独立的 `@xiaoxiao/desktop-runtime` 生成最小生产锁文件，再在 `release-v2/app` 中建立物理依赖树，最后一次性写入 `app.asar`。只有 RTC、Sharp 等原生二进制按需进入 `app.asar.unpacked`。打包后会实际验证 LiveKit Agent、OpenAI 插件、RTC、Zod、WebSocket、Sharp、Electron `utilityProcess`、MSFS CLI status/daemon stop 和 Bridge 哈希，任何一步失败都不会生成候选安装包。
+
+如果只是修改了 CLI 或 Agent 代码，也需要重新执行 `pnpm desktop:package` 生成新版本；不要向 `release-v2` 手动复制依赖。安装包固定包含打包当时的 CLI、daemon、SimConnect DLL 和 Bridge 快照，并用 `component-manifest.json` 记录 SHA-256 与协议主版本。
+
+如果要回退或切换版本，不能只重新打开应用，必须先退出 MSFS 2024，再在项目根目录执行：
+
+```powershell
+# 回退到开发版本
+pnpm msfs:use:dev
+
+# 切回应用版本
+pnpm msfs:use:app
+```
+
+切换完成后再启动 MSFS。若要回退到更早的应用发布物，先完全退出应用和 MSFS，再运行对应的旧安装包；如果 Windows 安装器不允许直接降级，先卸载当前版本但保留 `%APPDATA%\msfs-ai-voice-guide`，然后安装旧版。当前版本库不会自动保存所有历史应用版本，必须单独保留旧安装包与其 SHA-256。
+
+应用退出时会自动关闭随应用启动的 `msfsd.exe`。安装新版本时，安装器也会先尝试关闭旧版本的 daemon；如果是很旧的版本，会自动使用兼容处理。正常情况下不需要手动结束 `msfsd.exe`。
 
 ## 桌面前端
 
@@ -60,10 +90,10 @@ pnpm run verify
 - 单行控制台可切换文字、按住说话与连续对话；语音挂断会通过 LiveKit `AgentSession.interrupt()` 终止正在播放的 TTS，但保留 Room 和文字聊天。
 - Agent 回答使用 `react-markdown` 与 `remark-gfm` 安全渲染；消息区在底部时自动跟随，用户上翻历史后以“新消息”按钮提示。
 - 自动连接唯一 LiveKit Room、发布麦克风、播放 Agent 音频，并展示等待讲话、聆听、思考、回答、打断和重连等真实状态。
-- 由主进程签发的短期最小权限 Token；API Secret 和模型密钥不会进入 Renderer。
+- 由主进程签发的短期最小权限 Token；LiveKit API Secret 永远不会进入 Renderer。Provider 凭据只允许可信设置 Utility Window 通过受限 IPC 读取，不会进入主助手、来源网页或远程预览。
 - AI 回答中的真实搜索来源卡片和搜索结果入口。
 - 自动启动/检查 Agent Worker、首次配置引导、脱敏故障提示、重试、音量/置顶/窗口状态保存。
-- 设置中心支持中英文项目语言、DeepSeek/STT/TTS/搜索服务配置、按项目语言过滤的本地豆包 TTS 音色、音色试听和自定义 speaker ID；保存服务配置后会重启 Agent 并重新连接 LiveKit。
+- 设置中心支持中英文项目语言、DeepSeek/STT/TTS/搜索服务配置、按项目语言过滤的本地豆包 TTS 音色、音色试听和自定义 speaker ID；未配置的 App ID、API Key 和 Access Token 输入框保持空白，保存后默认显示密码圆点，点击眼睛才显示本机真实值。保存服务配置后会重启 Agent 并重新连接 LiveKit。
 - 设置中心的 MSFS 页面可以检测 CLI 运行文件、SimConnect、`UserCfg.opt`、`Community2024\msfs-native-cli-route-bridge` 和 EFB Route Bridge；检测只读，不会安装或修改游戏文件。MSFS 7 个工具与 `searchWeb` 可分别关闭，关闭后对应工具不会注册到 Agent。
 - 聊天标题栏在探索按钮右侧显示“游戏已连接/未连接”两种状态；MSFS 工具全部关闭时隐藏该标识，游戏启停后自动刷新。
 - 关于页提供 QQ 群、使用教程和版本信息，并支持中英文文案；应用图标资源位于 `resources/app-icon.png` 与 `resources/app-icon.ico`，ICO 包含 Windows 常用多尺寸且为圆形透明边缘。

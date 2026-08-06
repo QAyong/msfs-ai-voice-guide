@@ -1,6 +1,6 @@
 # 本地语音与文字 Agent 冒烟测试
 
-**最近一次通过：** 2026-08-05，已完成 MSFS 标题栏连接状态、MSFS 配置检测、Community Package 暂存、8 个工具独立开关、关于页中英文链接和圆形应用图标的真实 Electron 验收；同时完成豆包/博查搜索服务商切换、英文搜索结果标准化和通用工具调用前中间话术模拟，桌面设置中的 TTS 音色筛选、试听、自定义 speaker、保存反馈和构建资源清理已完成验收；开发态 Electron 默认自动启动本地 LiveKit。2026-07-19 已在 Electron 中完成语音与文字两条真实链路：连续对话可自动检测轮次结束并经过豆包 STT、DeepSeek 与豆包 TTS；文字输入可通过 LiveKit `lk.chat` 进入同一 AgentSession，显示并播放回答，且回答中发送新文字可以触发打断。用户确认测试没有问题。2026-07-16 已另行验证 `searchWeb` 的真实搜索链路。
+**最近一次自动化通过：** 2026-08-07，`1.0.1-rc.2` 的 V2 x64 打包目录已通过 ASAR 提取后的 LiveKit/RTC/Sharp/OpenTelemetry 导入、真实 Electron `utilityProcess`、MSFS CLI status/daemon stop、Bridge 哈希和松散文件数量校验。`rc.1` 已在当前开发机完成人工安装与主流程验证；`rc.2` 只增加凭据回显规则并已完成构建校验，仍需按本文做一次设置页视觉确认。其他 Windows 机器上的干净环境回归仍待完成。
 
 ## 前置条件
 
@@ -57,7 +57,7 @@ MSFS_AUTO_START_LIVEKIT=true
 
 ## MSFS 连接与配置检测
 
-1. 确认 MSFS 2024 的 `Community2024\msfs-native-cli-route-bridge` 已安装，并包含 `manifest.json`、`layout.json` 和 `modules\msfs-route-bridge.wasm`。
+1. 确认 MSFS 2024 的 `Community2024\msfs-native-cli-route-bridge` 已安装，并包含 `manifest.json`、`layout.json` 和 `modules\msfs-route-bridge.wasm`。开发机还应确认版本副本位于 `Community2024\_晓晓飞行导游版本库\开发版本` 或 `应用版本`，但 MSFS 根目录只保留一个当前生效的 bridge。
 2. 执行 `pnpm desktop:build`，再执行 `pnpm desktop:preview` 打开 Electron 桌面窗口。
 3. MSFS 未启动时确认聊天标题栏显示“游戏未连接”。
 4. 启动 MSFS 2024 并加载飞行，确认标题栏自动变为“游戏已连接”。
@@ -65,6 +65,38 @@ MSFS_AUTO_START_LIVEKIT=true
 6. 关闭一个 MSFS 工具并保存，确认 Agent 重启后该工具不再注册；关闭全部 MSFS 工具时，标题栏连接状态隐藏。
 
 通过标准：检测只读、不安装或修改游戏文件；游戏关闭时不误报已连接；`ROUTE_NOT_FOUND` 被识别为 Bridge 已响应但没有当前航路；工具开关和保存重连状态一致。
+
+## V2 安装包回归
+
+1. 执行 `pnpm desktop:package`，确认只生成一个 `*-win-x64-setup.exe`。
+2. 检查 `release-v2/runtime-validation-report.json`，确认安装态依赖、`utilityProcess`、CLI 和 daemon 校验成功。
+3. 完全退出旧应用，运行 Setup；若出现“应用无法关闭”，先确认系统托盘或后台没有主应用进程，而不只是关闭聊天窗口。
+4. 全新用户数据目录首次启动时，确认 App ID、API Key 和 Access Token 输入框为空，不出现开发者密钥、示例值、`your_deepseek_api_key` 或“已配置”。
+5. 保存服务配置并重启应用，确认所有凭据字段默认显示密码圆点；点击每个字段的小眼睛能够显示本机真实值，再次点击恢复遮罩。App ID 与 API Key、Access Token 使用相同规则。
+6. 打开探索页：只有 DeepSeek 未配置时才显示探索规划配置提示；STT/TTS 或 MSFS 不可用不应被误报为探索规划未配置。
+7. 启动 MSFS 后检测 CLI 与 Bridge，退出应用后确认 `msfsd.exe`、Agent 和本地 LiveKit 都已停止。
+8. 覆盖安装更高版本并重复第 4～7 步；随后按“开发版本与应用版本切换回归”验证 Bridge。
+
+通过标准：安装目录没有完整外置 `node_modules`；设置保存、Agent 启动、探索降级、CLI 状态、Bridge 更新和进程退出均正常；安装耗时需单独记录，超过 2 分钟不得作为候选发布版。
+
+### 开发版本与应用版本切换回归
+
+切换前必须先完全退出 MSFS 2024；建议同时退出桌面应用。切换完成后再启动 MSFS。
+
+```powershell
+# 回退/切换到开发版本
+pnpm msfs:use:dev
+
+# 切回应用版本（应用版本已由候选安装包创建后才可执行）
+pnpm msfs:use:app
+```
+
+验证以下结果：
+
+1. `Community2024\msfs-native-cli-route-bridge` 始终只有一个当前生效目录。
+2. 开发版本和应用版本的文件内容互不覆盖；切换后当前生效目录与目标版本的 `manifest.json`、`layout.json` 和 WASM 哈希一致。
+3. 运行 `pnpm desktop:dev` 会刷新开发 CLI 快照并自动切换到开发版本。
+4. 在已有开发版本库的机器上启动候选应用，会更新并启用应用版本，不会修改开发版本。
 
 ## 桌面语音闭环
 

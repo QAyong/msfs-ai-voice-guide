@@ -1,7 +1,9 @@
+import { existsSync } from 'node:fs';
 import { isAbsolute, join, resolve } from 'node:path';
 
 export type MsfsPathOptions = {
   configuredPath?: string;
+  developmentPath?: string;
   resourcesPath?: string;
   cwd?: string;
 };
@@ -11,6 +13,9 @@ export function resolveMsfsCliPath(options: MsfsPathOptions): string {
     return isAbsolute(options.configuredPath)
       ? options.configuredPath
       : resolve(options.cwd ?? process.cwd(), options.configuredPath);
+  }
+  if (options.developmentPath && existsSync(options.developmentPath)) {
+    return options.developmentPath;
   }
   if (options.resourcesPath) return join(options.resourcesPath, 'msfs', 'msfs.exe');
   return resolve(options.cwd ?? process.cwd(), 'resources', 'msfs', 'msfs.exe');

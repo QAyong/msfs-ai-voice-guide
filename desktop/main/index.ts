@@ -6,12 +6,14 @@ import {
   safeStorage,
   screen,
   shell,
+  utilityProcess,
   WebContentsView,
 } from 'electron';
+import { existsSync } from 'node:fs';
 import { readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { basename, dirname, extname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import type { AppConfig } from '../../src/config/schema.js';
+import { loadLlmConfig, loadMsfsConfig, type AppConfig } from '../../src/config/schema.js';
 import { guideSourcesMessageSchema, type GuideSource } from '../../shared/guide-events.js';
 import {
   companionPreviewSources,
@@ -93,6 +95,7 @@ import {
   type AboutLink,
 } from '../../shared/about-info.js';
 import { EmbeddedAgentRuntime } from './agent-runtime.js';
+import { stopMsfsDaemon } from './msfs-daemon.js';
 import {
   ensureLocalEnvironmentFile,
   getInheritedEnvironment,
@@ -145,7 +148,11 @@ import { getGlobalPushToTalkAddonPath, GlobalPushToTalkController } from './glob
 import { DiagnosticLogger, writeDiagnosticArchive } from './diagnostics.js';
 import { withSourceAcceptLanguage } from './source-locale.js';
 import { ExploreController } from './explore-controller.js';
-import { MsfsConfigurationChecker } from './msfs-diagnostics.js';
+import {
+  defaultMsfsUserConfigCandidates,
+  installMsfsCommunityPackage,
+  MsfsConfigurationChecker,
+} from './msfs-diagnostics.js';
 import { MsfsConnectionMonitor } from './msfs-connection-monitor.js';
 import {
   msfsConfigurationDiagnosticSchema,
@@ -301,12 +308,29 @@ const getGuideLocalePath = () => join(app.getPath('userData'), 'guide-locale.jso
 const getServiceSettingsPath = () => join(app.getPath('userData'), 'service-settings.json');
 const getToolSettingsPath = () => join(app.getPath('userData'), 'guide-tool-settings.json');
 const getServiceCredentialsPath = () => join(app.getPath('userData'), 'service-credentials.bin');
-const getAgentProcessPath = () => join(mainDir, 'agent-process.js');
+const getAgentProcessPath = () =>
+  app.isPackaged
+    ? join(process.resourcesPath, 'app.asar', 'out', 'main', 'agent-process.js')
+    : join(mainDir, 'agent-process.js');
+const getRuntimeSmokeProcessPath = () =>
+  app.isPackaged
+    ? join(process.resourcesPath, 'app.asar', 'out', 'main', 'runtime-smoke-worker.js')
+    : join(mainDir, 'runtime-smoke-worker.js');
 const getPackagedResourcesPath = () =>
   app.isPackaged
     ? ((process as NodeJS.Process & { resourcesPath?: string }).resourcesPath ??
       join(process.cwd(), 'resources'))
     : join(process.cwd(), 'resources');
+const getDevelopmentMsfsCliPath = () =>
+  app.isPackaged ? undefined : join(process.cwd(), 'dev-runtime', 'msfs-cli', 'msfs.exe');
+const resolveDesktopMsfsCliPath = (configuredPath?: string) => {
+  const developmentPath = getDevelopmentMsfsCliPath();
+  return resolveMsfsCliPath({
+    ...(configuredPath ? { configuredPath } : {}),
+    ...(developmentPath && existsSync(developmentPath) ? { developmentPath } : {}),
+    resourcesPath: getPackagedResourcesPath(),
+  });
+};
 const getAppIconPath = () => join(getPackagedResourcesPath(), 'app-icon.png');
 const getTtsVoiceSamplesPath = () =>
   join(
@@ -479,19 +503,25 @@ const getServiceCredentialStatus = async (): Promise<ServiceCredentialStatus> =>
   };
 };
 
-const getVisibleLocalServiceCredentials = (): VisibleServiceCredentials => {
-  reloadLocalEnvironment(localEnvironmentPath);
-  const appId = process.env.VOLCENGINE_SPEECH_APP_ID?.trim() ?? '';
-  const accessToken = process.env.VOLCENGINE_SPEECH_ACCESS_TOKEN?.trim() ?? '';
+const visibleServiceCredentialsFromEnvironment = (
+  environment: NodeJS.ProcessEnv,
+): VisibleServiceCredentials => {
+  const appId = environment.VOLCENGINE_SPEECH_APP_ID?.trim() ?? '';
+  const accessToken = environment.VOLCENGINE_SPEECH_ACCESS_TOKEN?.trim() ?? '';
   return {
-    deepseekApiKey: process.env.DEEPSEEK_API_KEY?.trim() ?? '',
+    deepseekApiKey: environment.DEEPSEEK_API_KEY?.trim() ?? '',
     sttAppId: appId,
     sttAccessToken: accessToken,
     ttsAppId: appId,
     ttsAccessToken: accessToken,
-    searchApiKey: process.env.VOLCENGINE_SEARCH_API_KEY?.trim() ?? '',
-    bochaSearchApiKey: process.env.BOCHA_SEARCH_API_KEY?.trim() ?? '',
+    searchApiKey: environment.VOLCENGINE_SEARCH_API_KEY?.trim() ?? '',
+    bochaSearchApiKey: environment.BOCHA_SEARCH_API_KEY?.trim() ?? '',
   };
+};
+
+const getVisibleLocalServiceCredentials = (): VisibleServiceCredentials => {
+  reloadLocalEnvironment(localEnvironmentPath);
+  return visibleServiceCredentialsFromEnvironment(process.env);
 };
 
 const getEffectiveServiceEnvironment = async (
@@ -511,30 +541,24 @@ const getEffectiveServiceEnvironment = async (
   return applyDesktopToolSettings(environment, tools ?? (await readStoredToolSettings()));
 };
 
+const getVisibleEffectiveServiceCredentials = async (): Promise<VisibleServiceCredentials> => {
+  const inherited = visibleServiceCredentialsFromEnvironment(getInheritedEnvironment());
+  const stored = await readStoredServiceCredentials();
+  const local = getVisibleLocalServiceCredentials();
+  return Object.fromEntries(
+    serviceCredentialKeys.map((key) => [key, inherited[key] || stored[key] || local[key] || '']),
+  ) as VisibleServiceCredentials;
+};
+
 const hasEnabledMsfsTools = () =>
   Object.entries(msfsToolSettings).some(([name, enabled]) => name !== 'searchWeb' && enabled);
-
-const createMsfsCliClient = (config: AppConfig): MsfsCliClient => {
-  const resourcesPath = getPackagedResourcesPath();
-  return new MsfsCliClient({
-    executablePath: resolveMsfsCliPath({
-      ...(config.msfs.cliPath ? { configuredPath: config.msfs.cliPath } : {}),
-      ...(resourcesPath ? { resourcesPath } : {}),
-    }),
-    timeoutMs: config.msfs.timeoutMs,
-    maxConcurrency: config.msfs.maxConcurrency,
-  });
-};
 
 const createMsfsCliClientFromEnvironment = (environment: NodeJS.ProcessEnv): MsfsCliClient => {
   const configuredPath = environment.MSFS_CLI_PATH?.trim();
   const timeoutValue = Number(environment.MSFS_CLI_TIMEOUT_MS);
   const concurrencyValue = Number(environment.MSFS_CLI_MAX_CONCURRENCY);
   return new MsfsCliClient({
-    executablePath: resolveMsfsCliPath({
-      ...(configuredPath ? { configuredPath } : {}),
-      resourcesPath: getPackagedResourcesPath(),
-    }),
+    executablePath: resolveDesktopMsfsCliPath(configuredPath),
     timeoutMs: Number.isInteger(timeoutValue) && timeoutValue >= 500 ? timeoutValue : 15_000,
     maxConcurrency:
       Number.isInteger(concurrencyValue) && concurrencyValue >= 1 ? concurrencyValue : 2,
@@ -545,10 +569,7 @@ const createMsfsConfigurationChecker = async (): Promise<MsfsConfigurationChecke
   const environment = await getEffectiveServiceEnvironment();
   const client = createMsfsCliClientFromEnvironment(environment);
   const configuredPath = environment.MSFS_CLI_PATH?.trim();
-  const executablePath = resolveMsfsCliPath({
-    ...(configuredPath ? { configuredPath } : {}),
-    resourcesPath: getPackagedResourcesPath(),
-  });
+  const executablePath = resolveDesktopMsfsCliPath(configuredPath);
   const timeoutValue = Number(environment.MSFS_CLI_TIMEOUT_MS);
   const concurrencyValue = Number(environment.MSFS_CLI_MAX_CONCURRENCY);
   return new MsfsConfigurationChecker({
@@ -615,6 +636,16 @@ const stopMsfsConnectionMonitor = () => {
   msfsConnectionMonitor = null;
 };
 
+const stopMsfsDaemonForApp = async () => {
+  let configuredPath: string | undefined;
+  try {
+    configuredPath = (await getEffectiveServiceEnvironment()).MSFS_CLI_PATH?.trim();
+  } catch {
+    // Shutdown must continue even if the optional environment file is unavailable.
+  }
+  await stopMsfsDaemon(resolveDesktopMsfsCliPath(configuredPath));
+};
+
 const runMsfsConfigurationDiagnostic = async (): Promise<MsfsConfigurationDiagnostic> => {
   try {
     return await (await createMsfsConfigurationChecker()).check();
@@ -632,6 +663,28 @@ const runMsfsConfigurationDiagnostic = async (): Promise<MsfsConfigurationDiagno
       checkedAt: new Date().toISOString(),
     });
   }
+};
+
+const installBundledMsfsCommunityPackage = async () => {
+  if (!app.isPackaged) return;
+  const result = await installMsfsCommunityPackage({
+    sourcePath: join(
+      getPackagedResourcesPath(),
+      'msfs',
+      'community',
+      'msfs-native-cli-route-bridge',
+    ),
+    userCfgCandidates: defaultMsfsUserConfigCandidates(),
+    backupDirectory: join(app.getPath('userData'), 'msfs-community-backups'),
+  });
+  void getDiagnosticsLogger().append('main', {
+    event: 'msfs_community_package_install',
+    status: result.status,
+    message: result.message,
+    ...(result.userCfgPath ? { userCfgPath: result.userCfgPath } : {}),
+    ...(result.communityPackagePath ? { communityPackagePath: result.communityPackagePath } : {}),
+    ...(result.versionStorePath ? { versionStorePath: result.versionStorePath } : {}),
+  });
 };
 
 const readStoredGuideLocale = async (): Promise<GuideLocale> => {
@@ -888,12 +941,59 @@ const isSafeWebUrl = (value: string) => {
   }
 };
 
+const runPackagedRuntimeSmoke = (): Promise<boolean> =>
+  new Promise((resolve) => {
+    let settled = false;
+    let ready = false;
+    const timeout = { value: undefined as NodeJS.Timeout | undefined };
+    const finish = (result: boolean) => {
+      if (settled) return;
+      settled = true;
+      if (timeout.value) clearTimeout(timeout.value);
+      resolve(result);
+    };
+    let child: ReturnType<typeof utilityProcess.fork>;
+    try {
+      child = utilityProcess.fork(getRuntimeSmokeProcessPath(), [], {
+        cwd: process.cwd(),
+        env: process.env,
+        serviceName: 'Xiaoxiao Packaged Runtime Smoke',
+        stdio: ['ignore', 'pipe', 'pipe'],
+      });
+    } catch (error) {
+      console.error(error);
+      resolve(false);
+      return;
+    }
+    child.stdout?.on('data', (chunk) => console.log(String(chunk)));
+    child.stderr?.on('data', (chunk) => console.error(String(chunk)));
+    child.on('message', (message: { type?: string; message?: string }) => {
+      if (message?.type === 'runtime-smoke-ready') ready = true;
+      if (message?.type === 'runtime-smoke-error') {
+        console.error(message.message ?? 'Packaged runtime smoke failed.');
+      }
+    });
+    child.on('error', (type, location) => {
+      console.error(`${type}: ${location}`);
+      finish(false);
+    });
+    child.on('exit', (code) => finish(ready && code === 0));
+    timeout.value = setTimeout(() => {
+      child.kill();
+      finish(false);
+    }, 30_000);
+  });
+
 const createExploreService = async (): Promise<ExploreService | null> => {
   const environment = await getEffectiveServiceEnvironment();
-  const configuration = checkDesktopConfiguration(environment);
-  if (!configuration.ok) return null;
+  let llmConfig: ReturnType<typeof loadLlmConfig>;
+  try {
+    llmConfig = loadLlmConfig(environment);
+  } catch {
+    return null;
+  }
   return new ExploreService(
-    new DeepSeekExplorePlanner(configuration.config.llm),
+    new DeepSeekExplorePlanner(llmConfig),
     new EncyclopediaService([
       new WikipediaSearchPageProvider(),
       new BaiduBaikeSearchPageProvider(),
@@ -907,13 +1007,23 @@ const createExploreService = async (): Promise<ExploreService | null> => {
 
 const getExploreMsfsContext = async (signal: AbortSignal) => {
   const environment = await getEffectiveServiceEnvironment();
-  const configuration = checkDesktopConfiguration(environment);
-  if (!configuration.ok) return undefined;
-  const config = configuration.config;
-  const service = new MsfsGuideService(createMsfsCliClient(config), {
-    trackIntervalMs: config.msfs.trackIntervalMs,
-    trackMaximumPoints: config.msfs.trackMaximumPoints,
-  });
+  let msfsConfig: ReturnType<typeof loadMsfsConfig>;
+  try {
+    msfsConfig = loadMsfsConfig(environment);
+  } catch {
+    return undefined;
+  }
+  const service = new MsfsGuideService(
+    new MsfsCliClient({
+      executablePath: resolveDesktopMsfsCliPath(msfsConfig.cliPath),
+      timeoutMs: msfsConfig.timeoutMs,
+      maxConcurrency: msfsConfig.maxConcurrency,
+    }),
+    {
+      trackIntervalMs: msfsConfig.trackIntervalMs,
+      trackMaximumPoints: msfsConfig.trackMaximumPoints,
+    },
+  );
   try {
     return await new MsfsExploreContextProvider(service).get(signal);
   } finally {
@@ -2235,20 +2345,23 @@ ipcMain.handle(
   },
 );
 
-ipcMain.handle('settings:get-visible-local-credentials', (event): VisibleServiceCredentials => {
-  if (!isUtilitySender(event.sender)) {
-    return {
-      deepseekApiKey: '',
-      sttAppId: '',
-      sttAccessToken: '',
-      ttsAppId: '',
-      ttsAccessToken: '',
-      searchApiKey: '',
-      bochaSearchApiKey: '',
-    };
-  }
-  return getVisibleLocalServiceCredentials();
-});
+ipcMain.handle(
+  'settings:get-visible-local-credentials',
+  async (event): Promise<VisibleServiceCredentials> => {
+    if (!isUtilitySender(event.sender)) {
+      return {
+        deepseekApiKey: '',
+        sttAppId: '',
+        sttAccessToken: '',
+        ttsAppId: '',
+        ttsAccessToken: '',
+        searchApiKey: '',
+        bochaSearchApiKey: '',
+      };
+    }
+    return getVisibleEffectiveServiceCredentials();
+  },
+);
 
 ipcMain.handle('settings:get-service-settings', async (event): Promise<DesktopServiceSettings> => {
   if (!isUtilitySender(event.sender)) return defaultDesktopServiceSettings;
@@ -2526,11 +2639,18 @@ ipcMain.handle('external:open', (event, url: string) => {
 });
 
 app.whenReady().then(async () => {
+  if (process.env.MSFS_PACKAGED_RUNTIME_SMOKE === '1') {
+    const passed = await runPackagedRuntimeSmoke();
+    console.log(`Packaged runtime smoke: ${passed ? 'passed' : 'failed'}`);
+    app.exit(passed ? 0 : 1);
+    return;
+  }
   storedWindowState = readStoredWindowState(getWindowStatePath());
   sourceReadingPreferences = storedWindowState.sourceReadingPreferences ?? {};
   guideLocale = await readStoredGuideLocale();
   msfsToolSettings = await readStoredToolSettings();
   await createAssistantWindow();
+  await installBundledMsfsCommunityPackage();
   await startMsfsConnectionMonitor();
   void startConfiguredAgent(false).then(async (result) => {
     if ('config' in result) await agentRuntime.waitUntilReady();
@@ -2562,6 +2682,7 @@ app.on('before-quit', (event) => {
   void agentRuntime
     .stop()
     .finally(() => localLiveKitRuntime.stop())
+    .finally(() => stopMsfsDaemonForApp())
     .finally(() => {
       shutdownComplete = true;
       app.quit();

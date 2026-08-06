@@ -1,4 +1,10 @@
-import { ConfigError, loadConfig, loadSearchConfig } from '../../src/config/schema.js';
+import {
+  ConfigError,
+  loadConfig,
+  loadLlmConfig,
+  loadMsfsConfig,
+  loadSearchConfig,
+} from '../../src/config/schema.js';
 import { describe, expect, it } from 'vitest';
 
 const baseEnvironment: NodeJS.ProcessEnv = {
@@ -20,6 +26,37 @@ const baseEnvironment: NodeJS.ProcessEnv = {
 };
 
 describe('loadConfig', () => {
+  it('探索规划只要求 DeepSeek 配置，不依赖语音或 LiveKit', () => {
+    expect(
+      loadLlmConfig({
+        DEEPSEEK_API_KEY: 'explore-secret',
+        DEEPSEEK_BASE_URL: 'https://api.deepseek.com',
+        DEEPSEEK_LLM_MODEL: 'deepseek-chat',
+      }),
+    ).toEqual({
+      provider: 'deepseek',
+      apiKey: 'explore-secret',
+      baseUrl: 'https://api.deepseek.com',
+      model: 'deepseek-chat',
+    });
+  });
+
+  it('MSFS 探索上下文使用独立默认值，不依赖 AI 服务配置', () => {
+    expect(loadMsfsConfig({})).toEqual({
+      timeoutMs: 15_000,
+      maxConcurrency: 2,
+      trackIntervalMs: 3_000,
+      trackMaximumPoints: 120,
+    });
+  });
+
+  it('缺少 Agent 名称时使用应用内默认值', () => {
+    const environment = { ...baseEnvironment };
+    delete environment.LIVEKIT_AGENT_NAME;
+
+    expect(loadConfig(environment).livekit.agentName).toBe('msfs-voice-guide');
+  });
+
   it('使用 Speech API Key 并保留 App ID/Token 供 TTS 使用', () => {
     const config = loadConfig({ ...baseEnvironment, VOLCENGINE_SPEECH_API_KEY: 'speech-api-key' });
 

@@ -1,12 +1,15 @@
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { MsfsCliClient } from '../../src/msfs/cli-client.js';
 import {
   MsfsConfigurationChecker,
+  activateMsfsCommunityVersion,
+  installMsfsCommunityPackage,
   parseInstalledPackagesPath,
   resolveCommunityPackagePath,
+  resolveMsfsCommunityVersionPath,
 } from '../../desktop/main/msfs-diagnostics.js';
 import type {
   MsfsProcessRunner,
@@ -109,6 +112,16 @@ async function createFixture() {
   return { root, cliPath, userCfgPath };
 }
 
+async function writeBridgePackage(path: string, wasmContents: string) {
+  await mkdir(join(path, 'modules'), { recursive: true });
+  await writeFile(
+    join(path, 'manifest.json'),
+    JSON.stringify({ title: 'MSFS Native CLI EFB Route Bridge', package_version: '0.1.0' }),
+  );
+  await writeFile(join(path, 'layout.json'), '{}');
+  await writeFile(join(path, 'modules', 'msfs-route-bridge.wasm'), wasmContents);
+}
+
 describe('MSFS configuration diagnostics', () => {
   it('parses UserCfg.opt and keeps Community2024 paths constrained', () => {
     expect(parseInstalledPackagesPath('InstalledPackagesPath "C:\\Packages"')).toBe('C:\\Packages');
@@ -162,6 +175,124 @@ describe('MSFS configuration diagnostics', () => {
       expect(result.checks.find((item) => item.id === 'route_bridge')?.status).toBe('ok');
     } finally {
       await rm(fixture.root, { recursive: true, force: true });
+    }
+  });
+
+  it('installs the bundled package idempotently and protects foreign packages', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'msfs-community-install-'));
+    try {
+      const sourcePath = join(root, 'source');
+      const installedPackagesPath = join(root, 'packages');
+      const userCfgPath = join(root, 'UserCfg.opt');
+      const packagePath = resolveCommunityPackagePath(installedPackagesPath);
+      await mkdir(join(sourcePath, 'modules'), { recursive: true });
+      await writeFile(
+        join(sourcePath, 'manifest.json'),
+        JSON.stringify({ title: 'MSFS Native CLI EFB Route Bridge', package_version: '0.1.0' }),
+      );
+      await writeFile(join(sourcePath, 'layout.json'), '{}');
+      await writeFile(join(sourcePath, 'modules', 'msfs-route-bridge.wasm'), 'wasm-v1');
+      await writeFile(userCfgPath, `InstalledPackagesPath "${installedPackagesPath}"`);
+
+      const first = await installMsfsCommunityPackage({
+        sourcePath,
+        userCfgCandidates: [userCfgPath],
+        backupDirectory: join(root, 'backups'),
+      });
+      expect(first.status).toBe('installed');
+      expect(await readFile(join(packagePath, 'modules', 'msfs-route-bridge.wasm'), 'utf8')).toBe(
+        'wasm-v1',
+      );
+
+      const second = await installMsfsCommunityPackage({
+        sourcePath,
+        userCfgCandidates: [userCfgPath],
+        backupDirectory: join(root, 'backups'),
+      });
+      expect(second.status).toBe('already_current');
+
+      await writeFile(
+        join(packagePath, 'manifest.json'),
+        JSON.stringify({ package_name: 'foreign-package' }),
+      );
+      const conflict = await installMsfsCommunityPackage({
+        sourcePath,
+        userCfgCandidates: [userCfgPath],
+        backupDirectory: join(root, 'backups'),
+      });
+      expect(conflict.status).toBe('conflict');
+      expect(await readFile(join(packagePath, 'manifest.json'), 'utf8')).toContain(
+        'foreign-package',
+      );
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('keeps development and application versions separate while switching the active package', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'msfs-community-versions-'));
+    try {
+      const developmentSourcePath = join(root, 'development-source');
+      const applicationSourcePath = join(root, 'application-source');
+      const installedPackagesPath = join(root, 'packages');
+      const userCfgPath = join(root, 'UserCfg.opt');
+      const backupDirectory = join(root, 'backups');
+      await writeBridgePackage(developmentSourcePath, 'development');
+      await writeBridgePackage(applicationSourcePath, 'application');
+      await writeFile(userCfgPath, `InstalledPackagesPath "${installedPackagesPath}"`);
+
+      const development = await activateMsfsCommunityVersion({
+        version: 'development',
+        sourcePath: developmentSourcePath,
+        userCfgCandidates: [userCfgPath],
+        backupDirectory,
+      });
+      expect(development.status).toBe('installed');
+
+      const activePath = resolveCommunityPackagePath(installedPackagesPath);
+      const developmentStorePath = resolveMsfsCommunityVersionPath(
+        installedPackagesPath,
+        'development',
+      );
+      expect(await readFile(join(activePath, 'modules', 'msfs-route-bridge.wasm'), 'utf8')).toBe(
+        'development',
+      );
+      expect(
+        await readFile(join(developmentStorePath, 'modules', 'msfs-route-bridge.wasm'), 'utf8'),
+      ).toBe('development');
+
+      const application = await installMsfsCommunityPackage({
+        sourcePath: applicationSourcePath,
+        userCfgCandidates: [userCfgPath],
+        backupDirectory,
+      });
+      expect(application.status).toBe('installed');
+      const applicationStorePath = resolveMsfsCommunityVersionPath(
+        installedPackagesPath,
+        'application',
+      );
+      expect(await readFile(join(activePath, 'modules', 'msfs-route-bridge.wasm'), 'utf8')).toBe(
+        'application',
+      );
+      expect(
+        await readFile(join(applicationStorePath, 'modules', 'msfs-route-bridge.wasm'), 'utf8'),
+      ).toBe('application');
+      expect(
+        await readFile(join(developmentStorePath, 'modules', 'msfs-route-bridge.wasm'), 'utf8'),
+      ).toBe('development');
+
+      const restoredDevelopment = await activateMsfsCommunityVersion({
+        version: 'development',
+        sourcePath: developmentSourcePath,
+        userCfgCandidates: [userCfgPath],
+        backupDirectory,
+      });
+      expect(restoredDevelopment.status).toBe('installed');
+      expect(await readFile(join(activePath, 'modules', 'msfs-route-bridge.wasm'), 'utf8')).toBe(
+        'development',
+      );
+    } finally {
+      await rm(root, { recursive: true, force: true });
     }
   });
 });

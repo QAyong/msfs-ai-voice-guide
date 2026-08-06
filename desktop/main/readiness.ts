@@ -23,7 +23,7 @@ export function checkDesktopConfiguration(
         ok: false,
         readiness: {
           status: 'setup_required',
-          message: '需要先完成本地服务配置。',
+          message: '未配置服务，请配置服务。',
           issues: splitIssues(error.message),
         },
       };

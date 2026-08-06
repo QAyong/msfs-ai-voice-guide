@@ -10,10 +10,12 @@ process.env.ELECTRON_RUN_AS_NODE = '1';
 const resourcesPath = (process as NodeJS.Process & { resourcesPath?: string }).resourcesPath;
 if (!process.env.MSFS_CLI_PATH) {
   const packagedCliPath = resourcesPath ? join(resourcesPath, 'msfs', 'msfs.exe') : undefined;
-  const developmentCliPath = join(process.cwd(), 'resources', 'msfs', 'msfs.exe');
+  const devRuntimeCliPath = join(process.cwd(), 'dev-runtime', 'msfs-cli', 'msfs.exe');
+  const legacyDevelopmentCliPath = join(process.cwd(), 'resources', 'msfs', 'msfs.exe');
   const cliPath =
     (packagedCliPath && existsSync(packagedCliPath) ? packagedCliPath : undefined) ??
-    (existsSync(developmentCliPath) ? developmentCliPath : undefined);
+    (existsSync(devRuntimeCliPath) ? devRuntimeCliPath : undefined) ??
+    (existsSync(legacyDevelopmentCliPath) ? legacyDevelopmentCliPath : undefined);
   if (cliPath) process.env.MSFS_CLI_PATH = cliPath;
 }
 

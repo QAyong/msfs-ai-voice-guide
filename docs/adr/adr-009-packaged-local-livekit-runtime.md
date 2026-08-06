@@ -1,7 +1,7 @@
 # ADR-009：将 LiveKit 作为应用私有本地运行时随桌面端分发
 
 **日期：** 2026-07-25
-**状态：** 已接受，待实施
+**状态：** 已接受并实施；Windows x64 候选安装包已通过安装态运行时校验
 
 ## 背景
 
@@ -28,7 +28,7 @@ Electron Renderer  ↔  Agent Utility Process
 本地运行时遵循以下约束：
 
 - 安装包生成或携带显式的 LiveKit 配置文件；不得在发行版使用 `--dev`、`devkey` 或 `secret`。
-- 开发态从受 Git 忽略的 `resources/livekit/livekit-server.exe` 启动官方 `--dev` 模式；不使用 Docker、全局安装或远程 LiveKit 服务。
+- 开发态从受 Git 忽略的 `resources/livekit/livekit-server.exe` 启动官方二进制；Electron 默认与安装态一样生成私有回环配置并自动管理，仅保留 `pnpm livekit:dev` 作为显式手工调试入口。
 - 每个应用数据目录首次初始化时生成独立的 LiveKit API Key 和 API Secret。主进程可使用 Secret 签发短期参与者 Token；Renderer 永远不能读取 Secret。
 - Server 仅监听 `127.0.0.1`。不得使用 `0.0.0.0`、局域网发现、公网端口映射或远程参与者。
 - 主进程先启动 Server，再执行本地健康检查；仅在 Server 可用后启动现有 Agent Utility Process 并签发 Room Token。
@@ -51,7 +51,7 @@ Electron Renderer  ↔  Agent Utility Process
 - 新增本地运行时管理模块，负责路径解析、配置生成、端口冲突处理、子进程启动、日志脱敏、探活、退出与异常清理。
 - 安装包需要为 `livekit-server.exe`、其许可证和版本清单增加与 MSFS CLI 类似的暂存与完整性检查流程。
 - 启动诊断需要区分“本地 Server 未能启动”“端口不可用”“Agent Worker 未注册”和“模型 Provider 未配置”，并保持现有脱敏错误约定。
-- 开发态与发行态均使用本地 Windows Server 二进制：开发态由开发者以 `--dev` 手工启动，发行态由应用以私有配置启动。二者的选择逻辑、配置 Schema 和测试矩阵由 Spec-011 定义。
+- 开发态与发行态均使用本地 Windows Server 二进制，并默认由应用以私有配置自动启动和停止；只有显式调试命令使用 `--dev`。二者的选择逻辑、配置 Schema 和测试矩阵由 Spec-011 定义。
 - 本地运行时不使 DeepSeek、豆包 STT/TTS 或网页搜索离线化；这些 Provider 仍按各自的网络与隐私条款工作。完全离线 AI 是单独的产品路线。
 
 ## 不在此决策范围内

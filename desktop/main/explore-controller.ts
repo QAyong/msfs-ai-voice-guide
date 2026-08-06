@@ -126,7 +126,11 @@ export class ExploreController {
         this.refreshCachedMsfsContext(conversation, msfsPromise);
       const service = await this.dependencies.createService();
       if (!service) {
-        return { ok: false, code: 'configuration', message: '探索服务尚未完成本地配置。' };
+        return {
+          ok: false,
+          code: 'configuration',
+          message: '探索规划服务尚未配置，请在设置中填写 DeepSeek API Key。',
+        };
       }
       const result = await service.explore(
         {

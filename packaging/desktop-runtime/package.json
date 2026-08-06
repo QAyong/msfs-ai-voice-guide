@@ -1,0 +1,16 @@
+{
+  "name": "@xiaoxiao/desktop-runtime",
+  "version": "1.0.1-rc.2",
+  "private": true,
+  "type": "module",
+  "main": "./out/main/index.js",
+  "dependencies": {
+    "@livekit/agents": "1.5.2",
+    "@livekit/agents-plugin-openai": "1.5.2",
+    "@livekit/protocol": "1.49.0",
+    "@livekit/rtc-node": "0.13.31",
+    "livekit-server-sdk": "2.17.0",
+    "ws": "8.21.0",
+    "zod": "4.4.3"
+  }
+}

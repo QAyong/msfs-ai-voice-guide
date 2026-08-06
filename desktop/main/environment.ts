@@ -3,6 +3,12 @@ import { parseEnv } from 'node:util';
 
 const inheritedEnvironment = new Map(Object.entries(process.env));
 const locallyLoadedKeys = new Set<string>();
+const templateValuePattern = /^your_[a-z0-9_]+$/iu;
+
+export function isTemplateEnvironmentValue(value: string): boolean {
+  const normalized = value.trim();
+  return templateValuePattern.test(normalized) || normalized === 'wss://your-livekit-host';
+}
 
 export function getInheritedEnvironment(): NodeJS.ProcessEnv {
   return Object.fromEntries(inheritedEnvironment);
@@ -17,7 +23,9 @@ export function reloadLocalEnvironment(path: string): void {
   if (!existsSync(path)) return;
   const parsed = parseEnv(readFileSync(path, 'utf8'));
   for (const [key, value] of Object.entries(parsed)) {
+    if (value === undefined) continue;
     if (inheritedEnvironment.has(key)) continue;
+    if (isTemplateEnvironmentValue(value)) continue;
     process.env[key] = value;
     locallyLoadedKeys.add(key);
   }

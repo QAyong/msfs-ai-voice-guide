@@ -20,6 +20,7 @@ export default defineConfig({
           index: resolve('desktop/main/index.ts'),
           'agent-process': resolve('desktop/agent-process.ts'),
           'guide-agent': resolve('src/agent/guide-agent.ts'),
+          'runtime-smoke-worker': resolve('desktop/runtime-smoke-worker.ts'),
         },
       },
     },

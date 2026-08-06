@@ -4,10 +4,10 @@ import tseslint from 'typescript-eslint';
 
 export default tseslint.config(
   {
-    ignores: ['coverage/', 'dist/', 'node_modules/', 'out/', '.ua/'],
+    ignores: ['coverage/', 'dist/', 'node_modules/', 'out/', 'release*/', '.ua/'],
   },
   {
-    files: ['scripts/build-global-ptt.mjs'],
+    files: ['scripts/**/*.{mjs,mts,ts}'],
     languageOptions: {
       globals: {
         console: 'readonly',

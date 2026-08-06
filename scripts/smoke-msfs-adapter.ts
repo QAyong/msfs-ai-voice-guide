@@ -9,6 +9,7 @@ const service = new MsfsGuideService(
   new MsfsCliClient({
     executablePath: resolveMsfsCliPath({
       ...(config.msfs.cliPath ? { configuredPath: config.msfs.cliPath } : {}),
+      developmentPath: resolve(import.meta.dirname, '..', 'dev-runtime', 'msfs-cli', 'msfs.exe'),
       cwd: resolve(import.meta.dirname, '..'),
     }),
     timeoutMs: config.msfs.timeoutMs,

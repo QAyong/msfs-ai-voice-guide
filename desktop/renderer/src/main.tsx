@@ -881,6 +881,12 @@ const SettingsDialog = ({ onClose, preferences, savePreferences }: SettingsDialo
     savePreferences(nextPreferences);
     setServices(nextServices);
     setTools(parsed.data.tools);
+    const [savedCredentialStatus, savedCredentials] = await Promise.all([
+      window.desktop.getServiceCredentialStatus(),
+      window.desktop.getVisibleLocalServiceCredentials(),
+    ]);
+    setCredentialStatus(savedCredentialStatus as ServiceCredentialStatus);
+    setCredentials(savedCredentials);
     setCredentialUpdates({});
     return true;
   };
@@ -1001,18 +1007,20 @@ const SettingsDialog = ({ onClose, preferences, savePreferences }: SettingsDialo
   ) => {
     setCredentials((current) => {
       if (voiceCredentialsLinked && key === 'sttAppId') {
-        setCredentialUpdates((updates) => ({ ...updates, sttAppId: value, ttsAppId: value }));
+        const update = value.trim() ? value : null;
+        setCredentialUpdates((updates) => ({ ...updates, sttAppId: update, ttsAppId: update }));
         return { ...current, sttAppId: value, ttsAppId: value };
       }
       if (voiceCredentialsLinked && key === 'sttAccessToken') {
+        const update = value.trim() ? value : null;
         setCredentialUpdates((updates) => ({
           ...updates,
-          sttAccessToken: value,
-          ttsAccessToken: value,
+          sttAccessToken: update,
+          ttsAccessToken: update,
         }));
         return { ...current, sttAccessToken: value, ttsAccessToken: value };
       }
-      setCredentialUpdates((updates) => ({ ...updates, [key]: value }));
+      setCredentialUpdates((updates) => ({ ...updates, [key]: value.trim() ? value : null }));
       return { ...current, [key]: value };
     });
   };
@@ -1922,8 +1930,8 @@ const ServiceField = ({
       <span>{label}</span>
       <span className="service-field-control">
         <input
+          data-configured={configured || undefined}
           disabled={disabled}
-          placeholder={configured && !value ? '已配置' : undefined}
           type={isSecret && !revealed ? 'password' : 'text'}
           value={value}
           onChange={(event) => onChange(event.target.value)}

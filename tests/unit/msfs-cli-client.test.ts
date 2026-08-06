@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { resolve } from 'node:path';
 import { z } from 'zod';
 import { MsfsCliClient } from '../../src/msfs/cli-client.js';
 import { resolveMsfsCliPath } from '../../src/msfs/path.js';
@@ -103,5 +104,11 @@ describe('resolveMsfsCliPath', () => {
     expect(resolveMsfsCliPath({ resourcesPath: 'C:\\app\\resources' })).toBe(
       'C:\\app\\resources\\msfs\\msfs.exe',
     );
+    expect(
+      resolveMsfsCliPath({
+        developmentPath: resolve('package.json'),
+        resourcesPath: 'C:\\app\\resources',
+      }),
+    ).toBe(resolve('package.json'));
   });
 });

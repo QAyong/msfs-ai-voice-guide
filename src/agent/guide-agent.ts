@@ -1,4 +1,5 @@
 import { defineAgent, llm, voice } from '@livekit/agents';
+import { join } from 'node:path';
 import {
   guideSourcesTopic,
   guideToolEventSchema,
@@ -87,6 +88,7 @@ export default defineAgent({
       new MsfsCliClient({
         executablePath: resolveMsfsCliPath({
           ...(config.msfs.cliPath ? { configuredPath: config.msfs.cliPath } : {}),
+          developmentPath: join(process.cwd(), 'dev-runtime', 'msfs-cli', 'msfs.exe'),
           ...(resourcesPath ? { resourcesPath } : {}),
         }),
         timeoutMs: config.msfs.timeoutMs,
