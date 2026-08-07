@@ -63,6 +63,10 @@ const unavailable = (code: MsfsUnavailableCode, requestId?: string): MsfsUnavail
   timestamp: new Date().toISOString(),
 });
 
+const retryableCodes = new Set<MsfsUnavailableCode>(['MSFS_CLI_UNAVAILABLE', 'MSFS_CLI_TIMEOUT']);
+
+const retryDelayMs = 1_000;
+
 class ConcurrencyGate {
   private active = 0;
   private readonly queue: Array<() => void> = [];
@@ -98,61 +102,76 @@ export class MsfsCliClient {
     signal?: AbortSignal,
   ): Promise<MsfsCommandResult<T>> {
     return this.gate.run(async () => {
-      const operation = args.slice(0, 2).join('.');
-      try {
-        await access(this.options.executablePath, constants.X_OK);
-      } catch {
-        this.options.onDiagnostic?.({ kind: 'executable_missing', operation });
-        return unavailable('MSFS_CLI_UNAVAILABLE');
+      const first = await this.executeOnce(args, dataSchema, signal);
+      if (first.status !== 'unavailable' || !retryableCodes.has(first.code) || signal?.aborted) {
+        return first;
       }
 
-      let result;
-      try {
-        result = await this.runner.run(this.options.executablePath, [...args, '--json'], {
-          timeoutMs: this.options.timeoutMs,
-          maxOutputBytes: 1_000_000,
-          ...(signal ? { signal } : {}),
-        });
-      } catch {
-        this.options.onDiagnostic?.({ kind: 'spawn_failed', operation });
-        return unavailable('MSFS_CLI_UNAVAILABLE');
-      }
-
-      if (result.timedOut) {
-        this.options.onDiagnostic?.({ kind: 'timeout', operation, exitCode: result.exitCode });
-        return unavailable('MSFS_CLI_TIMEOUT');
-      }
-      const envelope = this.parseEnvelope(result.stdout);
-      if (!envelope) {
-        this.options.onDiagnostic?.({
-          kind: 'protocol_error',
-          operation,
-          exitCode: result.exitCode,
-        });
-        return unavailable('MSFS_CLI_PROTOCOL_ERROR');
-      }
-      if (!envelope.ok) {
-        const code = normalizedCode(envelope.error.code);
-        this.options.onDiagnostic?.({
-          kind: 'command_error',
-          operation,
-          exitCode: result.exitCode,
-          code: envelope.error.code,
-        });
-        return unavailable(code, envelope.id);
-      }
-
-      const data = dataSchema.safeParse(envelope.data);
-      if (!data.success) {
-        this.options.onDiagnostic?.({
-          kind: 'protocol_error',
-          operation,
-          exitCode: result.exitCode,
-        });
-        return unavailable('MSFS_CLI_PROTOCOL_ERROR', envelope.id);
-      }
-      return { status: 'ok', requestId: envelope.id, data: data.data };
+      await new Promise((resolve) => setTimeout(resolve, retryDelayMs));
+      if (signal?.aborted) return first;
+      return this.executeOnce(args, dataSchema, signal);
     });
+  }
+
+  private async executeOnce<T>(
+    args: readonly string[],
+    dataSchema: z.ZodType<T>,
+    signal?: AbortSignal,
+  ): Promise<MsfsCommandResult<T>> {
+    const operation = args.slice(0, 2).join('.');
+    try {
+      await access(this.options.executablePath, constants.X_OK);
+    } catch {
+      this.options.onDiagnostic?.({ kind: 'executable_missing', operation });
+      return unavailable('MSFS_CLI_UNAVAILABLE');
+    }
+
+    let result;
+    try {
+      result = await this.runner.run(this.options.executablePath, [...args, '--json'], {
+        timeoutMs: this.options.timeoutMs,
+        maxOutputBytes: 1_000_000,
+        ...(signal ? { signal } : {}),
+      });
+    } catch {
+      this.options.onDiagnostic?.({ kind: 'spawn_failed', operation });
+      return unavailable('MSFS_CLI_UNAVAILABLE');
+    }
+
+    if (result.timedOut) {
+      this.options.onDiagnostic?.({ kind: 'timeout', operation, exitCode: result.exitCode });
+      return unavailable('MSFS_CLI_TIMEOUT');
+    }
+    const envelope = this.parseEnvelope(result.stdout);
+    if (!envelope) {
+      this.options.onDiagnostic?.({
+        kind: 'protocol_error',
+        operation,
+        exitCode: result.exitCode,
+      });
+      return unavailable('MSFS_CLI_PROTOCOL_ERROR');
+    }
+    if (!envelope.ok) {
+      const code = normalizedCode(envelope.error.code);
+      this.options.onDiagnostic?.({
+        kind: 'command_error',
+        operation,
+        exitCode: result.exitCode,
+        code: envelope.error.code,
+      });
+      return unavailable(code, envelope.id);
+    }
+
+    const data = dataSchema.safeParse(envelope.data);
+    if (!data.success) {
+      this.options.onDiagnostic?.({
+        kind: 'protocol_error',
+        operation,
+        exitCode: result.exitCode,
+      });
+      return unavailable('MSFS_CLI_PROTOCOL_ERROR', envelope.id);
+    }
+    return { status: 'ok', requestId: envelope.id, data: data.data };
   }
 
   watch(

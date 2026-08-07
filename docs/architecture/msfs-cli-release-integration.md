@@ -53,6 +53,16 @@ CLI 仓库负责：
 
 设置页不提供 CLI 路径选择，不执行安装、复制、删除或修改游戏配置。Bridge 是否已安装必须以用户实际 `InstalledPackagesPath\Community2024` 目录为准，应用资源目录仅作为随包发布输入。
 
+### MSFS 请求排队与故障恢复
+
+主进程的连接监控和探索上下文共用一个 `MsfsCliClient`，默认并发数为 `1`。同一客户端内的 MSFS CLI 请求按顺序执行；`getFlightSnapshot` 的批量变量、机型和机号读取也按顺序执行，避免多个 `msfs.exe` 同时竞争同一个 `msfsd.exe` Named Pipe。
+
+遇到 CLI 超时或 `DAEMON_UNAVAILABLE` 时，适配层等待约 1 秒后自动重试一次；认证、协议和业务错误不盲目重试。Agent Worker 也使用单通道配置。该方案优先解决单机用户的偶发竞争和启动时序问题，不引入新的 MSFS 服务或远程代理。
+
+### Geo Cloud 随包配置
+
+Geo Cloud 配置由 `scripts/stage-geo-config.mjs` 在打包时生成到 `out/msfs/geo-config.json`，安装后位于应用资源目录的 `msfs/geo-config.json`。主进程和 Agent Worker 启动时自动读取，供原生 CLI 使用；测试者不需要填写 Geo 地址或 Key。当前测试候选包内置 Geo Key，具有可被安装包持有者提取的安全风险。
+
 ### 开发专属 CLI 快照
 
 为避免开发中的 CLI 修改直接混入发布输入，桌面端开发使用项目根目录下的 `dev-runtime/msfs-cli/`。该目录被 `.gitignore` 忽略，由 `pnpm msfs:stage:dev` 从当前开发用 CLI 构建目录更新，结构包含 `msfs.exe`、`msfsd.exe`、`SimConnect.dll` 和 bridge。`pnpm desktop:dev` 会自动刷新开发快照，并把开发版 bridge 设为当前 MSFS 启用版本。

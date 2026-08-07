@@ -14,6 +14,7 @@ import { readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { basename, dirname, extname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { loadLlmConfig, loadMsfsConfig, type AppConfig } from '../../src/config/schema.js';
+import { applyBundledGeoEnvironment } from '../../src/config/bundled-geo.js';
 import { guideSourcesMessageSchema, type GuideSource } from '../../shared/guide-events.js';
 import {
   companionPreviewSources,
@@ -245,6 +246,8 @@ let guideLocale: GuideLocale = 'zh-CN';
 let exploreController: ExploreController | null = null;
 let msfsToolSettings: DesktopToolSettings = { ...defaultDesktopToolSettings };
 let msfsConnectionMonitor: MsfsConnectionMonitor | null = null;
+let sharedMsfsClient: MsfsCliClient | null = null;
+let sharedMsfsClientPromise: Promise<MsfsCliClient> | null = null;
 let latestMsfsConnectionStatus: MsfsConnectionStatus = {
   visible: true,
   connected: false,
@@ -561,13 +564,22 @@ const createMsfsCliClientFromEnvironment = (environment: NodeJS.ProcessEnv): Msf
     executablePath: resolveDesktopMsfsCliPath(configuredPath),
     timeoutMs: Number.isInteger(timeoutValue) && timeoutValue >= 500 ? timeoutValue : 15_000,
     maxConcurrency:
-      Number.isInteger(concurrencyValue) && concurrencyValue >= 1 ? concurrencyValue : 2,
+      Number.isInteger(concurrencyValue) && concurrencyValue >= 1 ? concurrencyValue : 1,
   });
+};
+
+const getSharedMsfsClient = async (): Promise<MsfsCliClient> => {
+  if (sharedMsfsClient) return sharedMsfsClient;
+  sharedMsfsClientPromise ??= getEffectiveServiceEnvironment().then((environment) => {
+    sharedMsfsClient = createMsfsCliClientFromEnvironment(environment);
+    return sharedMsfsClient;
+  });
+  return sharedMsfsClientPromise;
 };
 
 const createMsfsConfigurationChecker = async (): Promise<MsfsConfigurationChecker> => {
   const environment = await getEffectiveServiceEnvironment();
-  const client = createMsfsCliClientFromEnvironment(environment);
+  const client = await getSharedMsfsClient();
   const configuredPath = environment.MSFS_CLI_PATH?.trim();
   const executablePath = resolveDesktopMsfsCliPath(configuredPath);
   const timeoutValue = Number(environment.MSFS_CLI_TIMEOUT_MS);
@@ -576,7 +588,7 @@ const createMsfsConfigurationChecker = async (): Promise<MsfsConfigurationChecke
     executablePath,
     timeoutMs: Number.isInteger(timeoutValue) && timeoutValue >= 500 ? timeoutValue : 15_000,
     maxConcurrency:
-      Number.isInteger(concurrencyValue) && concurrencyValue >= 1 ? concurrencyValue : 2,
+      Number.isInteger(concurrencyValue) && concurrencyValue >= 1 ? concurrencyValue : 1,
     client,
     packageSourcePath: join(
       getPackagedResourcesPath(),
@@ -596,8 +608,7 @@ const getMsfsConnectionStatus = async (): Promise<MsfsConnectionStatus> => {
       timestamp: new Date().toISOString(),
     });
   }
-  const environment = await getEffectiveServiceEnvironment();
-  const client = createMsfsCliClientFromEnvironment(environment);
+  const client = await getSharedMsfsClient();
   const result = await client.execute(['status'], statusDataSchema);
   const simulatorState = await client.execute(
     ['system', 'state', '--name', 'AircraftLoaded'],
@@ -622,9 +633,8 @@ const publishMsfsConnectionStatus = (status: MsfsConnectionStatus) => {
 
 const startMsfsConnectionMonitor = async () => {
   if (msfsConnectionMonitor) return;
-  const environment = await getEffectiveServiceEnvironment();
   msfsConnectionMonitor = new MsfsConnectionMonitor({
-    client: createMsfsCliClientFromEnvironment(environment),
+    client: await getSharedMsfsClient(),
     isVisible: hasEnabledMsfsTools,
     onStatus: publishMsfsConnectionStatus,
   });
@@ -1013,17 +1023,11 @@ const getExploreMsfsContext = async (signal: AbortSignal) => {
   } catch {
     return undefined;
   }
-  const service = new MsfsGuideService(
-    new MsfsCliClient({
-      executablePath: resolveDesktopMsfsCliPath(msfsConfig.cliPath),
-      timeoutMs: msfsConfig.timeoutMs,
-      maxConcurrency: msfsConfig.maxConcurrency,
-    }),
-    {
-      trackIntervalMs: msfsConfig.trackIntervalMs,
-      trackMaximumPoints: msfsConfig.trackMaximumPoints,
-    },
-  );
+  const client = await getSharedMsfsClient();
+  const service = new MsfsGuideService(client, {
+    trackIntervalMs: msfsConfig.trackIntervalMs,
+    trackMaximumPoints: msfsConfig.trackMaximumPoints,
+  });
   try {
     return await new MsfsExploreContextProvider(service).get(signal);
   } finally {
@@ -2639,6 +2643,7 @@ ipcMain.handle('external:open', (event, url: string) => {
 });
 
 app.whenReady().then(async () => {
+  applyBundledGeoEnvironment(getPackagedResourcesPath());
   if (process.env.MSFS_PACKAGED_RUNTIME_SMOKE === '1') {
     const passed = await runPackagedRuntimeSmoke();
     console.log(`Packaged runtime smoke: ${passed ? 'passed' : 'failed'}`);

@@ -63,6 +63,8 @@ V2 不复制开发目录的 `node_modules`，也不在 `win-unpacked` 生成后�
 
 如果只是修改了 CLI 或 Agent 代码，也需要重新执行 `pnpm desktop:package` 生成新版本；不要向 `release-v2` 手动复制依赖。安装包固定包含打包当时的 CLI、daemon、SimConnect DLL 和 Bridge 快照，并用 `component-manifest.json` 记录 SHA-256 与协议主版本。
 
+当前候选包还会在打包时生成 `out/msfs/geo-config.json`，安装后由主进程和 Agent Worker 自动加载 Geo Cloud 配置，测试者不需要手动填写。该测试方案会把 Geo Cloud API Key 放入安装资源，拿到安装包的人理论上可以提取；其他模型、语音、搜索和 LiveKit 凭据不随包分发。
+
 如果要回退或切换版本，不能只重新打开应用，必须先退出 MSFS 2024，再在项目根目录执行：
 
 ```powershell

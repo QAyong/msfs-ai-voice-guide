@@ -3,11 +3,13 @@ import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { loadConfig } from '../src/config/schema.js';
+import { applyBundledGeoEnvironment } from '../src/config/bundled-geo.js';
 
 // AgentServer forks job executors. Electron's executable must run those grandchildren
 // in Node mode instead of attempting to open another desktop window.
 process.env.ELECTRON_RUN_AS_NODE = '1';
 const resourcesPath = (process as NodeJS.Process & { resourcesPath?: string }).resourcesPath;
+applyBundledGeoEnvironment(resourcesPath);
 if (!process.env.MSFS_CLI_PATH) {
   const packagedCliPath = resourcesPath ? join(resourcesPath, 'msfs', 'msfs.exe') : undefined;
   const devRuntimeCliPath = join(process.cwd(), 'dev-runtime', 'msfs-cli', 'msfs.exe');

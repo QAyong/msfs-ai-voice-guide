@@ -51,7 +51,7 @@ const llmEnvironmentSchema = z.object({
 const msfsEnvironmentSchema = z.object({
   MSFS_CLI_PATH: optionalNonEmpty,
   MSFS_CLI_TIMEOUT_MS: boundedInteger(15_000, 500, 60_000),
-  MSFS_CLI_MAX_CONCURRENCY: boundedInteger(2, 1, 4),
+  MSFS_CLI_MAX_CONCURRENCY: boundedInteger(1, 1, 4),
   MSFS_TRACK_INTERVAL_MS: boundedInteger(3_000, 1_000, 60_000),
   MSFS_TRACK_MAX_POINTS: boundedInteger(120, 10, 120),
 });
@@ -87,7 +87,7 @@ const envSchema = z.object({
   BOCHA_SEARCH_TIMEOUT_MS: positiveInteger(defaultSearchTimeoutMs),
   MSFS_CLI_PATH: optionalNonEmpty,
   MSFS_CLI_TIMEOUT_MS: boundedInteger(15_000, 500, 60_000),
-  MSFS_CLI_MAX_CONCURRENCY: boundedInteger(2, 1, 4),
+  MSFS_CLI_MAX_CONCURRENCY: boundedInteger(1, 1, 4),
   MSFS_TRACK_INTERVAL_MS: boundedInteger(3_000, 1_000, 60_000),
   MSFS_TRACK_MAX_POINTS: boundedInteger(120, 10, 120),
 });

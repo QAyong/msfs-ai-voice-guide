@@ -44,7 +44,7 @@ describe('loadConfig', () => {
   it('MSFS 探索上下文使用独立默认值，不依赖 AI 服务配置', () => {
     expect(loadMsfsConfig({})).toEqual({
       timeoutMs: 15_000,
-      maxConcurrency: 2,
+      maxConcurrency: 1,
       trackIntervalMs: 3_000,
       trackMaximumPoints: 120,
     });
@@ -116,7 +116,7 @@ describe('loadConfig', () => {
     expect(config.msfs).toEqual({
       cliPath: 'tools/msfs.exe',
       timeoutMs: 15_000,
-      maxConcurrency: 2,
+      maxConcurrency: 1,
       trackIntervalMs: 3_000,
       trackMaximumPoints: 120,
     });

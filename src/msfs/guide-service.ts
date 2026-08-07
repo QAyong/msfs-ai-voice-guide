@@ -235,24 +235,23 @@ export class MsfsGuideService {
   }
 
   async getFlightSnapshot(signal?: AbortSignal): Promise<FlightSnapshotResult> {
-    const [batch, title, tailNumber] = await Promise.all([
-      this.client.execute(
-        ['simvar', 'batch', '--items', itemArgument(flightItems)],
-        simvarBatchDataSchema,
-        signal,
-      ),
-      this.client.execute(
-        ['simvar', 'get', '--name', 'TITLE', '--unit', 'string', '--datatype', 'string'],
-        stringSimvarDataSchema,
-        signal,
-      ),
-      this.client.execute(
-        ['simvar', 'get', '--name', 'ATC ID', '--unit', 'string', '--datatype', 'string'],
-        stringSimvarDataSchema,
-        signal,
-      ),
-    ]);
+    const batch = await this.client.execute(
+      ['simvar', 'batch', '--items', itemArgument(flightItems)],
+      simvarBatchDataSchema,
+      signal,
+    );
     if (batch.status !== 'ok') return this.rememberFailure(batch);
+
+    const title = await this.client.execute(
+      ['simvar', 'get', '--name', 'TITLE', '--unit', 'string', '--datatype', 'string'],
+      stringSimvarDataSchema,
+      signal,
+    );
+    const tailNumber = await this.client.execute(
+      ['simvar', 'get', '--name', 'ATC ID', '--unit', 'string', '--datatype', 'string'],
+      stringSimvarDataSchema,
+      signal,
+    );
 
     try {
       const values = byName(batch.data.items);

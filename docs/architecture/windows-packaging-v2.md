@@ -32,6 +32,7 @@ NSIS x64 Setup.exe
 
 - `livekit/livekit-server.exe` 与许可证；
 - `msfs/msfs.exe`、`msfsd.exe`、`SimConnect.dll`、CLI 组件清单和 Community Bridge；
+- `msfs/geo-config.json`，由打包时的 Geo Cloud 配置生成；
 - `tts/` 本地音色样例；
 - `native/global-push-to-talk.node`；
 - 应用图标、空凭据 `.env.example` 和总发布清单。
@@ -48,6 +49,12 @@ CLI、daemon、SimConnect DLL 和 Bridge 必须来自同一次暂存快照。`sc
 安装版从 `process.resourcesPath/msfs/msfs.exe` 调用 CLI，不读取开发目录，不注册全局 PATH，也不安装 Windows 服务。`msfs.exe` 按需启动唯一 `msfsd.exe`；应用真正退出时执行 `daemon stop --json`，失败或超时后仅对本项目的单例 `msfsd.exe` 使用 Windows 兼容兜底。安装器覆盖旧版本前执行相同停止流程。
 
 Bridge 仍由应用首次启动逻辑管理。普通用户写入标准 `Community2024/msfs-native-cli-route-bridge`；开发机保留“开发版本”和“应用版本”副本，但 MSFS 根目录只启用一个 Bridge。
+
+### Geo Cloud 配置
+
+`scripts/stage-geo-config.mjs` 在 `desktop:build` 期间从构建环境读取 `MSFS_GEO_CLOUD_BASE_URL` 和 `MSFS_GEO_API_KEY`，生成 `out/msfs/geo-config.json`。该文件随 `out/msfs` 进入安装包，主进程和 Agent Worker 启动时自动加载，最终用户不需要编辑 `.env` 或设置页。
+
+这是当前测试候选包的明确例外：Geo Cloud Key 会存在于安装资源中，因此拿到安装包的人理论上可以提取它。DeepSeek、豆包 STT/TTS、搜索服务和 LiveKit 的用户凭据仍不写入安装包。
 
 ## 构建命令和产物
 
@@ -82,8 +89,9 @@ Provider App ID、API Key、Access Token 和 Secret 统一使用密码输入框�
 4. 安装态 Electron 必须能从 ASAR 逻辑路径启动真实 `utilityProcess`。
 5. 打包后的 `msfs.exe status` 成功，并能执行 `daemon stop --json`。
 6. MSFS 组件清单中的每个哈希都与安装目录一致。
-7. `app.asar.unpacked` 的原生依赖不得超过 5,000 个文件或 160 MiB；超限直接失败。
-8. 对外只能有一个 `*-setup.exe`，同时生成 SHA-256。
+7. 安装目录中的 `resources/msfs/geo-config.json` 存在，并包含 Geo Cloud 配置字段；验证日志不得输出 Key 值。
+8. `app.asar.unpacked` 的原生依赖不得超过 5,000 个文件或 160 MiB；超限直接失败。
+9. 对外只能有一个 `*-setup.exe`，同时生成 SHA-256。
 
 报告写入：
 
@@ -107,7 +115,7 @@ Provider App ID、API Key、Access Token 和 Secret 统一使用密码输入框�
 
 ## 明确不做的事情
 
-- 不把开发者 API Key、`.env` 或绝对路径写入安装包。
+- 不把 DeepSeek、豆包 STT/TTS、搜索服务或 LiveKit 的开发者凭据、`.env` 或绝对路径写入安装包；MSFS Geo Cloud Key 仅作为当前测试候选包的明确内置配置例外。
 - 不把完整项目源码、测试、TypeScript 工具链或前端依赖作为后台运行依赖分发。
 - 不在用户第一次启动时解压完整 `node_modules`。
 - 不自动安装 CMake、Visual Studio、MSFS SDK 或全局 Node.js。

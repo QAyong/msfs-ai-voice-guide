@@ -12,12 +12,16 @@ import type {
 class FakeRunner implements MsfsProcessRunner {
   readonly calls: Array<readonly string[]> = [];
 
-  constructor(private readonly result: ProcessRunResult | Error) {}
+  constructor(
+    private readonly result: ProcessRunResult | Error | Array<ProcessRunResult | Error>,
+  ) {}
 
   async run(...[, args]: Parameters<MsfsProcessRunner['run']>): Promise<ProcessRunResult> {
     this.calls.push(args);
-    if (this.result instanceof Error) throw this.result;
-    return this.result;
+    const result = Array.isArray(this.result) ? this.result.shift() : this.result;
+    if (!result) throw new Error('Fake runner has no result');
+    if (result instanceof Error) throw result;
+    return result;
   }
 
   watch(): ProcessWatchHandle {
@@ -93,6 +97,31 @@ describe('MsfsCliClient', () => {
     await expect(spawnFailure.execute(['status'], z.unknown())).resolves.toMatchObject({
       code: 'MSFS_CLI_UNAVAILABLE',
     });
+  });
+
+  it('retries a timeout once before returning success', async () => {
+    const runner = new FakeRunner([
+      { exitCode: null, stdout: '', stderr: '', timedOut: true },
+      {
+        exitCode: 0,
+        stdout: '{"id":"retry","ok":true,"data":{"value":7}}',
+        stderr: '',
+        timedOut: false,
+      },
+    ]);
+    const client = new MsfsCliClient({
+      executablePath: process.execPath,
+      timeoutMs: 100,
+      maxConcurrency: 1,
+      runner,
+    });
+
+    await expect(client.execute(['status'], z.object({ value: z.number() }))).resolves.toEqual({
+      status: 'ok',
+      requestId: 'retry',
+      data: { value: 7 },
+    });
+    expect(runner.calls).toHaveLength(2);
   });
 });
 

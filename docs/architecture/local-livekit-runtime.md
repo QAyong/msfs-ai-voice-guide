@@ -68,7 +68,7 @@ sequenceDiagram
 - Provider 凭据与 LiveKit Secret 分属不同边界：Provider 凭据只可在可信设置 Utility Window 中默认遮罩回显；主助手与远程网页仍不可读取。
 - LiveKit Server 仅接收同机回环连接，不承担互联网认证或多人隔离服务。
 - 本机 API Secret 不是对设备所有者的防护承诺；它用于防止不可信 Renderer 与远程网页获得签发能力。
-- 安装包不得内置供应商 API Key。用户密钥与未来账号/订阅模式必须独立设计。
+- 安装包不得内置 DeepSeek、豆包 STT/TTS、搜索服务或 LiveKit 的供应商 API Key。当前测试候选包为让用户免配置使用 MSFS Geo Cloud，明确内置该项 Key；它不属于 LiveKit 运行时凭据，且具有可被安装包持有者提取的风险。
 
 ## 官方文档映射
 
