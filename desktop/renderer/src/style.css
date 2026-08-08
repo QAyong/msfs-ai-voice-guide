@@ -401,7 +401,7 @@ button {
   background: #f1f6ff;
 }
 .bubble {
-  max-width: 92%;
+  max-width: 96%;
   margin: 0;
   padding: 8px 10px;
   border-radius: 8px;
@@ -528,12 +528,14 @@ button {
 .guide-reply {
   display: flex;
   align-self: flex-start;
-  max-width: 92%;
+  width: 100%;
+  max-width: 100%;
   flex-direction: column;
   gap: 7px;
 }
 .guide-reply .bubble {
   width: fit-content;
+  max-width: 100%;
   align-self: flex-start;
 }
 .assistant-activity {
@@ -1236,7 +1238,6 @@ button {
 }
 .settings-content button,
 .settings-content input,
-.settings-content select,
 .settings-content summary {
   -webkit-app-region: no-drag;
   app-region: no-drag;
@@ -1471,17 +1472,6 @@ button {
   color: #4a5769;
   font-size: 11px;
   font-weight: 700;
-}
-.settings-select-row select {
-  min-width: 112px;
-  max-width: 58%;
-  border: 1px solid rgba(33, 58, 96, 0.14);
-  border-radius: 7px;
-  background: #fff;
-  color: #2d3746;
-  font: inherit;
-  font-weight: 600;
-  padding: 5px 7px;
 }
 .push-to-talk-picker {
   display: grid;
@@ -2050,34 +2040,6 @@ button {
   cursor: not-allowed;
   opacity: 0.55;
 }
-.service-field-control--select {
-  padding-right: 6px;
-}
-.service-field-control select {
-  width: 100%;
-  min-width: 0;
-  border: 0;
-  background: transparent;
-  outline: 0;
-  color: #2d3746;
-  font: inherit;
-  font-weight: 500;
-  padding: 4px 0;
-  text-align: left;
-  appearance: none;
-  cursor: pointer;
-}
-.service-field-control select:focus {
-  border-color: transparent;
-}
-.service-field-control select option {
-  color: #2d3746;
-}
-.service-field-control--select > svg {
-  flex: 0 0 auto;
-  color: #60708a;
-  pointer-events: none;
-}
 .tts-voice-picker {
   display: grid;
   gap: 5px;
@@ -2092,15 +2054,21 @@ button {
 .tts-voice-picker-row > .service-field {
   min-width: 0;
 }
-.tts-voice-select-field {
+.settings-dropdown {
   position: relative;
   z-index: 2;
-}
-.tts-voice-select-control {
-  position: relative;
   min-width: 0;
 }
-.tts-voice-select-trigger {
+.settings-select-row > .settings-dropdown-control {
+  min-width: 112px;
+  flex: 0 1 58%;
+}
+.settings-dropdown-control {
+  position: relative;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+.settings-dropdown-trigger {
   display: flex;
   width: 100%;
   min-width: 0;
@@ -2118,21 +2086,25 @@ button {
   font-weight: 500;
   text-align: left;
 }
-.tts-voice-select-trigger:hover,
-.tts-voice-select-trigger[aria-expanded='true'] {
+.settings-dropdown-trigger:hover:not(:disabled),
+.settings-dropdown-trigger[aria-expanded='true'] {
   border-color: #2563eb;
 }
-.tts-voice-select-trigger > span {
+.settings-dropdown-trigger:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+.settings-dropdown-trigger > span {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.tts-voice-select-trigger > svg {
+.settings-dropdown-trigger > svg {
   flex: 0 0 auto;
   color: #60708a;
 }
-.tts-voice-select-menu {
+.settings-dropdown-menu {
   position: absolute;
   z-index: 20;
   top: calc(100% + 4px);
@@ -2146,7 +2118,7 @@ button {
   background: #fff;
   box-shadow: 0 10px 24px rgba(33, 58, 96, 0.16);
 }
-.tts-voice-select-option {
+.settings-dropdown-option {
   display: flex;
   width: 100%;
   min-height: 42px;
@@ -2162,31 +2134,35 @@ button {
   font: inherit;
   text-align: left;
 }
-.tts-voice-select-option:hover,
-.tts-voice-select-option[aria-selected='true'] {
+.settings-dropdown-option:hover:not(:disabled),
+.settings-dropdown-option[aria-selected='true'] {
   background: rgba(37, 99, 235, 0.09);
   color: #2454a4;
 }
-.tts-voice-select-option > span {
+.settings-dropdown-option:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+.settings-dropdown-option > span {
   display: flex;
   min-width: 0;
   flex-direction: column;
   gap: 2px;
 }
-.tts-voice-select-option strong,
-.tts-voice-select-option small {
+.settings-dropdown-option strong,
+.settings-dropdown-option small {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.tts-voice-select-option strong {
+.settings-dropdown-option strong {
   font-size: 10px;
 }
-.tts-voice-select-option small {
+.settings-dropdown-option small {
   color: #7a8494;
   font-size: 9px;
 }
-.tts-voice-select-option > svg {
+.settings-dropdown-option > svg {
   flex: 0 0 auto;
   color: #2563eb;
 }
@@ -2454,9 +2430,10 @@ button {
   .tts-voice-preview-button {
     width: 100%;
   }
-  .settings-select-row select {
+  .settings-select-row > .settings-dropdown-control {
     width: 100%;
-    max-width: none;
+    min-width: 0;
+    flex-basis: 100%;
   }
   .diagnostics-row {
     align-items: flex-start;

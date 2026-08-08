@@ -2,6 +2,7 @@ import {
   StrictMode,
   useCallback,
   useEffect,
+  useId,
   useLayoutEffect,
   useMemo,
   useRef,
@@ -1158,16 +1159,16 @@ const SettingsDialog = ({ onClose, preferences, savePreferences }: SettingsDialo
                   {english ? 'Apply the interface language after saving.' : '保存后应用界面语言。'}
                 </small>
               </div>
-              <label className="settings-select-row">
-                <span>{english ? 'Project language' : '项目语言'}</span>
-                <select
-                  value={draft.locale}
-                  onChange={(event) => updateDraftLocale(event.target.value as SupportedLocale)}
-                >
-                  <option value="zh-CN">简体中文</option>
-                  <option value="en-US">English</option>
-                </select>
-              </label>
+              <SettingsDropdown
+                className="settings-select-row"
+                label={english ? 'Project language' : '项目语言'}
+                value={draft.locale}
+                options={[
+                  { value: 'zh-CN', label: '简体中文' },
+                  { value: 'en-US', label: 'English' },
+                ]}
+                onChange={(value) => updateDraftLocale(value as SupportedLocale)}
+              />
               <div className="settings-section-heading">
                 <strong>{english ? 'Flight experience' : '飞行体验'}</strong>
               </div>
@@ -1228,21 +1229,18 @@ const SettingsDialog = ({ onClose, preferences, savePreferences }: SettingsDialo
               <div className="settings-section-heading">
                 <strong>{english ? 'Explore sources' : '探索来源'}</strong>
               </div>
-              <label className="settings-select-row">
-                <span>{english ? 'Encyclopedia' : '百科来源'}</span>
-                <select
-                  value={draft.exploreEncyclopedia}
-                  onChange={(event) =>
-                    updateDraft(
-                      'exploreEncyclopedia',
-                      event.target.value as Preferences['exploreEncyclopedia'],
-                    )
-                  }
-                >
-                  <option value="wikipedia">Wikipedia</option>
-                  <option value="baidu_baike">{english ? 'Baidu Baike' : '百度百科'}</option>
-                </select>
-              </label>
+              <SettingsDropdown
+                className="settings-select-row"
+                label={english ? 'Encyclopedia' : '百科来源'}
+                value={draft.exploreEncyclopedia}
+                options={[
+                  { value: 'wikipedia', label: 'Wikipedia' },
+                  { value: 'baidu_baike', label: english ? 'Baidu Baike' : '百度百科' },
+                ]}
+                onChange={(value) =>
+                  updateDraft('exploreEncyclopedia', value as Preferences['exploreEncyclopedia'])
+                }
+              />
               <div
                 className="explore-platform-settings"
                 role="group"
@@ -1526,12 +1524,22 @@ const SettingsDialog = ({ onClose, preferences, savePreferences }: SettingsDialo
                 )}
                 <div className="tts-voice-picker">
                   <div className="tts-voice-picker-row">
-                    <TtsVoiceSelectField
+                    <SettingsDropdown
+                      className="service-field"
                       label={english ? 'TTS voice' : '豆包 TTS 音色'}
                       value={ttsVoiceSelectValue}
-                      voices={ttsVoiceOptions}
-                      customLabel={english ? 'Custom speaker ID' : '自定义 speaker ID'}
-                      customValue={customTtsVoiceValue}
+                      options={[
+                        ...ttsVoiceOptions.map((voice) => ({
+                          value: voice.speaker,
+                          label: voice.name,
+                          description: voice.speaker,
+                        })),
+                        {
+                          value: customTtsVoiceValue,
+                          label: english ? 'Custom speaker ID' : '自定义 speaker ID',
+                          description: english ? 'Enter a speaker ID manually' : '手动填写 speaker ID',
+                        },
+                      ]}
                       onChange={(value) =>
                         setServices((current) => ({
                           ...current,
@@ -1660,27 +1668,24 @@ const SettingsDialog = ({ onClose, preferences, savePreferences }: SettingsDialo
                 }
                 title={english ? 'Web search' : '网页搜索'}
               >
-                <label className="service-field">
-                  <span>{english ? 'Provider' : '服务商'}</span>
-                  <span className="service-field-control service-field-control--select">
-                    <select
-                      value={services.search.provider}
-                      onChange={(event) => {
-                        const provider = event.target.value as SearchProviderName;
-                        setServices((current) => ({ ...current, search: { provider } }));
-                        setServiceTests((current) => {
-                          const next = { ...current };
-                          delete next.search;
-                          return next;
-                        });
-                      }}
-                    >
-                      <option value="volcengine">{english ? 'Volcengine' : '豆包搜索'}</option>
-                      <option value="bocha">{english ? 'Bocha' : '博查搜索'}</option>
-                    </select>
-                    <CaretDownIcon size={14} weight="bold" aria-hidden="true" />
-                  </span>
-                </label>
+                <SettingsDropdown
+                  className="service-field"
+                  label={english ? 'Provider' : '服务商'}
+                  value={services.search.provider}
+                  options={[
+                    { value: 'volcengine', label: english ? 'Volcengine' : '豆包搜索' },
+                    { value: 'bocha', label: english ? 'Bocha' : '博查搜索' },
+                  ]}
+                  onChange={(value) => {
+                    const provider = value as SearchProviderName;
+                    setServices((current) => ({ ...current, search: { provider } }));
+                    setServiceTests((current) => {
+                      const next = { ...current };
+                      delete next.search;
+                      return next;
+                    });
+                  }}
+                />
                 <ServiceField
                   label={english ? 'API Key (optional)' : 'API Key（可选）'}
                   configured={credentialStatus.configured[searchCredentialKey]}
@@ -1962,33 +1967,56 @@ const ServiceField = ({
   );
 };
 
-const TtsVoiceSelectField = ({
-  customLabel,
-  customValue,
-  label,
-  onChange,
-  value,
-  voices,
-}: {
-  customLabel: string;
-  customValue: string;
+type SettingsDropdownOption = {
+  value: string;
+  label: string;
+  description?: string;
+  disabled?: boolean;
+};
+
+type SettingsDropdownProps = {
+  className?: string;
   label: string;
   onChange(value: string): void;
+  options: ReadonlyArray<SettingsDropdownOption>;
   value: string;
-  voices: ReadonlyArray<DesktopTtsVoiceSample>;
-}) => {
+};
+
+const SettingsDropdown = ({
+  className,
+  label,
+  onChange,
+  options,
+  value,
+}: SettingsDropdownProps) => {
   const [open, setOpen] = useState(false);
+  const selectedIndex = options.findIndex((option) => option.value === value);
+  const firstEnabledIndex = options.findIndex((option) => !option.disabled);
+  const fallbackIndex = firstEnabledIndex >= 0 ? firstEnabledIndex : -1;
+  const activeIndex = selectedIndex >= 0 ? selectedIndex : fallbackIndex;
+  const [highlightedIndex, setHighlightedIndex] = useState(activeIndex);
   const rootRef = useRef<HTMLDivElement | null>(null);
-  const selectedVoice = voices.find((voice) => voice.speaker === value);
+  const triggerRef = useRef<HTMLButtonElement | null>(null);
+  const optionRefs = useRef<Array<HTMLButtonElement | null>>([]);
+  const focusHighlightedOptionRef = useRef(false);
+  const menuId = useId();
+
+  useEffect(() => {
+    if (!open || !focusHighlightedOptionRef.current || highlightedIndex < 0) return;
+    focusHighlightedOptionRef.current = false;
+    optionRefs.current[highlightedIndex]?.focus();
+  }, [highlightedIndex, open]);
 
   useEffect(() => {
     if (!open) return;
     const handlePointerDown = (event: PointerEvent) => {
-      if (rootRef.current?.contains(event.target as Node)) return;
-      setOpen(false);
+      if (!rootRef.current?.contains(event.target as Node)) setOpen(false);
     };
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setOpen(false);
+      if (event.key === 'Escape') {
+        setOpen(false);
+        triggerRef.current?.focus();
+      }
     };
     document.addEventListener('pointerdown', handlePointerDown);
     document.addEventListener('keydown', handleKeyDown);
@@ -1998,56 +2026,133 @@ const TtsVoiceSelectField = ({
     };
   }, [open]);
 
-  const chooseVoice = (speaker: string) => {
-    onChange(speaker);
+  const findEnabledIndex = (start: number, direction: 1 | -1): number => {
+    if (options.length === 0) return -1;
+    let index = start;
+    for (let step = 0; step < options.length; step += 1) {
+      index = (index + direction + options.length) % options.length;
+      if (!options[index]?.disabled) return index;
+    }
+    return -1;
+  };
+
+  const focusOption = (index: number) => {
+    if (index < 0 || options[index]?.disabled) return;
+    focusHighlightedOptionRef.current = true;
+    setHighlightedIndex(index);
+  };
+
+  const chooseOption = (option: SettingsDropdownOption) => {
+    if (option.disabled) return;
+    onChange(option.value);
     setOpen(false);
+    triggerRef.current?.focus();
+  };
+
+  const openMenu = () => {
+    setHighlightedIndex(activeIndex);
+    setOpen(true);
+  };
+
+  const handleTriggerKeyDown = (event: ReactKeyboardEvent<HTMLButtonElement>) => {
+    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+      event.preventDefault();
+      if (!open) {
+        openMenu();
+        if (activeIndex >= 0) focusOption(activeIndex);
+        return;
+      }
+      const nextIndex = findEnabledIndex(
+        highlightedIndex >= 0 ? highlightedIndex : activeIndex,
+        event.key === 'ArrowDown' ? 1 : -1,
+      );
+      focusOption(nextIndex);
+      return;
+    }
+    if (event.key === 'Escape' && open) {
+      event.preventDefault();
+      setOpen(false);
+    }
+    if (event.key === 'Tab') setOpen(false);
+  };
+
+  const handleOptionKeyDown = (
+    event: ReactKeyboardEvent<HTMLButtonElement>,
+    index: number,
+  ) => {
+    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+      event.preventDefault();
+      focusOption(findEnabledIndex(index, event.key === 'ArrowDown' ? 1 : -1));
+      return;
+    }
+    if (event.key === 'Home' || event.key === 'End') {
+      event.preventDefault();
+      const nextIndex =
+        event.key === 'Home'
+          ? options.findIndex((option) => !option.disabled)
+          : [...options].findLastIndex((option) => !option.disabled);
+      focusOption(nextIndex);
+      return;
+    }
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      const option = options[index];
+      if (option) chooseOption(option);
+      return;
+    }
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      setOpen(false);
+      triggerRef.current?.focus();
+      return;
+    }
+    if (event.key === 'Tab') setOpen(false);
   };
 
   return (
-    <div className="service-field tts-voice-select-field" ref={rootRef}>
+    <div className={`settings-dropdown ${className ?? ''}`.trim()} ref={rootRef}>
       <span>{label}</span>
-      <div className="tts-voice-select-control">
+      <div className="settings-dropdown-control">
         <button
+          ref={triggerRef}
           type="button"
-          className="tts-voice-select-trigger no-drag"
+          className="settings-dropdown-trigger no-drag"
           aria-expanded={open}
           aria-haspopup="listbox"
-          onClick={() => setOpen((current) => !current)}
+          aria-controls={menuId}
+          aria-label={label}
+          disabled={options.length === 0}
+          onClick={() => (open ? setOpen(false) : openMenu())}
+          onKeyDown={handleTriggerKeyDown}
         >
-          <span>{selectedVoice?.name ?? customLabel}</span>
+          <span>{options.find((option) => option.value === value)?.label ?? value}</span>
           <CaretDownIcon size={14} weight="bold" aria-hidden="true" />
         </button>
         {open ? (
-          <div className="tts-voice-select-menu" role="listbox" aria-label={label}>
-            {voices.map((voice) => (
+          <div id={menuId} className="settings-dropdown-menu" role="listbox" aria-label={label}>
+            {options.map((option, index) => (
               <button
-                key={voice.speaker}
+                key={option.value}
+                ref={(element) => {
+                  optionRefs.current[index] = element;
+                }}
                 type="button"
-                className="tts-voice-select-option no-drag"
+                className="settings-dropdown-option no-drag"
                 role="option"
-                aria-selected={voice.speaker === value}
-                onClick={() => chooseVoice(voice.speaker)}
+                aria-selected={option.value === value}
+                aria-disabled={option.disabled || undefined}
+                tabIndex={index === highlightedIndex ? 0 : -1}
+                disabled={option.disabled}
+                onClick={() => chooseOption(option)}
+                onKeyDown={(event) => handleOptionKeyDown(event, index)}
               >
                 <span>
-                  <strong>{voice.name}</strong>
-                  <small>{voice.speaker}</small>
+                  <strong>{option.label}</strong>
+                  {option.description ? <small>{option.description}</small> : null}
                 </span>
-                {voice.speaker === value ? <CheckIcon size={14} weight="bold" /> : null}
+                {option.value === value ? <CheckIcon size={14} weight="bold" /> : null}
               </button>
             ))}
-            <button
-              type="button"
-              className="tts-voice-select-option no-drag"
-              role="option"
-              aria-selected={value === customValue}
-              onClick={() => chooseVoice(customValue)}
-            >
-              <span>
-                <strong>{customLabel}</strong>
-                <small>手动填写 speaker ID</small>
-              </span>
-              {value === customValue ? <CheckIcon size={14} weight="bold" /> : null}
-            </button>
           </div>
         ) : null}
       </div>
