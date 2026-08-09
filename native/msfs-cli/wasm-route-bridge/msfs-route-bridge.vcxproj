@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|MSFS"><Configuration>Debug</Configuration><Platform>MSFS</Platform></ProjectConfiguration>
+    <ProjectConfiguration Include="Release|MSFS"><Configuration>Release</Configuration><Platform>MSFS</Platform></ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <VCProjectVersion>16.0</VCProjectVersion>
+    <ProjectGuid>{A87BA2D8-937A-49C6-A7D2-C5C190AC476A}</ProjectGuid>
+    <RootNamespace>MsfsRouteBridge</RootNamespace>
+    <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|MSFS'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType><UseDebugLibraries>true</UseDebugLibraries><PlatformToolset>MSFS2024</PlatformToolset><CharacterSet>MultiByte</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|MSFS'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType><UseDebugLibraries>false</UseDebugLibraries><PlatformToolset>MSFS2024</PlatformToolset><WholeProgramOptimization>true</WholeProgramOptimization><CharacterSet>MultiByte</CharacterSet>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="ExtensionSettings" />
+  <ImportGroup Label="Shared" />
+  <ImportGroup Condition="'$(Configuration)|$(Platform)'=='Debug|MSFS'" Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Condition="'$(Configuration)|$(Platform)'=='Release|MSFS'" Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <PropertyGroup Label="UserMacros" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|MSFS'">
+    <TargetName>msfs-route-bridge</TargetName><TargetExt>.wasm</TargetExt><OutDir>$(MSBuildProjectDirectory)\build-msfs\$(Configuration)\</OutDir><IntDir>$(MSBuildProjectDirectory)\build-msfs\obj\$(Configuration)\</IntDir><IncludePath>$(MSFS_IncludePath)</IncludePath>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|MSFS'">
+    <TargetName>msfs-route-bridge</TargetName><TargetExt>.wasm</TargetExt><OutDir>$(MSBuildProjectDirectory)\build-msfs\$(Configuration)\</OutDir><IntDir>$(MSBuildProjectDirectory)\build-msfs\obj\$(Configuration)\</IntDir><IncludePath>$(MSFS_IncludePath)</IncludePath>
+  </PropertyGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|MSFS'">
+    <ClCompile><WarningLevel>Level3</WarningLevel><Optimization>MaxSpeed</Optimization><FunctionLevelLinking>true</FunctionLevelLinking><IntrinsicFunctions>true</IntrinsicFunctions><SDLCheck>true</SDLCheck><ConformanceMode>true</ConformanceMode><BufferSecurityCheck>false</BufferSecurityCheck><ExceptionHandling>false</ExceptionHandling><DebugInformationFormat>false</DebugInformationFormat><LanguageStandard>stdcpp20</LanguageStandard><PreprocessorDefinitions>__wasi__;_STRING_H_CPLUSPLUS_98_CONFORMANCE_;_WCHAR_H_CPLUSPLUS_98_CONFORMANCE_;_LIBCPP_HAS_NO_THREADS;_WINDLL;%(PreprocessorDefinitions)</PreprocessorDefinitions></ClCompile>
+    <Link><NoEntryPoint>true</NoEntryPoint><OutputFile>$(OutDir)$(TargetName)$(TargetExt)</OutputFile><GenerateDebugInformation>false</GenerateDebugInformation></Link>
+  </ItemDefinitionGroup>
+  <ItemGroup><ClCompile Include="src\route_bridge.cpp" /></ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ImportGroup Label="ExtensionTargets" />
+</Project>

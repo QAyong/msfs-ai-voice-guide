@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<AssetPackage Version="0.1.0">
+    <PackageOrderHint>CUSTOM_INSTRUMENT</PackageOrderHint>
+    <ItemSettings>
+        <ContentType>MISC</ContentType>
+        <Title>MSFS Native CLI EFB Route Bridge</Title>
+        <Manufacturer>MSFS Native CLI</Manufacturer>
+        <Creator>MSFS Native CLI</Creator>
+        <Description>Standalone WASM bridge for reading the MSFS 2024 EFB flight plan.</Description>
+    </ItemSettings>
+    <Flags>
+        <VisibleInStore>false</VisibleInStore>
+        <CanBeReferenced>false</CanBeReferenced>
+    </Flags>
+    <Dependencies />
+    <AssetGroups>
+        <AssetGroup Name="RouteBridgeModule">
+            <Type>Copy</Type>
+            <Flags>
+                <FSXCompatibility>false</FSXCompatibility>
+            </Flags>
+            <AssetDir>PackageSources\modules</AssetDir>
+            <OutputDir>modules</OutputDir>
+        </AssetGroup>
+    </AssetGroups>
+</AssetPackage>

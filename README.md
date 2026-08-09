@@ -51,7 +51,7 @@ pnpm run verify
 
 当前已完成工程工具链、LiveKit SDK 类型契约、火山 Provider 适配器、LiveKit 会话入口、`searchWeb` 和 7 个只读 MSFS 工具；桌面端还提供 MSFS 游戏连接状态、Community2024 配置检测和 8 个工具的独立开关。
 
-开发态可在 `.env` 中通过 `MSFS_CLI_PATH` 指向本地 `msfs.exe`；未配置时，Electron Worker 优先使用项目根目录受 Git 忽略的 `dev-runtime/msfs-cli/msfs.exe`，再回退到 `resources/msfs/msfs.exe`。执行 `pnpm msfs:stage:dev` 会刷新开发快照；`pnpm desktop:dev` 还会自动把开发版 bridge 切换为当前 MSFS 生效版本。安装态默认从应用私有资源目录解析。CLI 只连接真实的 MSFS 2024 SimConnect；游戏未启动或未加载飞行时，前端会显示不可读取状态而不会返回模拟数据。EFB 航路还要求在 MSFS 2024 的 `Community2024` 中安装配套 route bridge。CLI 是独立发布依赖：正式打包必须使用经校验的发布目录，不得依赖开发机上的 `D:\code\微软模拟飞行cli`；完整约定见 [MSFS CLI 发布物集成](docs/architecture/msfs-cli-release-integration.md)。
+CLI 源码位于本仓库的 `native/msfs-cli/`，后续原生功能均在此处维护。开发态可在 `.env` 中通过 `MSFS_CLI_PATH` 指向本地 `msfs.exe`；未配置时，Electron Worker 优先使用项目根目录受 Git 忽略的 `dev-runtime/msfs-cli/msfs.exe`，再回退到 `resources/msfs/msfs.exe`。执行 `pnpm msfs:stage:dev` 会从 `native/msfs-cli/build/` 刷新开发快照；`pnpm desktop:dev` 还会自动把开发版 bridge 切换为当前 MSFS 生效版本。安装态默认从应用私有资源目录解析。CLI 只连接真实的 MSFS 2024 SimConnect；游戏未启动或未加载飞行时，前端会显示不可读取状态而不会返回模拟数据。EFB 航路还要求在 MSFS 2024 的 `Community2024` 中安装配套 route bridge。正式打包必须使用 `MSFS_CLI_DISTRIBUTION_DIR` 指向经校验的同批发布快照；完整约定见 [MSFS CLI 发布物集成](docs/architecture/msfs-cli-release-integration.md)。
 
 ## Windows x64 打包与版本切换
 

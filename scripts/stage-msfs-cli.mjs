@@ -10,12 +10,19 @@ try {
   // CI and release builds may provide paths through the process environment.
 }
 
-const argumentsWithoutFlags = process.argv.slice(2).filter((value) => value !== '--strict');
+const argumentsWithoutFlags = process.argv
+  .slice(2)
+  .filter((value) => value !== '--strict' && value !== '--release');
+const releaseBuild =
+  process.argv.includes('--release') || process.env.MSFS_CLI_REQUIRE_RELEASE_SNAPSHOT === 'true';
 const strict =
-  process.argv.includes('--strict') || process.env.MSFS_CLI_REQUIRE_COMMUNITY_PACKAGE === 'true';
+  process.argv.includes('--strict') ||
+  releaseBuild ||
+  process.env.MSFS_CLI_REQUIRE_COMMUNITY_PACKAGE === 'true';
 const configuredExecutable = process.env.MSFS_CLI_PATH?.trim();
 const configuredDistribution = process.env.MSFS_CLI_DISTRIBUTION_DIR?.trim();
-const adjacentBuildDirectory = resolve(projectRoot, '..', '微软模拟飞行cli', 'build');
+const nativeCliProjectDirectory = resolve(projectRoot, 'native', 'msfs-cli');
+const nativeCliBuildDirectory = resolve(nativeCliProjectDirectory, 'build');
 const devDistributionDirectory = resolve(projectRoot, 'dev-runtime', 'msfs-cli');
 const targets =
   argumentsWithoutFlags.length > 0
@@ -27,10 +34,15 @@ const devDistributionAvailable =
   (await access(devDistributionDirectory)
     .then(() => true)
     .catch(() => false));
+if (releaseBuild && !configuredDistribution) {
+  throw new Error(
+    '候选或正式发布必须设置 MSFS_CLI_DISTRIBUTION_DIR，指向同一构建批次的已验证 CLI 发布快照。',
+  );
+}
 const sourceDirectory = configuredDistribution
   ? resolve(configuredDistribution)
   : stagingDevRuntime
-    ? adjacentBuildDirectory
+    ? nativeCliBuildDirectory
     : devDistributionAvailable
       ? devDistributionDirectory
       : configuredExecutable
@@ -39,7 +51,7 @@ const sourceDirectory = configuredDistribution
               ? configuredExecutable
               : resolve(projectRoot, configuredExecutable),
           )
-        : adjacentBuildDirectory;
+        : nativeCliBuildDirectory;
 
 for (const target of targets) {
   if (target === sourceDirectory || relative(target, sourceDirectory) === '') {
@@ -53,10 +65,8 @@ const sourceCommunityPackage = resolve(
   'community',
   'msfs-native-cli-route-bridge',
 );
-const adjacentCommunityPackage = resolve(
-  projectRoot,
-  '..',
-  '微软模拟飞行cli',
+const nativeCommunityPackage = resolve(
+  nativeCliProjectDirectory,
   'wasm-route-bridge',
   'build',
   'package-tool',
@@ -69,7 +79,7 @@ const communityPackageSource = configuredCommunityPackage
   ? resolve(configuredCommunityPackage)
   : sourceContainsCommunityPackage || strict
     ? sourceCommunityPackage
-    : adjacentCommunityPackage;
+    : nativeCommunityPackage;
 
 const requiredFiles = ['msfs.exe', 'msfsd.exe'];
 const optionalFiles = ['SimConnect.dll'];

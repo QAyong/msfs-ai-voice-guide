@@ -37,6 +37,6 @@ MSFS 2024 已经进入飞行场景，命令行适配层可以读取 SimConnect �
 
 - `desktop:dev` 不能只依赖 `process.resourcesPath`；开发态必须能解析项目根目录的 `resources/msfs/msfs.exe`。
 - 正式构建前先执行 `pnpm msfs:stage`，或由 `pnpm desktop:build` 完成暂存，并检查 `resources/msfs/msfs.exe`、`msfsd.exe` 存在。
-- CI、候选包和正式包必须设置 `MSFS_CLI_DISTRIBUTION_DIR` 指向经过验证的发布目录，不得依赖开发机绝对路径或相邻项目的未版本化 `build/`。
+- CI、候选包和正式包必须设置 `MSFS_CLI_DISTRIBUTION_DIR` 指向经过验证的发布快照；不得依赖开发机绝对路径、旧备份目录或 `native/msfs-cli/build/` 等未版本化构建目录。
 - 安装态必须从应用私有资源目录解析 CLI；不能把开发态回退路径写入安装器配置。
 - `msfs-native-cli-route-bridge` 不由当前暂存脚本自动安装；正式安装包仍需单独处理 Community Package 的携带、版本校验、安装、升级和卸载。

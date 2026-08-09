@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Version="2" Name="msfs-native-cli-route-bridge" FolderName="Packages" MetadataFolderName="PackagesMetadata">
+    <OutputDirectory>.</OutputDirectory>
+    <TemporaryOutputDirectory>_PackageInt</TemporaryOutputDirectory>
+    <Packages>
+        <Package>PackageDefinitions\msfs-native-cli-route-bridge.xml</Package>
+    </Packages>
+</Project>

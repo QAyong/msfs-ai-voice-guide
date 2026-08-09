@@ -1,7 +1,7 @@
 # Spec-019：单 SimConnect 会话的 Pipe 等待修复
 
 **日期：** 2026-08-08  
-**状态：** 已确认，待实施  
+**状态：** 已实施；真实 MSFS 前端回归待执行
 **优先级：** P0
 
 ## 背景
@@ -48,7 +48,7 @@
 
 ## 实施要求
 
-修改 `D:\code\微软模拟飞行cli\src\common\win_pipe.cpp` 中客户端等待 Pipe 的逻辑：
+修改 `native/msfs-cli/src/common/win_pipe.cpp` 中客户端等待 Pipe 的逻辑：
 
 1. daemon 存在且正在处理前一个请求时，继续等待；
 2. daemon 不存在、Pipe 真正不可用或等待达到现有 CLI 调用的可接受时限时，才返回失败；
@@ -60,9 +60,19 @@
 - [ ] 一个慢的 AI MSFS 请求执行期间，前端连接检测不再因为 500ms Pipe 忙碌而显示“游戏未连接”。
 - [ ] 真实退出 MSFS 或无法打开 SimConnect 时，前端仍会在下一次检测中显示“游戏未连接”。
 - [ ] 连续完成至少 10 次会调用 MSFS 工具的 AI 对话，前端连接状态不会因 Pipe 忙碌而错误变化。
-- [ ] `msfs.exe`、`msfsd.exe` 没有残留进程，所有 CLI 调用都有结束结果。
-- [ ] 原生 Named Pipe 集成测试覆盖“前一个请求尚未完成时，后一个请求等待并获得结果”的场景。
+- [x] `msfs.exe`、`msfsd.exe` 没有残留进程，所有 CLI 调用都有结束结果。
+- [x] 原生 Named Pipe 集成测试覆盖“前一个请求尚未完成时，后一个请求等待并获得结果”的场景。
 - [ ] 开发态和安装态均完成一次真实 MSFS 2024 回归。
+
+## 实施记录（2026-08-09）
+
+`native/msfs-cli/src/common/win_pipe.cpp` 已将忙碌 Pipe 的总等待窗口设为 10 秒，低于桌面端 15 秒的 CLI 调用预算。客户端首次直接打开 Pipe 时若收到 `ERROR_FILE_NOT_FOUND`，仍会立即走既有的 daemon 启动路径；只有已经确认 `ERROR_PIPE_BUSY` 后，才会在 daemon 关闭旧实例、创建新实例的短暂 `ERROR_FILE_NOT_FOUND` 空档内继续等待至截止时间。`CreateFileW` 与 `WaitNamedPipeW` 的竞争同样受该截止时间保护。
+
+`named_pipe_test` 现在让第一个请求占用 Pipe 800ms，并验证第二个请求等待后获得响应；旧的 500ms 实现会在该测试中失败。2026-08-09 的新目录 CTest 已通过该测试、CLI 契约测试和其余原生测试。
+
+同日的 MSFS 驾驶舱纯后端验证中，EFB 读取返回 `source: "efb"` 与 `CUSTD → CUSTA`。随后连续 10 轮、每轮并发一个 EFB 读取和一个 SimVar 读取，共 20/20 成功，未出现 `DAEMON_UNAVAILABLE` 或 `SIM_NOT_READY`；该验证没有启动前端。极端 120 路独立 CLI 并发会使单 SimConnect 会话出现 `SIM_NOT_READY`，但没有重现本规格处理的 Pipe 假断连，重启 daemon 后无需重启游戏即可恢复。该容量问题留待后续架构决策，不在本规格中引入多 SimConnect 会话或新网关。
+
+真实 MSFS 前端压力回归仍按上面的未勾选项执行。
 
 ## 场景描述
 

@@ -1,18 +1,18 @@
 # MSFS CLI 发布物集成
 
-**最后更新：** 2026-08-07
-**状态：** V2 x64 候选打包链路、CLI 快照清单、安装态依赖/子进程/daemon 校验和开发/应用 Bridge 隔离已实现；代码签名与自动更新未实现
+**最后更新：** 2026-08-09
+**状态：** V2 x64 候选打包链路、CLI 快照清单、安装态依赖/子进程/daemon 校验和开发/应用 Bridge 隔离已实现；候选发布已增加“官方构建输入快照 + 游戏内 EFB 验收”门禁；代码签名与自动更新未实现
 
 ## 目的
 
-`D:\code\微软模拟飞行cli` 是本项目的独立原生依赖。它提供 Windows CLI、守护进程和读取 EFB 航路所需的 Community Package。本项目消费其已经构建并验证的发布物；不在运行时调用其源码，也不将两个仓库合并为 pnpm workspace。
+`native/msfs-cli/` 是本仓库内受统一版本控制的原生子项目。它提供 Windows CLI、守护进程和读取 EFB 航路所需的 Community Package。Electron 不在运行时调用其源码，而是携带其同一构建批次、经验证的发布物。旧独立目录仅保留为迁移备份，不再作为构建或修改来源。
 
 pnpm workspace 只管理本仓库的 Node.js 依赖，不能替代 CLI 所需的 CMake、MSFS SDK、WASM 官方工具链和 Community Package 安装流程。
 
 ## 依赖边界
 
 ```text
-微软模拟飞行cli（独立构建、测试和发布）
+native/msfs-cli（同仓库构建、测试和发布）
         ↓ 已验证发布物
 AI 导游助手（暂存、校验、Electron 打包和安装）
         ↓
@@ -39,10 +39,43 @@ CLI 仓库负责：
 | 场景                     | CLI 来源                                      | 允许的配置                                                             | 约束                                                                   |
 | ------------------------ | --------------------------------------------- | ---------------------------------------------------------------------- | ---------------------------------------------------------------------- |
 | 本地开发与调试           | 本机 CLI 构建目录                             | `MSFS_CLI_PATH` 可指向本机 `msfs.exe`                                  | 可使用本机路径，不得写入提交的配置或发布脚本。                         |
-| 本地 Electron 构建       | 已验证的 CLI 发行目录或相邻 CLI 项目 `build/` | `MSFS_CLI_DISTRIBUTION_DIR` 优先；未设置时暂存脚本可使用开发用相邻目录 | 相邻目录回退仅是开发便利，不构成发布输入。                             |
-| CI / 候选发布 / 正式发布 | 明确提供的、已验证的 CLI 发布目录             | 必须设置 `MSFS_CLI_DISTRIBUTION_DIR`                                   | 不得依赖 `D:\code\微软模拟飞行cli`、开发机 SDK 或未版本化的 `build/`。 |
+| 本地 Electron 构建       | `native/msfs-cli/build/` 或已验证的开发快照 | `MSFS_CLI_DISTRIBUTION_DIR` 优先；未设置时暂存脚本使用同仓库的本地构建 | 本地构建只用于开发调试，不构成发布输入。 |
+| CI / 候选发布 / 正式发布 | 明确提供的、已验证的 CLI 发布快照             | 必须设置 `MSFS_CLI_DISTRIBUTION_DIR`；`desktop:package*` 会强制检查    | 不得回退到 `dev-runtime/`、旧备份目录、开发机 SDK 或未版本化的 `build/`。 |
 
 `scripts/stage-msfs-cli.mjs` 把同一快照中的 CLI、daemon、SimConnect DLL 和 Community Package 暂存到 `out/msfs/`，并生成记录文件大小、SHA-256、Bridge 版本和协议主版本的 `component-manifest.json`。它不直接向用户的 MSFS 目录安装文件；打包后的应用首次启动时，会读取 `UserCfg.opt` 并自动处理 Community Package 的目标目录发现、安装和升级。
+
+### 候选发布的构建输入门禁
+
+`dev-runtime/msfs-cli/`、`native/msfs-cli/build/` 和上一次安装器遗留的资源都只能用于开发调试，**不能**直接作为候选或正式安装器的来源。每次候选发布必须先从同一次官方构建产物创建一个不可混用的输入快照，至少包含：
+
+```text
+release-inputs/<build-id>/
+  msfs.exe
+  msfsd.exe
+  SimConnect.dll
+  community/msfs-native-cli-route-bridge/
+    manifest.json
+    layout.json
+    modules/msfs-route-bridge.wasm
+```
+
+快照中的 CLI、daemon 和 bridge 必须分别来自：
+
+1. 使用 MSFS SDK 的 SimConnect 配置构建出的原生 Release 输出；
+2. VS2022 `MSFS2024` Platform Toolset 编译、再由 SDK `fspackagetool.exe` 生成的 Community Package；
+3. 同一次构建后记录的 SHA-256。`manifest.json` 或目录名不能替代 WASM 哈希和构建来源记录。
+
+候选打包前设置明确输入；不得依赖脚本的开发回退路径：
+
+```powershell
+$env:MSFS_CLI_DISTRIBUTION_DIR = 'D:\release-inputs\<build-id>'
+# 若构建机同时安装 VS2026，node-gyp 必须固定使用已验证的 VS2022。
+$env:npm_config_msvs_version = '2022'
+$env:GYP_MSVS_VERSION = '2022'
+pnpm desktop:package:dir
+```
+
+打包完成后，`out/msfs/component-manifest.json`、安装态 `resources/msfs/component-manifest.json` 和输入快照必须逐文件校验大小与 SHA-256。缺少构建来源、未使用官方 Toolset，或三个位置任一哈希不一致，候选包不得发布。
 
 ### 桌面端连接状态与配置检测
 
@@ -98,6 +131,32 @@ Geo Cloud 配置由 `scripts/stage-geo-config.mjs` 在打包时生成到 `out/ms
 
 `pnpm desktop:dev` 已经包含“刷新开发 CLI + 切换到开发版本”，日常开发直接执行它即可。`pnpm msfs:use:app` 需要先安装并启动过一次候选应用，使“应用版本”已经创建。若要回退到更早的应用包，需要重新运行对应的旧 EXE；当前版本库只维护“开发版本”和“当前应用版本”，不会自动保存所有历史应用版本。
 
+### Community bridge 部署与 EFB 实机验收（发布阻断项）
+
+静态包结构、`route status` 和 `msfs status` 都不能证明游戏已加载 bridge。升级或手动恢复 bridge 时，必须按下面顺序执行：
+
+1. 完全退出 MSFS 2024；只关闭窗口但仍有 `FlightSimulator*.exe` / `KittyHawk*.exe` 进程时不得替换 WASM。
+2. 仅替换 `<InstalledPackagesPath>\Community2024\msfs-native-cli-route-bridge` 中的 `manifest.json`、`layout.json` 和 `modules/msfs-route-bridge.wasm`；复制后比较源、目标 WASM 的 SHA-256。
+3. 只删除该包对应的缓存：`<packages-root>\..\WASM\MSFS2020\msfs-native-cli-route-bridge` 和 `MSFS2024\msfs-native-cli-route-bridge`。不得删除整个 `WASM` 目录，也不得编辑 `Content.xml`。
+4. 重新启动 MSFS，进入已经加载的飞行，并在 EFB 中设置或导入航路。
+5. 从**与运行 MSFS 相同的 Windows 用户和交互会话**启动 CLI/daemon 后，执行：
+
+   ```powershell
+   .\msfs.exe daemon stop --json  # 仅在曾由其他会话启动过 daemon 时执行一次
+   .\msfs.exe route get --source efb --json
+   ```
+
+   自动化沙盒、Windows 服务账户、远程会话或其他用户启动的 daemon 可能无法访问游戏的 SimConnect 会话；此时的 `SIM_NOT_READY` 不能作为 bridge 是否损坏的结论。`status` 中的 `connected: false` 也可能只是惰性连接尚未被实际请求触发，最终以 `route get` 为准。
+6. 检查 `%APPDATA%\Microsoft Flight Simulator 2024\AsoboReport-RunningSession.txt`：`msfs-route-bridge.wasm` 必须显示 `Ready`。发布记录同时保存该行、Community WASM 哈希和 `route get` 的脱敏 JSON 结果。
+
+| `route get --source efb --json` 结果 | 含义与处理 |
+| --- | --- |
+| `ok: true` 且 `source: "efb"` | bridge、CommBus 和 Planned Route API 已连通；空机场字段或自定义航点仍是有效 EFB 响应，应由测试者确认当前航路内容。 |
+| `ROUTE_NOT_FOUND` | bridge 已响应，但 EFB 没有可读航路；在 EFB 中创建/导入航路后重试。 |
+| `ROUTE_TIMEOUT` | bridge 没有响应；立即检查 RunningSession 中 WASM 是否 `Failed`、包哈希和专属缓存，不能误报为“没有航路”。 |
+| `SIM_NOT_READY` | 先确认 CLI/daemon 与 MSFS 同一 Windows 会话，再确认已加载飞行；不要只依据 `status.connected` 判断。 |
+| `DAEMON_UNAVAILABLE` / `MSFS_CLI_TIMEOUT` | 属于 CLI/Named Pipe/进程生命周期问题，与 EFB API 是否存在航路分开排查。 |
+
 ### Electron 开发态资源路径注意事项
 
 Electron 的 `process.resourcesPath` 在开发态通常指向 Electron 自身的运行时资源目录，不等于本项目的 `resources/`。因此 Agent Worker 不得在开发态无条件把它拼成 `process.resourcesPath/msfs/msfs.exe`。
@@ -126,7 +185,7 @@ pnpm build
 
 严格构建必须在 `out/msfs/` 中同时包含 `msfs.exe`、`msfsd.exe`、`SimConnect.dll`、`component-manifest.json` 和完整的 `community/msfs-native-cli-route-bridge/`。清单中的哈希与任意文件不一致都会终止打包。
 
-正式构建必须通过 `MSFS_CLI_DISTRIBUTION_DIR` 提供已验证的 CLI 发布目录，并由打包脚本校验必需文件；不能把本机 `D:\code\微软模拟飞行cli` 或未版本化的相邻 `build/` 作为发布输入。
+正式构建必须通过 `MSFS_CLI_DISTRIBUTION_DIR` 提供已验证的 CLI 发布快照；`desktop:package*` 会在变量缺失时直接失败。不能把 `native/msfs-cli/build/`、旧备份目录或未版本化的本地构建目录作为发布输入。
 
 ## 发布物契约
 

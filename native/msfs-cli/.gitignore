@@ -1,0 +1,8 @@
+build*/
+out/
+.vs/
+wasm-route-bridge/package-tool/PackageSources/modules/
+wasm-route-bridge/package-tool/_PackageInt/
+wasm-route-bridge/build*/
+# Local SDK installers and other machine-specific documentation assets.
+docs/local/

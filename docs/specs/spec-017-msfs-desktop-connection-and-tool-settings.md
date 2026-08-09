@@ -57,7 +57,7 @@
 
 ## 打包约定
 
-`pnpm desktop:build` 会暂存 CLI 运行文件和 Community Package。开发构建可以从相邻 CLI 项目的已验证构建目录读取资源；候选发布和正式发布必须通过 `MSFS_CLI_DISTRIBUTION_DIR` 提供明确的发布目录。设置页只检测最终用户的实际 `Community2024` 目录，不把应用资源目录误认为游戏已安装。
+`pnpm desktop:build` 会暂存 CLI 运行文件和 Community Package；开发构建默认从同仓库的 `native/msfs-cli/build/` 读取资源。候选发布和正式发布必须通过 `MSFS_CLI_DISTRIBUTION_DIR` 提供明确的同批发布快照，`pnpm desktop:package*` 未设置该变量会直接失败。设置页只检测最终用户的实际 `Community2024` 目录，不把应用资源目录误认为游戏已安装。
 
 ## 验收
 

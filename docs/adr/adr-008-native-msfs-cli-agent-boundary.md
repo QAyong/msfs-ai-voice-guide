@@ -1,13 +1,13 @@
 # ADR-008：以原生 MSFS CLI 作为导游 Agent 的唯一模拟器边界
 
-**日期：** 2026-07-24  
+**日期：** 2026-07-24（2026-08-09 修订）
 **状态：** 已接受
 
 ## 背景
 
 项目当前以 LiveKit Agents Node.js SDK（实时语音 Agent 框架）编排 AI 导游，并由 Electron 的 Utility Process（工具进程）托管 Agent Worker。需要让导游读取 Microsoft Flight Simulator 2024 的实时状态、EFB（Electronic Flight Bag，电子飞行包）航路和地理上下文。
 
-旧项目 `[reference project]` 中的 Python MCP（Model Context Protocol，模型上下文协议）Server 已验证过相应产品能力，但其运行时依赖 Python、FastMCP、C# HTTP bridge 和本地地理数据。新项目将采用 `D:\code\微软模拟飞行cli` 中的 `msfs.exe`（命令行入口）与 `msfsd.exe`（常驻守护进程）；两者通过 Windows Named Pipe（命名管道）与官方 SimConnect 通信，并输出 JSON/NDJSON（逐行 JSON）。
+旧项目 `[reference project]` 中的 Python MCP（Model Context Protocol，模型上下文协议）Server 已验证过相应产品能力，但其运行时依赖 Python、FastMCP、C# HTTP bridge 和本地地理数据。新项目采用本仓库 `native/msfs-cli/` 中的 `msfs.exe`（命令行入口）与 `msfsd.exe`（常驻守护进程）；两者通过 Windows Named Pipe（命名管道）与官方 SimConnect 通信，并输出 JSON/NDJSON（逐行 JSON）。
 
 需要固定本项目的集成边界，避免导游 Agent 直接暴露原始命令、复用旧 MCP 运行时，或将 SimConnect 细节散落到 Agent 会话代码中。
 
@@ -41,7 +41,7 @@ MSFS 2024
 ## 影响
 
 - Electron 打包需携带与架构匹配的 `msfs.exe`、`msfsd.exe` 及其运行时文件；EFB 航路仍要求用户安装对应的 Community Package（社区扩展包）。
-- CLI 是独立构建和发布的原生依赖。正式打包必须消费经版本、协议兼容性和文件完整性校验的 CLI 发布物，不得依赖开发机上的 `D:\code\微软模拟飞行cli` 或未版本化的构建目录；开发态本机路径仅用于调试。具体发布、安装和升级约定见 [MSFS CLI 发布物集成](../architecture/msfs-cli-release-integration.md)。
+- CLI 源码由本仓库的 `native/msfs-cli/` 统一维护，但仍以独立 CMake/MSFS SDK/WASM 工具链构建，不能并入 pnpm workspace。正式打包必须消费经版本、协议兼容性和文件完整性校验的 CLI 发布快照；不得依赖 `native/msfs-cli/build/`、旧备份目录或未版本化的构建目录。具体发布、安装和升级约定见 [MSFS CLI 发布物集成](../architecture/msfs-cli-release-integration.md)。
 - Agent Worker 启动时执行低成本状态预热；预热失败不得阻止文字或语音导游启动，但必须记录可显示的就绪状态。
 - 所有工具输入均使用 Zod（运行时 Schema 校验库）验证；CLI 成功、失败和 NDJSON 事件都必须由 `src/msfs/` 转为稳定 TypeScript 类型。
 - 模拟器未就绪、EFB bridge 未加载、外部地理服务不可用时，导游必须如实说明原因，不得回退到旧数据或编造飞行信息。
@@ -60,5 +60,5 @@ MSFS 2024
 - [Spec-008：原生 MSFS CLI 导游工具接入](../specs/spec-008-native-msfs-cli-guide-tools.md)
 - [MSFS CLI 发布物集成](../architecture/msfs-cli-release-integration.md)
 - [ADR-006：搜索访问边界](adr-006-search-access-boundary.md)
-- `D:\code\微软模拟飞行cli\docs\cli-reference.md`（原生 CLI 功能参考）
+- [`native/msfs-cli/docs/cli-reference.md`](../../native/msfs-cli/docs/cli-reference.md)（原生 CLI 功能参考）
 - `[reference project]\mcp\mfsf2024-mcp\ARCHITECTURE.md`（旧 MCP 能力参考）
