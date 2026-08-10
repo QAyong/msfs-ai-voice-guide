@@ -12,21 +12,48 @@ import {
 import {
   NodeMsfsProcessRunner,
   type MsfsProcessRunner,
+  type ProcessRunResult,
   type ProcessWatchHandle,
 } from './process-runner.js';
+
+export type MsfsDaemonRole = 'monitor' | 'ai';
 
 export type MsfsCliClientOptions = {
   executablePath: string;
   timeoutMs: number;
   maxConcurrency: number;
+  role?: MsfsDaemonRole;
   runner?: MsfsProcessRunner;
   onDiagnostic?: (event: MsfsCliDiagnostic) => void;
 };
 
 export type MsfsCliDiagnostic = {
-  kind: 'executable_missing' | 'spawn_failed' | 'timeout' | 'protocol_error' | 'command_error';
+  kind:
+    | 'runtime'
+    | 'request_start'
+    | 'request_end'
+    | 'executable_missing'
+    | 'spawn_failed'
+    | 'timeout'
+    | 'protocol_error'
+    | 'command_error'
+    | 'watch_start'
+    | 'watch_event'
+    | 'watch_error'
+    | 'watch_exit';
   operation: string;
+  role?: MsfsDaemonRole;
+  attempt?: number;
+  queueWaitMs?: number;
+  durationMs?: number;
+  outcome?: 'ok' | 'unavailable';
+  pid?: number | null;
+  requestId?: string;
+  executablePath?: string;
+  timeoutMs?: number;
+  maxConcurrency?: number;
   exitCode?: number | null;
+  timedOut?: boolean;
   code?: string;
 };
 
@@ -94,6 +121,14 @@ export class MsfsCliClient {
   constructor(private readonly options: MsfsCliClientOptions) {
     this.runner = options.runner ?? new NodeMsfsProcessRunner();
     this.gate = new ConcurrencyGate(options.maxConcurrency);
+    this.emitDiagnostic({
+      kind: 'runtime',
+      operation: 'client',
+      role: options.role ?? 'ai',
+      executablePath: options.executablePath,
+      timeoutMs: options.timeoutMs,
+      maxConcurrency: options.maxConcurrency,
+    });
   }
 
   async execute<T>(
@@ -101,15 +136,17 @@ export class MsfsCliClient {
     dataSchema: z.ZodType<T>,
     signal?: AbortSignal,
   ): Promise<MsfsCommandResult<T>> {
+    const queuedAt = Date.now();
     return this.gate.run(async () => {
-      const first = await this.executeOnce(args, dataSchema, signal);
+      const queueWaitMs = Math.max(0, Date.now() - queuedAt);
+      const first = await this.executeOnce(args, dataSchema, signal, 1, queueWaitMs);
       if (first.status !== 'unavailable' || !retryableCodes.has(first.code) || signal?.aborted) {
         return first;
       }
 
       await new Promise((resolve) => setTimeout(resolve, retryDelayMs));
       if (signal?.aborted) return first;
-      return this.executeOnce(args, dataSchema, signal);
+      return this.executeOnce(args, dataSchema, signal, 2, queueWaitMs);
     });
   }
 
@@ -117,61 +154,110 @@ export class MsfsCliClient {
     args: readonly string[],
     dataSchema: z.ZodType<T>,
     signal?: AbortSignal,
+    attempt = 1,
+    queueWaitMs = 0,
   ): Promise<MsfsCommandResult<T>> {
-    const operation = args.slice(0, 2).join('.');
+    const operation = args.slice(0, 2).join('.') || args[0] || 'unknown';
+    const startedAt = Date.now();
+    let runnerResult: ProcessRunResult | undefined;
+    let outcome: 'ok' | 'unavailable' = 'unavailable';
+    let code: string | undefined;
+    let requestId: string | undefined;
+    const fail = (failureCode: MsfsUnavailableCode, id?: string) => {
+      code = failureCode;
+      requestId = id;
+      return unavailable(failureCode, id);
+    };
+
+    this.emitDiagnostic({ kind: 'request_start', operation, attempt, queueWaitMs });
     try {
-      await access(this.options.executablePath, constants.X_OK);
-    } catch {
-      this.options.onDiagnostic?.({ kind: 'executable_missing', operation });
-      return unavailable('MSFS_CLI_UNAVAILABLE');
-    }
+      try {
+        await access(this.options.executablePath, constants.X_OK);
+      } catch {
+        this.emitDiagnostic({ kind: 'executable_missing', operation, attempt, queueWaitMs });
+        return fail('MSFS_CLI_UNAVAILABLE');
+      }
 
-    let result;
-    try {
-      result = await this.runner.run(this.options.executablePath, [...args, '--json'], {
-        timeoutMs: this.options.timeoutMs,
-        maxOutputBytes: 1_000_000,
-        ...(signal ? { signal } : {}),
-      });
-    } catch {
-      this.options.onDiagnostic?.({ kind: 'spawn_failed', operation });
-      return unavailable('MSFS_CLI_UNAVAILABLE');
-    }
+      try {
+        runnerResult = await this.runner.run(this.options.executablePath, this.cliArgs(args), {
+          timeoutMs: this.options.timeoutMs,
+          maxOutputBytes: 1_000_000,
+          ...(signal ? { signal } : {}),
+        });
+      } catch {
+        this.emitDiagnostic({ kind: 'spawn_failed', operation, attempt, queueWaitMs });
+        return fail('MSFS_CLI_UNAVAILABLE');
+      }
 
-    if (result.timedOut) {
-      this.options.onDiagnostic?.({ kind: 'timeout', operation, exitCode: result.exitCode });
-      return unavailable('MSFS_CLI_TIMEOUT');
-    }
-    const envelope = this.parseEnvelope(result.stdout);
-    if (!envelope) {
-      this.options.onDiagnostic?.({
-        kind: 'protocol_error',
-        operation,
-        exitCode: result.exitCode,
-      });
-      return unavailable('MSFS_CLI_PROTOCOL_ERROR');
-    }
-    if (!envelope.ok) {
-      const code = normalizedCode(envelope.error.code);
-      this.options.onDiagnostic?.({
-        kind: 'command_error',
-        operation,
-        exitCode: result.exitCode,
-        code: envelope.error.code,
-      });
-      return unavailable(code, envelope.id);
-    }
+      if (runnerResult.timedOut) {
+        this.emitDiagnostic({
+          kind: 'timeout',
+          operation,
+          attempt,
+          queueWaitMs,
+          ...(runnerResult.pid === undefined ? {} : { pid: runnerResult.pid }),
+          exitCode: runnerResult.exitCode,
+        });
+        return fail('MSFS_CLI_TIMEOUT');
+      }
+      const envelope = this.parseEnvelope(runnerResult.stdout);
+      if (!envelope) {
+        this.emitDiagnostic({
+          kind: 'protocol_error',
+          operation,
+          attempt,
+          queueWaitMs,
+          ...(runnerResult.pid === undefined ? {} : { pid: runnerResult.pid }),
+          exitCode: runnerResult.exitCode,
+        });
+        return fail('MSFS_CLI_PROTOCOL_ERROR');
+      }
+      requestId = envelope.id;
+      if (!envelope.ok) {
+        const normalized = normalizedCode(envelope.error.code);
+        this.emitDiagnostic({
+          kind: 'command_error',
+          operation,
+          attempt,
+          queueWaitMs,
+          ...(runnerResult.pid === undefined ? {} : { pid: runnerResult.pid }),
+          exitCode: runnerResult.exitCode,
+          code: envelope.error.code,
+          requestId: envelope.id,
+        });
+        return fail(normalized, envelope.id);
+      }
 
-    const data = dataSchema.safeParse(envelope.data);
-    if (!data.success) {
-      this.options.onDiagnostic?.({
-        kind: 'protocol_error',
+      const data = dataSchema.safeParse(envelope.data);
+      if (!data.success) {
+        this.emitDiagnostic({
+          kind: 'protocol_error',
+          operation,
+          attempt,
+          queueWaitMs,
+          ...(runnerResult.pid === undefined ? {} : { pid: runnerResult.pid }),
+          exitCode: runnerResult.exitCode,
+          requestId: envelope.id,
+        });
+        return fail('MSFS_CLI_PROTOCOL_ERROR', envelope.id);
+      }
+      outcome = 'ok';
+      return { status: 'ok', requestId: envelope.id, data: data.data };
+    } finally {
+      this.emitDiagnostic({
+        kind: 'request_end',
         operation,
-        exitCode: result.exitCode,
+        attempt,
+        queueWaitMs,
+        durationMs: Math.max(0, Date.now() - startedAt),
+        outcome,
+        ...(runnerResult && runnerResult.pid !== undefined ? { pid: runnerResult.pid } : {}),
+        ...(runnerResult ? { exitCode: runnerResult.exitCode } : {}),
+        ...(runnerResult?.timedOut ? { timedOut: true } : {}),
+        ...(code ? { code } : {}),
+        ...(requestId ? { requestId } : {}),
       });
-      return unavailable('MSFS_CLI_PROTOCOL_ERROR', envelope.id);
     }
-    return { status: 'ok', requestId: envelope.id, data: data.data };
   }
 
   watch(
@@ -179,14 +265,71 @@ export class MsfsCliClient {
     onEnvelope: (envelope: MsfsCliEnvelope) => void,
     onError: (error: unknown) => void,
   ): ProcessWatchHandle {
-    return this.runner.watch(this.options.executablePath, [...args, '--json'], {
-      onLine: (line) => {
-        const envelope = this.parseEnvelope(line);
-        if (envelope) onEnvelope(envelope);
-        else onError(new Error('MSFS CLI NDJSON protocol error'));
-      },
-      onError,
+    const operation = args.slice(0, 2).join('.') || args[0] || 'watch';
+    let processId: number | null | undefined;
+    let handle: ProcessWatchHandle;
+    try {
+      handle = this.runner.watch(this.options.executablePath, this.cliArgs(args), {
+        onLine: (line) => {
+          const envelope = this.parseEnvelope(line);
+          if (envelope) {
+            this.emitDiagnostic({
+              kind: 'watch_event',
+              operation,
+              ...(processId === undefined ? {} : { pid: processId }),
+              requestId: envelope.id,
+            });
+            onEnvelope(envelope);
+          } else {
+            const error = new Error('MSFS CLI NDJSON protocol error');
+            this.emitDiagnostic({
+              kind: 'watch_error',
+              operation,
+              ...(processId === undefined ? {} : { pid: processId }),
+            });
+            onError(error);
+          }
+        },
+        onError: (error) => {
+          this.emitDiagnostic({
+            kind: 'watch_error',
+            operation,
+            ...(processId === undefined ? {} : { pid: processId }),
+          });
+          onError(error);
+        },
+        onClose: (exitCode) => {
+          this.emitDiagnostic({
+            kind: 'watch_exit',
+            operation,
+            ...(processId === undefined ? {} : { pid: processId }),
+            exitCode,
+          });
+        },
+      });
+    } catch (error) {
+      this.emitDiagnostic({ kind: 'watch_error', operation });
+      throw error;
+    }
+    processId = handle.pid;
+    this.emitDiagnostic({
+      kind: 'watch_start',
+      operation,
+      ...(processId === undefined ? {} : { pid: processId }),
     });
+    return handle;
+  }
+
+  private emitDiagnostic(event: MsfsCliDiagnostic): void {
+    try {
+      this.options.onDiagnostic?.({ role: this.options.role ?? 'ai', ...event });
+    } catch {
+      // Diagnostics must never change the MSFS request result.
+    }
+  }
+
+  private cliArgs(args: readonly string[]): string[] {
+    return [...args, '--role', this.options.role ?? 'ai', '--json'];
   }
 
   private parseEnvelope(stdout: string): MsfsCliEnvelope | null {

@@ -7,6 +7,7 @@ export type ProcessRunOptions = {
 };
 
 export type ProcessRunResult = {
+  pid?: number | null;
   exitCode: number | null;
   stdout: string;
   stderr: string;
@@ -16,9 +17,11 @@ export type ProcessRunResult = {
 export type WatchCallbacks = {
   onLine(line: string): void;
   onError(error: unknown): void;
+  onClose?(exitCode: number | null): void;
 };
 
 export interface ProcessWatchHandle {
+  pid?: number | null;
   stop(): Promise<void>;
   completion: Promise<void>;
 }
@@ -80,7 +83,9 @@ export class NodeMsfsProcessRunner implements MsfsProcessRunner {
         options.signal?.removeEventListener('abort', abort);
         reject(error);
       });
-      child.once('close', (exitCode) => finish({ exitCode, stdout, stderr, timedOut }));
+      child.once('close', (exitCode) =>
+        finish({ pid: child.pid ?? null, exitCode, stdout, stderr, timedOut }),
+      );
     });
   }
 
@@ -115,12 +120,14 @@ export class NodeMsfsProcessRunner implements MsfsProcessRunner {
       }
     });
     child.once('error', callbacks.onError);
-    child.once('close', () => {
+    child.once('close', (exitCode) => {
       if (buffer.trim()) callbacks.onLine(buffer);
+      callbacks.onClose?.(exitCode);
       resolveCompletion();
     });
 
     return {
+      pid: child.pid ?? null,
       completion,
       stop: async () => {
         if (stopped) return completion;

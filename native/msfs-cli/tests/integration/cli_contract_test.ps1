@@ -64,6 +64,10 @@ Assert-That ($status.Json.data.simconnect.transport -eq 'SimConnect') 'status mu
 Assert-That ($status.Json.data.simconnect.connected -is [bool]) 'status.simconnect.connected must be boolean.'
 Assert-That ($status.Json.data.route_bridge.transport -eq 'SimConnect CommBus') 'status must identify the route bridge transport.'
 
+$monitorStatus = Invoke-CliJson @('status', '--role', 'monitor', '--json')
+Assert-ResponseEnvelope $monitorStatus $true
+Assert-That ($monitorStatus.Json.data.role -eq 'monitor') 'Explicit monitor status must use the monitor daemon.'
+
 # Agent discovery: catalog results expose the exact SDK name, unit, mutability, and explanation.
 $catalog = Invoke-CliJson @('catalog', 'simvar', 'search', '--query', 'altitude', '--json')
 Assert-ResponseEnvelope $catalog $true
@@ -137,5 +141,9 @@ Assert-That (-not $geo.Raw.Contains('contract-test-secret')) 'Geo API key must n
 $daemonStop = Invoke-CliJson @('daemon', 'stop', '--json')
 Assert-ResponseEnvelope $daemonStop $true
 Assert-That (($daemonStop.Json.data.stopping -eq $true) -or ($daemonStop.Json.data.already_stopped -eq $true)) 'Daemon stop must report stopping or already stopped.'
+
+$monitorStop = Invoke-CliJson @('daemon', 'stop', '--role', 'monitor', '--json')
+Assert-ResponseEnvelope $monitorStop $true
+Assert-That (($monitorStop.Json.data.stopping -eq $true) -or ($monitorStop.Json.data.already_stopped -eq $true)) 'Monitor daemon stop must be idempotent.'
 
 Write-Host 'CLI contract checks passed.'

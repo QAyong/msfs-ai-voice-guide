@@ -31,7 +31,7 @@ import {
   exploreSuggestionSchema,
   type ExploreResult,
 } from '../../shared/explore-contracts.js';
-import { MsfsCliClient } from '../../src/msfs/cli-client.js';
+import { MsfsCliClient, type MsfsDaemonRole } from '../../src/msfs/cli-client.js';
 import { MsfsGuideService } from '../../src/msfs/guide-service.js';
 import { MsfsExploreContextProvider } from '../../src/msfs/explore-context.js';
 import { resolveMsfsCliPath } from '../../src/msfs/path.js';
@@ -246,8 +246,8 @@ let guideLocale: GuideLocale = 'zh-CN';
 let exploreController: ExploreController | null = null;
 let msfsToolSettings: DesktopToolSettings = { ...defaultDesktopToolSettings };
 let msfsConnectionMonitor: MsfsConnectionMonitor | null = null;
-let sharedMsfsClient: MsfsCliClient | null = null;
-let sharedMsfsClientPromise: Promise<MsfsCliClient> | null = null;
+const msfsClients: Partial<Record<MsfsDaemonRole, MsfsCliClient>> = {};
+const msfsClientPromises: Partial<Record<MsfsDaemonRole, Promise<MsfsCliClient>>> = {};
 let latestMsfsConnectionStatus: MsfsConnectionStatus = {
   visible: true,
   connected: false,
@@ -556,7 +556,10 @@ const getVisibleEffectiveServiceCredentials = async (): Promise<VisibleServiceCr
 const hasEnabledMsfsTools = () =>
   Object.entries(msfsToolSettings).some(([name, enabled]) => name !== 'searchWeb' && enabled);
 
-const createMsfsCliClientFromEnvironment = (environment: NodeJS.ProcessEnv): MsfsCliClient => {
+const createMsfsCliClientFromEnvironment = (
+  environment: NodeJS.ProcessEnv,
+  role: MsfsDaemonRole,
+): MsfsCliClient => {
   const configuredPath = environment.MSFS_CLI_PATH?.trim();
   const timeoutValue = Number(environment.MSFS_CLI_TIMEOUT_MS);
   const concurrencyValue = Number(environment.MSFS_CLI_MAX_CONCURRENCY);
@@ -565,21 +568,30 @@ const createMsfsCliClientFromEnvironment = (environment: NodeJS.ProcessEnv): Msf
     timeoutMs: Number.isInteger(timeoutValue) && timeoutValue >= 500 ? timeoutValue : 15_000,
     maxConcurrency:
       Number.isInteger(concurrencyValue) && concurrencyValue >= 1 ? concurrencyValue : 1,
+    role,
+    onDiagnostic: (event) => {
+      void getDiagnosticsLogger().append('main', {
+        event: 'msfs_cli',
+        ...event,
+      });
+    },
   });
 };
 
-const getSharedMsfsClient = async (): Promise<MsfsCliClient> => {
-  if (sharedMsfsClient) return sharedMsfsClient;
-  sharedMsfsClientPromise ??= getEffectiveServiceEnvironment().then((environment) => {
-    sharedMsfsClient = createMsfsCliClientFromEnvironment(environment);
-    return sharedMsfsClient;
+const getMsfsClient = async (role: MsfsDaemonRole): Promise<MsfsCliClient> => {
+  const existing = msfsClients[role];
+  if (existing) return existing;
+  msfsClientPromises[role] ??= getEffectiveServiceEnvironment().then((environment) => {
+    const client = createMsfsCliClientFromEnvironment(environment, role);
+    msfsClients[role] = client;
+    return client;
   });
-  return sharedMsfsClientPromise;
+  return msfsClientPromises[role] as Promise<MsfsCliClient>;
 };
 
 const createMsfsConfigurationChecker = async (): Promise<MsfsConfigurationChecker> => {
   const environment = await getEffectiveServiceEnvironment();
-  const client = await getSharedMsfsClient();
+  const client = await getMsfsClient('ai');
   const configuredPath = environment.MSFS_CLI_PATH?.trim();
   const executablePath = resolveDesktopMsfsCliPath(configuredPath);
   const timeoutValue = Number(environment.MSFS_CLI_TIMEOUT_MS);
@@ -608,7 +620,7 @@ const getMsfsConnectionStatus = async (): Promise<MsfsConnectionStatus> => {
       timestamp: new Date().toISOString(),
     });
   }
-  const client = await getSharedMsfsClient();
+  const client = await getMsfsClient('monitor');
   const result = await client.execute(['status'], statusDataSchema);
   const simulatorState = await client.execute(
     ['system', 'state', '--name', 'AircraftLoaded'],
@@ -631,12 +643,30 @@ const publishMsfsConnectionStatus = (status: MsfsConnectionStatus) => {
   }
 };
 
+const startMsfsDaemons = async () => {
+  await Promise.all(
+    (['monitor', 'ai'] as const).map(async (role) => {
+      try {
+        await (await getMsfsClient(role)).execute(['status'], statusDataSchema);
+      } catch {
+        return undefined;
+      }
+    }),
+  );
+};
+
 const startMsfsConnectionMonitor = async () => {
   if (msfsConnectionMonitor) return;
   msfsConnectionMonitor = new MsfsConnectionMonitor({
-    client: await getSharedMsfsClient(),
+    client: await getMsfsClient('monitor'),
     isVisible: hasEnabledMsfsTools,
     onStatus: publishMsfsConnectionStatus,
+    onDiagnostic: (event) => {
+      void getDiagnosticsLogger().append('main', {
+        event: 'msfs_connection',
+        ...event,
+      });
+    },
   });
   msfsConnectionMonitor.start();
 };
@@ -653,7 +683,11 @@ const stopMsfsDaemonForApp = async () => {
   } catch {
     // Shutdown must continue even if the optional environment file is unavailable.
   }
-  await stopMsfsDaemon(resolveDesktopMsfsCliPath(configuredPath));
+  const executablePath = resolveDesktopMsfsCliPath(configuredPath);
+  await Promise.all([
+    stopMsfsDaemon(executablePath, 'monitor'),
+    stopMsfsDaemon(executablePath, 'ai'),
+  ]);
 };
 
 const runMsfsConfigurationDiagnostic = async (): Promise<MsfsConfigurationDiagnostic> => {
@@ -1023,7 +1057,7 @@ const getExploreMsfsContext = async (signal: AbortSignal) => {
   } catch {
     return undefined;
   }
-  const client = await getSharedMsfsClient();
+  const client = await getMsfsClient('monitor');
   const service = new MsfsGuideService(client, {
     trackIntervalMs: msfsConfig.trackIntervalMs,
     trackMaximumPoints: msfsConfig.trackMaximumPoints,
@@ -2656,6 +2690,7 @@ app.whenReady().then(async () => {
   msfsToolSettings = await readStoredToolSettings();
   await createAssistantWindow();
   await installBundledMsfsCommunityPackage();
+  await startMsfsDaemons();
   await startMsfsConnectionMonitor();
   void startConfiguredAgent(false).then(async (result) => {
     if ('config' in result) await agentRuntime.waitUntilReady();

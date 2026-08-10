@@ -53,6 +53,14 @@ std::string option(const Arguments& args, const std::string& name) {
     return it == args.options.end() ? std::string{} : it->second;
 }
 
+msfs::pipe::DaemonRole daemon_role(const Arguments& args, bool& valid) {
+    const std::string value = option(args, "role");
+    if (value.empty()) return msfs::pipe::DaemonRole::ai;
+    const auto parsed = msfs::pipe::parse_role(value);
+    valid = parsed.has_value();
+    return parsed.value_or(msfs::pipe::DaemonRole::ai);
+}
+
 std::string request_id() {
     return "cli-" + std::to_string(GetCurrentProcessId()) + "-" +
            std::to_string(GetTickCount64());
@@ -68,9 +76,10 @@ std::string request_json(const std::string& command, const std::vector<std::pair
 }
 
 std::optional<std::string> transact_daemon(const std::string& request, std::string& error_message,
+                                           msfs::pipe::DaemonRole role = msfs::pipe::DaemonRole::ai,
                                            bool start_if_missing = true);
 
-bool start_daemon(std::string& error_message) {
+bool start_daemon(const msfs::pipe::DaemonRole role, std::string& error_message) {
     wchar_t executable_path[MAX_PATH]{};
     if (GetModuleFileNameW(nullptr, executable_path, MAX_PATH) == 0) {
         error_message = "GetModuleFileNameW failed.";
@@ -83,7 +92,8 @@ bool start_daemon(std::string& error_message) {
     STARTUPINFOW startup{};
     startup.cb = sizeof(startup);
     PROCESS_INFORMATION process{};
-    std::wstring command_line = L"\"" + daemon_path + L"\"";
+    const wchar_t* role_argument = role == msfs::pipe::DaemonRole::monitor ? L"monitor" : L"ai";
+    std::wstring command_line = L"\"" + daemon_path + L"\" --role " + role_argument;
     if (!CreateProcessW(daemon_path.c_str(), command_line.data(), nullptr, nullptr, FALSE,
                         CREATE_NO_WINDOW, nullptr, nullptr, &startup, &process)) {
         error_message = "Unable to start msfsd.exe (Win32 error " + std::to_string(GetLastError()) + ").";
@@ -167,12 +177,14 @@ std::string build_request(const Arguments& args, bool& valid) {
     return {};
 }
 
-int run_watch(const Arguments& args, const std::string& command, const std::vector<std::pair<std::string, std::string>>& fields) {
+int run_watch(const Arguments& args, const std::string& command,
+              const std::vector<std::pair<std::string, std::string>>& fields,
+              const msfs::pipe::DaemonRole role) {
     const int interval_ms = std::max(100, std::atoi(option(args, "interval-ms").empty() ? "1000" : option(args, "interval-ms").c_str()));
     const int count = std::max(0, std::atoi(option(args, "count").c_str()));
     for (int iteration = 0; count == 0 || iteration < count; ++iteration) {
         std::string pipe_error;
-        const auto response = transact_daemon(request_json(command, fields), pipe_error);
+        const auto response = transact_daemon(request_json(command, fields), pipe_error, role);
         std::cout << (response.has_value() ? *response : msfs::json::error("cli", "DAEMON_UNAVAILABLE", pipe_error)) << '\n';
         if (!response.has_value()) return 1;
         if (count == 0 || iteration + 1 < count) std::this_thread::sleep_for(std::chrono::milliseconds(interval_ms));
@@ -181,14 +193,15 @@ int run_watch(const Arguments& args, const std::string& command, const std::vect
 }
 
 std::optional<std::string> transact_daemon(const std::string& request, std::string& error_message,
-                                           bool start_if_missing) {
-    auto response = msfs::pipe::transact(request, error_message);
+                                           const msfs::pipe::DaemonRole role,
+                                           const bool start_if_missing) {
+    auto response = msfs::pipe::transact(request, error_message, msfs::pipe::pipe_name(role));
     if (response.has_value()) return response;
     if (!start_if_missing) return std::nullopt;
-    if (!start_daemon(error_message)) return std::nullopt;
+    if (!start_daemon(role, error_message)) return std::nullopt;
     for (int attempt = 0; attempt < 20 && !response.has_value(); ++attempt) {
         Sleep(100);
-        response = msfs::pipe::transact(request, error_message);
+        response = msfs::pipe::transact(request, error_message, msfs::pipe::pipe_name(role));
     }
     return response;
 }
@@ -209,8 +222,10 @@ std::optional<double> required_number_option(const Arguments& args, const std::s
     return parsed;
 }
 
-std::optional<double> aircraft_simvar(const std::string& name, const std::string& unit, std::string& error_message) {
-    const auto response = transact_daemon(request_json("simvar.get", {{"name", name}, {"unit", unit}}), error_message);
+std::optional<double> aircraft_simvar(const std::string& name, const std::string& unit,
+                                      std::string& error_message,
+                                      const msfs::pipe::DaemonRole role) {
+    const auto response = transact_daemon(request_json("simvar.get", {{"name", name}, {"unit", unit}}), error_message, role);
     if (!response.has_value()) return std::nullopt;
     const auto value = msfs::json::number_at(*response, "value");
     if (!value.has_value()) {
@@ -220,7 +235,7 @@ std::optional<double> aircraft_simvar(const std::string& name, const std::string
     return value;
 }
 
-int run_external_geo_context(const Arguments& args) {
+int run_external_geo_context(const Arguments& args, const msfs::pipe::DaemonRole role) {
     const bool from_aircraft = option(args, "from") == "aircraft";
     const bool has_direct_coordinates = !option(args, "lat").empty() || !option(args, "lon").empty();
     if (from_aircraft == has_direct_coordinates) {
@@ -236,17 +251,17 @@ int run_external_geo_context(const Arguments& args) {
 
     std::string error_message;
     if (from_aircraft) {
-        const auto latitude = aircraft_simvar("PLANE LATITUDE", "degrees", error_message);
+        const auto latitude = aircraft_simvar("PLANE LATITUDE", "degrees", error_message, role);
         if (!latitude.has_value()) {
             std::cout << msfs::json::error("cli", "SIM_POSITION_UNAVAILABLE", error_message) << '\n';
             return 1;
         }
-        const auto longitude = aircraft_simvar("PLANE LONGITUDE", "degrees", error_message);
+        const auto longitude = aircraft_simvar("PLANE LONGITUDE", "degrees", error_message, role);
         if (!longitude.has_value()) {
             std::cout << msfs::json::error("cli", "SIM_POSITION_UNAVAILABLE", error_message) << '\n';
             return 1;
         }
-        const auto altitude = aircraft_simvar("PLANE ALTITUDE", "meters", error_message);
+        const auto altitude = aircraft_simvar("PLANE ALTITUDE", "meters", error_message, role);
         if (!altitude.has_value()) {
             std::cout << msfs::json::error("cli", "SIM_POSITION_UNAVAILABLE", error_message) << '\n';
             return 1;
@@ -299,19 +314,25 @@ int run_external_geo_context(const Arguments& args) {
 
 int wmain(int argc, wchar_t* argv[]) {
     const Arguments arguments = read_arguments(argc, argv);
+    bool role_valid = true;
+    const auto role = daemon_role(arguments, role_valid);
+    if (!role_valid) {
+        std::cout << msfs::json::error("cli", "USAGE", "--role must be monitor or ai.") << '\n';
+        return 2;
+    }
     if (arguments.positional.size() == 3 && arguments.positional[0] == "external" &&
         arguments.positional[1] == "geo" && arguments.positional[2] == "context") {
-        return run_external_geo_context(arguments);
+        return run_external_geo_context(arguments, role);
     }
     if (arguments.positional.size() == 2 && arguments.positional[0] == "simvar" && arguments.positional[1] == "watch") {
         if (option(arguments, "name").empty() || option(arguments, "unit").empty()) {
             std::cout << msfs::json::error("cli", "USAGE", "simvar watch requires --name and --unit.") << '\n';
             return 2;
         }
-        return run_watch(arguments, "simvar.get", {{"name", option(arguments, "name")}, {"unit", option(arguments, "unit")}, {"datatype", option(arguments, "datatype")}});
+        return run_watch(arguments, "simvar.get", {{"name", option(arguments, "name")}, {"unit", option(arguments, "unit")}, {"datatype", option(arguments, "datatype")}}, role);
     }
     if (arguments.positional.size() == 2 && arguments.positional[0] == "route" && arguments.positional[1] == "watch") {
-        return run_watch(arguments, "route.get", {{"source", "efb"}});
+        return run_watch(arguments, "route.get", {{"source", "efb"}}, role);
     }
     bool valid = false;
     const std::string request = build_request(arguments, valid);
@@ -324,7 +345,7 @@ int wmain(int argc, wchar_t* argv[]) {
                                 arguments.positional[0] == "daemon" &&
                                 arguments.positional[1] == "stop";
     std::string pipe_error;
-    const auto response = transact_daemon(request, pipe_error, !is_daemon_stop);
+    const auto response = transact_daemon(request, pipe_error, role, !is_daemon_stop);
     if (!response.has_value()) {
         if (is_daemon_stop) {
             std::cout << msfs::json::ok(request_id(), msfs::json::object({

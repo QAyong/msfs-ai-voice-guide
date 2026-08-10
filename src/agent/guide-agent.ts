@@ -93,6 +93,7 @@ export default defineAgent({
         }),
         timeoutMs: config.msfs.timeoutMs,
         maxConcurrency: config.msfs.maxConcurrency,
+        role: 'ai',
         onDiagnostic: (event) => {
           console.warn(`[msfs-cli] ${JSON.stringify(event)}`);
         },

@@ -17,6 +17,7 @@ class SimConnectClient final {
 public:
     SimConnectClient();
     ~SimConnectClient();
+    void shutdown();
 
     SimConnectClient(const SimConnectClient&) = delete;
     SimConnectClient& operator=(const SimConnectClient&) = delete;

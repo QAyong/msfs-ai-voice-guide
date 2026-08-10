@@ -303,6 +303,7 @@ SimConnectClient::SimConnectClient() = default;
 SimConnectClient::~SimConnectClient() {
     close_connection();
 }
+void SimConnectClient::shutdown() { close_connection(); }
 
 bool SimConnectClient::sdk_compiled() const {
 #if defined(MSFS_CLI_HAS_SIMCONNECT)

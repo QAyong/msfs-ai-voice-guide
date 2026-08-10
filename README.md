@@ -19,6 +19,7 @@
 - [MSFS 桌面连接状态、配置检测与工具开关](docs/specs/spec-017-msfs-desktop-connection-and-tool-settings.md)
 - [MSFS 运行时稳定性与桌面体验一致性](docs/specs/spec-018-msfs-runtime-stability-and-desktop-consistency.md)
 - [单 SimConnect 会话的 Pipe 等待修复](docs/specs/spec-019-single-simconnect-pipe-wait.md)
+- [双 MSFS daemon 会话隔离方案（草案）](docs/specs/spec-020-two-msfs-daemons.md)
 - [MSFS 运行时回归测试矩阵](docs/testing/msfs-runtime-regression-matrix.md)
 - [MSFS CLI 发布物集成](docs/architecture/msfs-cli-release-integration.md)
 - [Windows x64 打包方案 V2](docs/architecture/windows-packaging-v2.md)

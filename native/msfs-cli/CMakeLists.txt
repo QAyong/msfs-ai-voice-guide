@@ -69,6 +69,12 @@ target_link_libraries(named_pipe_test PRIVATE msfs_core)
 target_compile_definitions(named_pipe_test PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
 add_test(NAME named_pipe_test COMMAND named_pipe_test)
 
+add_executable(dual_daemon_test tests/integration/dual_daemon_test.cpp)
+target_link_libraries(dual_daemon_test PRIVATE msfs_core)
+target_compile_definitions(dual_daemon_test PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
+add_test(NAME dual_daemon_test COMMAND dual_daemon_test)
+set_tests_properties(dual_daemon_test PROPERTIES TIMEOUT 30)
+
 add_executable(geo_context_test tests/unit/geo_context_test.cpp)
 target_link_libraries(geo_context_test PRIVATE msfs_core)
 target_compile_definitions(geo_context_test PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)

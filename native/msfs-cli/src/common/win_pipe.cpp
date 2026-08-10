@@ -43,6 +43,25 @@ std::optional<std::string> read_message(HANDLE handle, std::string& error_messag
 
 }  // namespace
 
+const wchar_t* pipe_name(const DaemonRole role) {
+    return role == DaemonRole::monitor ? kMonitorPipeName : kAiPipeName;
+}
+
+const wchar_t* mutex_name(const DaemonRole role) {
+    return role == DaemonRole::monitor ? L"Local\\msfs-native-cli-daemon-monitor-v1"
+                                      : L"Local\\msfs-native-cli-daemon-ai-v1";
+}
+
+const char* role_name(const DaemonRole role) {
+    return role == DaemonRole::monitor ? "monitor" : "ai";
+}
+
+std::optional<DaemonRole> parse_role(const std::string_view value) {
+    if (value == "monitor") return DaemonRole::monitor;
+    if (value == "ai") return DaemonRole::ai;
+    return std::nullopt;
+}
+
 std::optional<std::string> transact(const std::string& request, std::string& error_message, const wchar_t* pipe_name) {
     HANDLE handle = CreateFileW(pipe_name, GENERIC_READ | GENERIC_WRITE, 0, nullptr, OPEN_EXISTING, 0, nullptr);
     if (handle == INVALID_HANDLE_VALUE && GetLastError() != ERROR_PIPE_BUSY) {
@@ -140,7 +159,6 @@ bool serve_once(const std::function<std::string(const std::string&)>& handler, s
     const std::string response = handler(*request);
     const bool wrote = write_all(handle, response);
     if (!wrote) error_message = "WriteFile failed with Win32 error " + std::to_string(GetLastError());
-    FlushFileBuffers(handle);
     DisconnectNamedPipe(handle);
     CloseHandle(handle);
     return wrote;

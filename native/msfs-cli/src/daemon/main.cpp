@@ -13,6 +13,7 @@
 #include <iostream>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace {
@@ -64,7 +65,7 @@ std::string json_array(const std::vector<std::string>& values) {
 }
 
 std::string handle_request(const std::string& request, msfs::simconnect::SimConnectClient& simconnect,
-                           std::atomic_bool& stop_requested) {
+                           std::atomic_bool& stop_requested, const msfs::pipe::DaemonRole role) {
     const std::string id = msfs::json::string_at(request, "id").value_or("unknown");
     const auto command = msfs::json::string_at(request, "command");
     if (!command.has_value()) {
@@ -79,6 +80,7 @@ std::string handle_request(const std::string& request, msfs::simconnect::SimConn
     if (*command == "status") {
         return msfs::json::ok(id, msfs::json::object({
             {"daemon", msfs::json::quote("ready")},
+            {"role", msfs::json::quote(msfs::pipe::role_name(role))},
             {"simconnect", simconnect.status_json()},
             {"route_bridge", msfs::json::object({
                 {"transport", msfs::json::quote("SimConnect CommBus")},
@@ -234,8 +236,26 @@ std::string handle_request(const std::string& request, msfs::simconnect::SimConn
 
 }  // namespace
 
-int wmain() {
-    HANDLE singleton = CreateMutexW(nullptr, TRUE, L"Local\\msfs-native-cli-daemon-v1");
+int wmain(int argc, wchar_t* argv[]) {
+    msfs::pipe::DaemonRole role = msfs::pipe::DaemonRole::ai;
+    for (int index = 1; index < argc; ++index) {
+        if (std::wstring_view(argv[index]) != L"--role") continue;
+        if (index + 1 >= argc) {
+            std::cerr << "Missing daemon role." << std::endl;
+            return 2;
+        }
+        const std::wstring value(argv[++index]);
+        const auto parsed = value == L"monitor" ? std::optional<msfs::pipe::DaemonRole>(msfs::pipe::DaemonRole::monitor)
+                                                 : value == L"ai" ? std::optional<msfs::pipe::DaemonRole>(msfs::pipe::DaemonRole::ai)
+                                                                  : std::nullopt;
+        if (!parsed.has_value()) {
+            std::cerr << "Unknown daemon role." << std::endl;
+            return 2;
+        }
+        role = *parsed;
+    }
+
+    HANDLE singleton = CreateMutexW(nullptr, TRUE, msfs::pipe::mutex_name(role));
     if (singleton == nullptr) {
         std::cerr << "CreateMutexW failed with Win32 error " << GetLastError() << std::endl;
         return 1;
@@ -246,17 +266,19 @@ int wmain() {
     }
 
     msfs::simconnect::SimConnectClient simconnect;
-    std::cerr << "msfsd starting named-pipe server" << std::endl;
+    std::cerr << "msfsd starting " << msfs::pipe::role_name(role) << " named-pipe server" << std::endl;
     std::atomic_bool stop_requested = false;
-    const auto handler = [&simconnect, &stop_requested](const std::string& request) {
-        return handle_request(request, simconnect, stop_requested);
+    const auto handler = [&simconnect, &stop_requested, role](const std::string& request) {
+        return handle_request(request, simconnect, stop_requested, role);
     };
     while (!stop_requested.load()) {
         std::string pipe_error;
-        if (!msfs::pipe::serve_once(handler, pipe_error) && !stop_requested.load() && !pipe_error.empty()) {
+        if (!msfs::pipe::serve_once(handler, pipe_error, msfs::pipe::pipe_name(role)) &&
+            !stop_requested.load() && !pipe_error.empty()) {
             std::cerr << pipe_error << std::endl;
         }
     }
+    simconnect.shutdown();
     CloseHandle(singleton);
-    return 0;
+    ExitProcess(0);
 }

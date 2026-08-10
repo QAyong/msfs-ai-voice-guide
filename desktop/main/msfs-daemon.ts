@@ -2,6 +2,7 @@ import { spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
 
 const defaultStopTimeoutMs = 5_000;
+export type MsfsDaemonRole = 'monitor' | 'ai';
 
 const forceStopMsfsDaemon = (): Promise<void> => {
   if (process.platform !== 'win32') return Promise.resolve();
@@ -35,6 +36,7 @@ const forceStopMsfsDaemon = (): Promise<void> => {
  */
 export function stopMsfsDaemon(
   executablePath: string,
+  role: MsfsDaemonRole = 'ai',
   timeoutMs = defaultStopTimeoutMs,
 ): Promise<void> {
   if (!existsSync(executablePath)) return Promise.resolve();
@@ -53,7 +55,7 @@ export function stopMsfsDaemon(
 
     let child: ReturnType<typeof spawn>;
     try {
-      child = spawn(executablePath, ['daemon', 'stop', '--json'], {
+      child = spawn(executablePath, ['daemon', 'stop', '--role', role, '--json'], {
         windowsHide: true,
         stdio: 'ignore',
       });

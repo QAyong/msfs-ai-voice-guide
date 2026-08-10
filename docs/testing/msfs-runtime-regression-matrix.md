@@ -1,6 +1,7 @@
 # MSFS 运行时回归测试矩阵
 
 **创建日期：** 2026-08-08  
+**双 daemon 方案更新：** 2026-08-10
 **适用范围：** MSFS 2024、SimConnect、MSFS CLI、daemon、EFB Bridge、Electron 桌面端与 Agent 工具
 
 ## 使用方式
@@ -15,6 +16,7 @@
 | 应用版本/构建类型 | `1.0.1-rc.2 / installed`                   |
 | MSFS 版本与飞机   | MSFS 2024 / C172SP G1000                   |
 | CLI 与 Bridge     | 版本、协议主版本、SHA-256                  |
+| daemon 角色与端点 | `monitor`/`ai` 的 PID、互斥体和 Pipe 名称  |
 | 启动顺序          | 应用先启动或 MSFS 先启动                   |
 | 操作              | 对话内容和触发的工具                       |
 | 结果              | 成功、错误码、耗时、是否重试               |
@@ -25,7 +27,7 @@
 | 编号       | 场景           | 操作                                                             | 通过标准                                                 |
 | ---------- | -------------- | ---------------------------------------------------------------- | -------------------------------------------------------- |
 | MSFS-P0-01 | 应用先启动     | 先打开应用，再启动 MSFS 并进入飞行场景                           | 标题栏从未连接变为已连接；Agent 能读取飞行快照           |
-| MSFS-P0-02 | MSFS 先启动    | 先进入飞行场景，再打开应用                                       | 应用可完成检测并显示已连接；不重复启动冲突 daemon        |
+| MSFS-P0-02 | MSFS 先启动    | 先进入飞行场景，再打开应用                                       | 同时启动 `monitor`、`ai` 两个 daemon；无互斥体或 Pipe 冲突 |
 | MSFS-P0-03 | 连续对话       | 连续完成至少 10 次会调用 MSFS 工具的对话                         | 连接状态不无故丢失；每次调用都有明确成功或错误结果       |
 | MSFS-P0-04 | EFB 正常       | 在 EFB 中设置有效航路，调用 `getRouteBrief` 和 `getNextWaypoint` | 两个调用在限定时间内返回；结果与 EFB 当前航路一致        |
 | MSFS-P0-05 | EFB 无航路     | 清除 EFB 航路后重复调用                                          | 返回 `ROUTE_NOT_FOUND`，不显示为 SimConnect 断开         |
@@ -35,6 +37,29 @@
 | MSFS-P0-09 | 应用退出       | 在有请求或连接监控时退出应用，再重新启动                         | 没有残留 CLI/daemon 持有通道；下一次启动可正常工作       |
 | MSFS-P0-10 | Bridge 缺失    | 临时移出应用自己的 Bridge 后检测                                 | 设置页明确报告 Bridge 问题；不误报游戏未连接或成功       |
 
+## P0：并行与压力测试
+
+压力测试是本专项的主要验收内容，不能用单次调用或串行冒烟替代。每轮测试都应同时保留
+连接监控轮询，并从不同入口发起模拟用户请求：
+
+```text
+monitor daemon：status + system.state
+monitor daemon：探索所需的飞行上下文读取
+ai daemon：飞行快照 + 天气/时间 + EFB 航路
+```
+
+其中普通 AI 对话和 EFB 走 `ai` daemon；探索的 MSFS 上下文走 `monitor` daemon。探索
+网页查询不计入 SimConnect 并发，但要保留其取消和失败结果。
+
+| 编号       | 场景                 | 操作                                                                 | 通过标准                                                                 |
+| ---------- | -------------------- | -------------------------------------------------------------------- | ------------------------------------------------------------------------ |
+| MSFS-P0-11 | 30 轮混合并发        | 连续 30 轮同时执行监控、AI 飞行快照、天气、EFB 和探索上下文读取       | 无错误 Pipe 忙碌误判；无永久卡住；每个请求都有结果；无残留进程          |
+| MSFS-P0-12 | 对话中启动探索       | AI 对话进行期间连续启动探索，重复至少 10 轮                             | 普通 AI 请求不因探索长期排队；探索失败不影响对话；监控不显示错误断开     |
+| MSFS-P0-13 | EFB 异常夹击          | 在混合并发中构造或等待一次 EFB 超时，随后继续执行至少 10 轮普通 AI 请求 | 只返回 EFB 错误；后续飞行快照、天气和监控仍能完成                       |
+| MSFS-P0-14 | 单 daemon 重启        | 压力运行期间单独停止并重启 `ai` daemon，再单独停止并重启 `monitor` daemon | 重启一方不自动关闭另一方；恢复后对应功能可继续；无旧状态覆盖新状态     |
+| MSFS-P0-15 | 长时间压力           | 在已加载飞行中连续执行 100 轮混合并发，持续观察两个 daemon 和连接状态   | 无累计队列堵塞、句柄泄漏、状态漂移或 `DAEMON_UNAVAILABLE` 假断连         |
+| MSFS-P0-16 | CLI 退出与超时边界   | 执行普通 `status`/`simvar`/`route` 请求；再模拟 daemon 不可用或请求超时；另执行并停止一次 `watch` | 普通 `msfs.exe` 在成功、明确错误或默认 15 秒超时后退出；超时不留 CLI 子进程；`watch` 只在订阅期间保持运行 |
+
 ## P1：发布前必须通过
 
 | 编号       | 场景         | 操作                                                 | 通过标准                                                       |
@@ -42,7 +67,7 @@
 | MSFS-P1-01 | 安装态路径   | 从安装包启动，不使用开发目录                         | CLI 从应用私有资源目录加载；Bridge 只从实际 Community2024 检查 |
 | MSFS-P1-02 | 开发态路径   | 执行 `pnpm desktop:dev` 后重复 P0-01                 | 开发快照可用；不误用 Electron `process.resourcesPath`          |
 | MSFS-P1-03 | 版本不匹配   | 使用不兼容的 Bridge 或 CLI                           | 返回版本错误；不会无限重试                                     |
-| MSFS-P1-04 | 并发调用     | 同时触发连接检测、飞行快照、EFB 和探索               | 请求按约定排队；无死锁、无旧结果覆盖新结果                     |
+| MSFS-P1-04 | 并发调用     | 同时触发 `monitor` 探测、AI 飞行快照、EFB 和探索上下文 | 两个 daemon 端点正确分工；无死锁、无旧结果覆盖新结果         |
 | MSFS-P1-05 | 取消请求     | 在 EFB 调用期间取消对话或退出 Worker                 | 请求及时结束；队列可继续处理下一次调用                         |
 | MSFS-P1-06 | 诊断导出     | 复现一次超时后导出默认诊断包                         | 默认聚焦故障时间窗口和 MSFS 事件，不包含无关日期全部日志       |
 | MSFS-P1-07 | 诊断脱敏     | 在日志中放入模拟 Token、URL 查询参数和错误堆栈后导出 | 导出包中均被替换为 `[REDACTED]`                                |
@@ -64,7 +89,7 @@
 提交前先执行无真实 MSFS 依赖的测试：
 
 ```powershell
-pnpm exec vitest run tests/unit/msfs-cli-client.test.ts tests/unit/msfs-connection-monitor.test.ts tests/unit/msfs-diagnostics.test.ts tests/integration/msfs-cli-offline.test.ts
+node node_modules/vitest/vitest.mjs run tests/unit/msfs-cli-client.test.ts tests/unit/msfs-connection-monitor.test.ts tests/unit/msfs-diagnostics.test.ts tests/integration/msfs-cli-offline.test.ts
 pnpm typecheck
 pnpm desktop:typecheck
 pnpm lint
@@ -91,8 +116,11 @@ pnpm desktop:validate-runtime
 应用版本/构建类型：
 MSFS 版本/飞机/场景：
 CLI、daemon、Bridge 版本与哈希：
+monitor daemon PID/Pipe：
+ai daemon PID/Pipe：
 启动顺序：
 复现步骤：
+并发轮数与每轮请求：
 首次失败时间：
 失败操作：
 返回错误码：
@@ -106,4 +134,7 @@ msfs.exe/msfsd.exe 是否仍运行：
 
 ## 发布门槛
 
-只要 MSFS-P0-03、MSFS-P0-04、MSFS-P0-06、MSFS-P0-07 或 MSFS-P0-08 任一失败，当前版本不得作为新的公开测试包分发。单纯增加重试次数但无法说明请求队列、连接状态和 EFB 错误分类的变化，不视为通过。
+只要 MSFS-P0-03、MSFS-P0-04、MSFS-P0-06、MSFS-P0-07、MSFS-P0-08 或
+MSFS-P0-11 至 MSFS-P0-16 任一失败，当前版本不得作为新的公开测试包分发。单纯增加
+重试次数但无法说明两个 daemon 的端点分工、并发结果、连接状态和 EFB 错误分类的变化，
+不视为通过。

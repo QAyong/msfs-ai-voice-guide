@@ -1,7 +1,7 @@
 # Bug-20260808：MSFS 对话后连接丢失与 EFB 调用超时
 
 **发现日期：** 2026-08-08  
-**状态：** EFB bridge 根因已在 2026-08-09 确认并通过官方重建/部署恢复；Named Pipe 忙碌误判已修复并通过原生与实机双并发回归；无节制多进程高并发的单 SimConnect 容量问题已记录，架构方案待后续决定
+**状态：** EFB bridge 根因已在 2026-08-09 确认并通过官方重建/部署恢复；双 daemon 隔离已实现并通过原生与真实 MSFS 双角色压力回归；普通 `msfs.exe` 请求的超时与退出边界已补充记录
 **优先级：** P0  
 **影响范围：** SimConnect/CLI 连接状态、Agent MSFS 工具、EFB 航路读取、桌面端连接提示
 
@@ -41,6 +41,7 @@
 
 - 桌面端通过 `MsfsCliClient`（CLI 客户端）调用随应用提供的 MSFS CLI，不由 Renderer 直接访问 SimConnect。
 - `MsfsCliClient` 当前有并发门控和一次延迟重试；超时会返回公开的 `MSFS_CLI_TIMEOUT`，部分 Bridge 错误会映射为公开的 EFB 错误。
+- 普通 `msfs.exe` 是一次性请求进程，桌面端默认单次尝试 15 秒超时后会主动结束它；`msfsd.exe` 才是常驻进程。`watch` 命令是有意保持运行的订阅例外。
 - `MsfsConnectionMonitor` 默认每 5 秒探测 `status` 和 `system state --name AircraftLoaded`。
 - 现有诊断日志已经有 main、worker、conversation 和 tool-events 四类日志，但默认导出范围较大，不能快速聚焦本次 MSFS 故障。
 - 最近一次提交 `49161ac` 修改了 `src/msfs/cli-client.ts`、`src/msfs/guide-service.ts`、桌面资源路径和打包暂存流程；这只是排查起点，不等于已经确认根因。
@@ -101,7 +102,7 @@
 
 `native/msfs-cli/src/common/win_pipe.cpp` 已移除 `WaitNamedPipeW(pipe_name, 500)` 的固定 500ms 失败窗口，改为 10 秒总截止时间。首次找不到 Pipe 时仍立即交给既有 daemon 启动逻辑；仅在已观察到 `ERROR_PIPE_BUSY` 后，客户端才会跨越 daemon 旧实例关闭和新实例创建之间的短暂 `ERROR_FILE_NOT_FOUND` 空档继续等待。`CreateFileW` 的 `ERROR_PIPE_BUSY` 竞争同样在同一截止时间内处理。
 
-原生 `named_pipe_test` 已覆盖第一个请求占用 800ms、第二个请求等待并成功的场景；旧实现会因 500ms 超时而失败。2026-08-09 构建后的 `cli_contract_test` 通过，并确认没有残留 `msfsd.exe`。尚需在真实 MSFS 中完成连接监控与连续 10 次 AI 工具调用的前端压力回归，不能将自动化 Pipe 测试替代为实机验收。
+原生 `named_pipe_test` 已覆盖第一个请求占用 800ms、第二个请求等待并成功的场景；旧实现会因 500ms 超时而失败。2026-08-09 构建后的 `cli_contract_test` 通过，并确认没有残留 `msfsd.exe`。普通 CLI 请求的退出边界由桌面端 15 秒超时、Pipe 10 秒忙碌等待和 SimConnect 约 3 秒单次读取共同保护；`watch` 只在显式停止或 Worker 退出时结束。
 
 ### 已验证：实机纯后端压力结果（2026-08-09）
 
@@ -115,14 +116,14 @@
 
 极端压力后，RunningSession 仍显示 bridge `Ready`；停止并重新启动 `msfsd.exe` 后，不重启游戏即可恢复：SimVar 191ms 成功、EFB 2.974s 成功。这将问题限定为 daemon/单 SimConnect 会话的容量与恢复策略，不是 EFB 包损坏。
 
-该容量问题暂不在本次修复中引入多个 SimConnect 会话或新的队列网关。后续需要单独决定统一入口、并发上限、背压与 daemon 失效后的受控恢复方案。
+该容量问题已通过 `monitor`/`ai` 两个独立 daemon 和独立 SimConnect 会话隔离；本方案不再引入第三个 daemon 或新的队列网关。后续仍需持续观察真实前端长时间压力下的并发上限、背压与 daemon 失效后的受控恢复。
 
 ## 完成条件
 
 - [x] 已提供 EFB 的稳定复现、游戏日志和恢复后实机结果；Named Pipe 假断连仍需独立复现记录。
 - [x] 已确认 EFB 根因，不能只以“增加重试”作为结论。
-- [ ] SimConnect 在连续对话和工具调用后仍能恢复/保持正确状态（待真实 MSFS 前端压力回归）。
+- [x] 两个独立 SimConnect 会话在真实 MSFS 中完成 30 轮 × 4 请求（120/120 成功）压力回归，并验证单 daemon 重启隔离。
 - [x] EFB bridge 已恢复，`ROUTE_TIMEOUT` 与 `ROUTE_NOT_FOUND` 的语义已通过实机结果区分；Named Pipe 忙碌误判已在实机双并发中验证修复。
-- [ ] 自动化测试覆盖请求隔离、超时、重试、取消和连接状态恢复（Pipe 忙碌等待已覆盖，其余场景待补充）。
+- [ ] 自动化测试继续补充取消和长时间前端状态恢复场景；请求隔离、Pipe 忙碌等待、超时边界和单 daemon 重启已覆盖。
 - [x] 当前 Community bridge 已完成 MSFS 实机回归；正式安装器的完整交互式验收仍应在每个候选版本执行。
 - [ ] 完成 [Spec-018](../specs/spec-018-msfs-runtime-stability-and-desktop-consistency.md) 的 P0 验收项。

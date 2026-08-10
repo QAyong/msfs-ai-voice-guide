@@ -8,6 +8,7 @@ import type {
   ProcessRunResult,
   ProcessWatchHandle,
 } from '../../src/msfs/process-runner.js';
+import type { MsfsCliDiagnostic } from '../../src/msfs/cli-client.js';
 
 class FakeRunner implements MsfsProcessRunner {
   readonly calls: Array<readonly string[]> = [];
@@ -51,6 +52,62 @@ describe('MsfsCliClient', () => {
       requestId: 'one',
       data: { value: 42 },
     });
+  });
+
+  it('routes requests to the configured daemon role', async () => {
+    const runner = new FakeRunner({
+      exitCode: 0,
+      stdout: '{"id":"monitor","ok":true,"data":{"value":1}}',
+      stderr: '',
+      timedOut: false,
+    });
+    const client = new MsfsCliClient({
+      executablePath: process.execPath,
+      timeoutMs: 100,
+      maxConcurrency: 1,
+      role: 'monitor',
+      runner,
+    });
+
+    await expect(client.execute(['status'], z.object({ value: z.number() }))).resolves.toMatchObject({
+      status: 'ok',
+      requestId: 'monitor',
+    });
+    expect(runner.calls[0]).toEqual(['status', '--role', 'monitor', '--json']);
+  });
+
+  it('emits a request timeline without exposing CLI output', async () => {
+    const events: MsfsCliDiagnostic[] = [];
+    const client = new MsfsCliClient({
+      executablePath: process.execPath,
+      timeoutMs: 100,
+      maxConcurrency: 1,
+      runner: new FakeRunner({
+        exitCode: 0,
+        stdout: '{"id":"timeline","ok":true,"data":{"value":42}}',
+        stderr: 'sensitive stderr',
+        timedOut: false,
+      }),
+      onDiagnostic: (event) => events.push(event),
+    });
+
+    await client.execute(['status'], z.object({ value: z.number() }));
+
+    expect(events.find((event) => event.kind === 'runtime')).toMatchObject({
+      operation: 'client',
+      timeoutMs: 100,
+      maxConcurrency: 1,
+    });
+    expect(events.find((event) => event.kind === 'request_start')).toMatchObject({
+      operation: 'status',
+      attempt: 1,
+    });
+    expect(events.find((event) => event.kind === 'request_end')).toMatchObject({
+      operation: 'status',
+      outcome: 'ok',
+      requestId: 'timeline',
+    });
+    expect(JSON.stringify(events)).not.toContain('sensitive stderr');
   });
 
   it('preserves known domain errors while removing the raw CLI message', async () => {
