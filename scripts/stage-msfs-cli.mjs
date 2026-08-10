@@ -23,6 +23,7 @@ const configuredExecutable = process.env.MSFS_CLI_PATH?.trim();
 const configuredDistribution = process.env.MSFS_CLI_DISTRIBUTION_DIR?.trim();
 const nativeCliProjectDirectory = resolve(projectRoot, 'native', 'msfs-cli');
 const nativeCliBuildDirectory = resolve(nativeCliProjectDirectory, 'build');
+const developmentCliBuildDirectory = resolve(projectRoot, 'dev-runtime', 'msfs-cli-build');
 const devDistributionDirectory = resolve(projectRoot, 'dev-runtime', 'msfs-cli');
 const targets =
   argumentsWithoutFlags.length > 0
@@ -34,6 +35,9 @@ const devDistributionAvailable =
   (await access(devDistributionDirectory)
     .then(() => true)
     .catch(() => false));
+const developmentBuildAvailable = await access(resolve(developmentCliBuildDirectory, 'msfs.exe'))
+  .then(() => true)
+  .catch(() => false);
 if (releaseBuild && !configuredDistribution) {
   throw new Error(
     '候选或正式发布必须设置 MSFS_CLI_DISTRIBUTION_DIR，指向同一构建批次的已验证 CLI 发布快照。',
@@ -42,16 +46,20 @@ if (releaseBuild && !configuredDistribution) {
 const sourceDirectory = configuredDistribution
   ? resolve(configuredDistribution)
   : stagingDevRuntime
-    ? nativeCliBuildDirectory
+    ? developmentBuildAvailable
+      ? developmentCliBuildDirectory
+      : nativeCliBuildDirectory
     : devDistributionAvailable
       ? devDistributionDirectory
-      : configuredExecutable
-        ? dirname(
-            isAbsolute(configuredExecutable)
-              ? configuredExecutable
-              : resolve(projectRoot, configuredExecutable),
-          )
-        : nativeCliBuildDirectory;
+      : developmentBuildAvailable
+        ? developmentCliBuildDirectory
+        : configuredExecutable
+          ? dirname(
+              isAbsolute(configuredExecutable)
+                ? configuredExecutable
+                : resolve(projectRoot, configuredExecutable),
+            )
+          : nativeCliBuildDirectory;
 
 for (const target of targets) {
   if (target === sourceDirectory || relative(target, sourceDirectory) === '') {

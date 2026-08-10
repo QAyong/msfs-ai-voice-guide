@@ -15,6 +15,16 @@ bool has_role(const std::optional<std::string>& response, const std::string& rol
     return response.has_value() && msfs::json::string_at(*response, "role").value_or("") == role;
 }
 
+bool run_role_contract_test() {
+    const auto monitor = msfs::pipe::parse_role("monitor");
+    const auto ai = msfs::pipe::parse_role("ai");
+    if (!monitor.has_value() || !ai.has_value() || monitor == ai) return false;
+    return std::string_view(msfs::pipe::role_name(*monitor)) == "monitor" &&
+           std::string_view(msfs::pipe::role_name(*ai)) == "ai" &&
+           std::wstring_view(msfs::pipe::pipe_name(*monitor)) == msfs::pipe::kMonitorPipeName &&
+           std::wstring_view(msfs::pipe::pipe_name(*ai)) == msfs::pipe::kAiPipeName;
+}
+
 std::optional<std::string> request(const std::string& role, const std::string& id, std::string& error) {
     const auto parsed = msfs::pipe::parse_role(role);
     if (!parsed.has_value()) return std::nullopt;
@@ -141,5 +151,5 @@ bool run_parallel_pressure_test() {
 }  // namespace
 
 int main() {
-    return run_parallel_role_pipe_test() && run_parallel_pressure_test() ? 0 : 1;
+    return run_role_contract_test() && run_parallel_role_pipe_test() && run_parallel_pressure_test() ? 0 : 1;
 }

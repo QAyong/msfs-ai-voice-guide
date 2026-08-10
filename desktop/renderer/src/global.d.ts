@@ -80,6 +80,7 @@ declare global {
       prefillExploreSuggestion(text: string): void;
       onExplorePrefillSuggestion(callback: (text: string) => void): () => void;
       getSourceState(): Promise<SourceWindowState | null>;
+      markSourceRendererReady(): Promise<boolean>;
       onSourceState(callback: (state: SourceWindowState) => void): () => void;
       selectSource(url: string): Promise<boolean>;
       backToSources(): Promise<boolean>;

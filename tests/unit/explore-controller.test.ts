@@ -73,7 +73,21 @@ describe('ExploreController', () => {
     await expect(controller.execute(request)).resolves.toMatchObject({ ok: true });
   });
 
-  it('starts a conversation-led exploration without waiting for a slow MSFS read', async () => {
+  it('reports no context only when both conversation and MSFS context are unavailable', async () => {
+    const controller = new ExploreController({
+      createService: async () => ({ explore: async () => result }) as unknown as ExploreService,
+      getMsfsContext: async () => {
+        throw new Error('MSFS context unavailable');
+      },
+      present: async () => true,
+    });
+
+    await expect(controller.execute({ ...request, recentConversation: [] })).resolves.toMatchObject(
+      { ok: false, code: 'no_context' },
+    );
+  });
+
+  it('includes available MSFS context in a conversation-led exploration', async () => {
     let receivedInput: unknown;
     const controller = new ExploreController({
       createService: async () =>
@@ -83,12 +97,39 @@ describe('ExploreController', () => {
             return result;
           },
         }) as unknown as ExploreService,
-      getMsfsContext: async () => new Promise<never>(() => undefined),
+      getMsfsContext: async () => ({
+        capturedAt: '2026-07-30T00:00:00.000Z',
+        position: { latitude: 48.8566, longitude: 2.3522 },
+      }),
       present: async () => true,
     });
 
     await expect(controller.execute(request)).resolves.toMatchObject({ ok: true, reused: false });
     expect(receivedInput).toMatchObject({ recentConversation: [{ text: '介绍一下巴黎。' }] });
-    expect(receivedInput).not.toHaveProperty('msfs');
+    expect(receivedInput).toMatchObject({ msfs: { position: { latitude: 48.8566 } } });
+  });
+
+  it('passes only MSFS context when no conversation is available', async () => {
+    let receivedInput: unknown;
+    const controller = new ExploreController({
+      createService: async () =>
+        ({
+          explore: async (input: unknown) => {
+            receivedInput = input;
+            return result;
+          },
+        }) as unknown as ExploreService,
+      getMsfsContext: async () => ({
+        capturedAt: '2026-07-30T00:00:00.000Z',
+        position: { latitude: 38.351269, longitude: 120.772148 },
+      }),
+      present: async () => true,
+    });
+
+    await expect(controller.execute({ ...request, recentConversation: [] })).resolves.toMatchObject(
+      { ok: true, reused: false },
+    );
+    expect(receivedInput).not.toHaveProperty('recentConversation');
+    expect(receivedInput).toMatchObject({ msfs: { position: { latitude: 38.351269 } } });
   });
 });

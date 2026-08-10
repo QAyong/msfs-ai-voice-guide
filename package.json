@@ -7,7 +7,7 @@
   "packageManager": "pnpm@11.7.0",
   "scripts": {
     "build": "pnpm desktop:typecheck && pnpm desktop:build",
-    "desktop:dev": "pnpm msfs:stage:dev && pnpm msfs:use:dev && pnpm native:build && electron-vite dev",
+    "desktop:dev": "pnpm msfs:native:build && pnpm msfs:stage:dev && pnpm msfs:use:dev && pnpm native:build && electron-vite dev",
     "desktop:clean": "node scripts/clean-desktop-output.mjs",
     "desktop:build": "pnpm desktop:clean && pnpm native:build && electron-vite build && node scripts/stage-global-ptt.mjs && node scripts/stage-msfs-cli.mjs --strict out/msfs && node scripts/stage-geo-config.mjs out/msfs && node scripts/stage-livekit-server.mjs out/livekit && node scripts/stage-tts-voice-samples.mjs resources/tts out/tts && node scripts/validate-release-inputs.mjs",
     "desktop:build:release": "pnpm desktop:clean && pnpm native:build && electron-vite build && node scripts/stage-global-ptt.mjs && node scripts/stage-msfs-cli.mjs --strict --release out/msfs && node scripts/stage-geo-config.mjs out/msfs && node scripts/stage-livekit-server.mjs out/livekit && node scripts/stage-tts-voice-samples.mjs resources/tts out/tts && node scripts/validate-release-inputs.mjs",
@@ -20,6 +20,7 @@
     "desktop:preview": "electron-vite preview --entry ./out/main/index.js",
     "desktop:typecheck": "tsc --noEmit --project desktop/tsconfig.json",
     "native:build": "node scripts/build-global-ptt.mjs",
+    "msfs:native:build": "node scripts/build-msfs-cli.mjs",
     "lint": "eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check .",

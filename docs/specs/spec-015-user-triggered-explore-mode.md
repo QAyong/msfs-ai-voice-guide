@@ -1,7 +1,7 @@
 # Spec-015：用户触发的探索模式
 
 **日期：** 2026-07-30<br />
-**最后更新：** 2026-08-05<br />
+**最后更新：** 2026-08-11<br />
 **状态：** 已实现；真实链路已验证，待人工验收<br />
 **前置决策：** [ADR-006](../adr/adr-006-search-access-boundary.md)、[ADR-008](../adr/adr-008-native-msfs-cli-agent-boundary.md)、[ADR-010](../adr/adr-010-secure-desktop-settings-global-ptt-and-diagnostics.md)<br />
 **关联规格：** [Spec-007](spec-007-desktop-text-input.md)、[Spec-008](spec-008-native-msfs-cli-guide-tools.md)、[Spec-012](spec-012-desktop-settings-localization-global-ptt-and-diagnostics.md)、[Spec-014](spec-014-source-window-adaptive-reading-and-site-preferences.md)、[Spec-016](spec-016-source-preview-lightweight-browser.md)
@@ -20,9 +20,9 @@
 - 话题分组标题保持紧凑的行式布局，主题描述使用浅色填充突出显示，不额外引入卡片层级、图标或复杂装饰。
 - 抖音百科、抖音视频和 TikTok 不在当前可选平台中，不作为已支持的探索 Provider 对外承诺。
 - Electron 主进程启动时的路径变量命名冲突已修复，避免打包注入的 `__dirname` 与源码重复声明。
-- 对话驱动探索不等待 MSFS：Planner 立即使用对话开始，MSFS 在后台刷新同会话缓存；相同对话直接恢复上一份结果。百科与视频发现并行执行，单个 Provider 失败只标记该来源不可用，不阻塞其它结果。
+- 当前 Main Controller 会先启动 MSFS 上下文读取；命中同一对话缓存时立即展示结果并在后台刷新 MSFS，首次或对话变化时等待 MSFS 读取完成后再调用 Planner。对话和 MSFS 仍是独立的可选输入，二者都可用时一起传入；百科与视频发现继续并行执行，单个 Provider 失败只标记该来源不可用，不阻塞其它结果。实现中的分层并行边界和窗口时序坑见 [MSFS 探索与桌面窗口改动记录](../architecture/msfs-explore-desktop-lessons.md)。
 - 真实长沙样例已验证：5 个 DeepSeek 请求均返回 HTTP 200 且 `thinking` 已关闭；主题、百科查询、视频查询、推荐问题和 AI 导览介绍耗时分别约 2950 ms、2246 ms、1427 ms、1581 ms、1389 ms，四个后置角色并行，总耗时约 5305 ms；导览介绍返回 77 个字符。
-- 自动化验证已通过：`pnpm test`（170 passed、8 skipped）、桌面 TypeScript 检查、Lint 与格式检查。上述结果不等同于人工验收；真实 Electron 窗口、目标网络和真实 LiveKit/MSFS 场景仍待人工确认。
+- 自动化验证已通过：`pnpm test`（187 passed、8 skipped）、桌面 TypeScript 检查、Lint 与格式检查。上述结果不等同于人工验收；真实 Electron 窗口、目标网络和真实 LiveKit/MSFS 场景仍待人工确认。
 
 探索模式是“发现与规划”，不是第二个导游 Agent，也不是现有 `searchWeb` 回答来源的另一种外观。它不得替换、写入或阻塞 LiveKit `AgentSession`，也不得让模型编造网页、视频或元数据。
 

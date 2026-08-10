@@ -143,6 +143,7 @@ contextBridge.exposeInMainWorld('desktop', {
     return () => ipcRenderer.removeListener('explore:prefill-suggestion', listener);
   },
   getSourceState: (): Promise<SourceWindowState | null> => ipcRenderer.invoke('source:get-state'),
+  markSourceRendererReady: (): Promise<boolean> => ipcRenderer.invoke('source:renderer-ready'),
   onSourceState: (callback: (state: SourceWindowState) => void) => {
     const listener = (_event: Electron.IpcRendererEvent, state: SourceWindowState) =>
       callback(state);

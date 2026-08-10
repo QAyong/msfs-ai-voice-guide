@@ -28,7 +28,11 @@ set(SIMCONNECT_INCLUDE_DIR "${MSFS2024_SDK_ROOT}/SimConnect SDK/include")
 set(SIMCONNECT_RUNTIME "${MSFS2024_SDK_ROOT}/SimConnect SDK/lib/SimConnect.dll")
 if(EXISTS "${SIMCONNECT_INCLUDE_DIR}/SimConnect.h")
     message(STATUS "Building with MSFS 2024 SimConnect SDK: ${MSFS2024_SDK_ROOT}")
-    target_compile_definitions(msfs_core PRIVATE MSFS_CLI_HAS_SIMCONNECT=1)
+    # The public header exposes SimConnectClient's layout conditionally. The
+    # definition must reach every executable that instantiates the class, not
+    # only the static-library implementation, or the daemon will use an
+    # incompatible object layout at runtime.
+    target_compile_definitions(msfs_core PUBLIC MSFS_CLI_HAS_SIMCONNECT=1)
     target_include_directories(msfs_core PRIVATE "${SIMCONNECT_INCLUDE_DIR}")
     target_link_libraries(msfs_core PRIVATE user32 shlwapi ws2_32)
     # SimConnect.dll is loaded dynamically by msfsd. This preserves offline

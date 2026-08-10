@@ -1537,7 +1537,9 @@ const SettingsDialog = ({ onClose, preferences, savePreferences }: SettingsDialo
                         {
                           value: customTtsVoiceValue,
                           label: english ? 'Custom speaker ID' : '自定义 speaker ID',
-                          description: english ? 'Enter a speaker ID manually' : '手动填写 speaker ID',
+                          description: english
+                            ? 'Enter a speaker ID manually'
+                            : '手动填写 speaker ID',
                         },
                       ]}
                       onChange={(value) =>
@@ -2076,10 +2078,7 @@ const SettingsDropdown = ({
     if (event.key === 'Tab') setOpen(false);
   };
 
-  const handleOptionKeyDown = (
-    event: ReactKeyboardEvent<HTMLButtonElement>,
-    index: number,
-  ) => {
+  const handleOptionKeyDown = (event: ReactKeyboardEvent<HTMLButtonElement>, index: number) => {
     if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
       event.preventDefault();
       focusOption(findEnabledIndex(index, event.key === 'ArrowDown' ? 1 : -1));
@@ -2387,6 +2386,7 @@ const AssistantView = ({
   voiceChannelConnected,
 }: AssistantViewProps) => {
   const [collapsed, setCollapsed] = useState(false);
+  const collapseTransitionRef = useRef(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [menuDirection, setMenuDirection] = useState<MenuDirection>('down');
   const [browserDialog, setBrowserDialog] = useState<BrowserDialog | null>(null);
@@ -3129,12 +3129,25 @@ const AssistantView = ({
     }, 180);
   };
   const changeCollapsed = async (next: boolean) => {
-    if (!next) {
-      await closeMenu();
-      if (session.connectionState === ConnectionState.Disconnected && !starting) void retry();
+    if (collapseTransitionRef.current || next === collapsed) return;
+    collapseTransitionRef.current = true;
+    const previous = collapsed;
+    try {
+      if (!next) {
+        await closeMenu();
+        if (session.connectionState === ConnectionState.Disconnected && !starting) void retry();
+      }
+      // Keep the current view mounted until the main process has finished the
+      // native resize/reposition/topmost transition. This prevents the ball
+      // from disappearing before the expanded window is visible over a game.
+      await window.desktop?.setCollapsed(next);
+      setCollapsed(next);
+    } catch (error) {
+      setCollapsed(previous);
+      console.error('Failed to change assistant collapsed state', error);
+    } finally {
+      collapseTransitionRef.current = false;
     }
-    setCollapsed(next);
-    await window.desktop?.setCollapsed(next);
   };
   const closeCurrentConversation = useCallback(async () => {
     if (closingConversation) return;
@@ -3930,18 +3943,31 @@ const getSourceErrorMessage = (
 
 const Source = () => {
   const [state, setState] = useState<SourceWindowState | null>(null);
+  const [sourceStateLoaded, setSourceStateLoaded] = useState(false);
   const [locale, setLocale] = useState<SupportedLocale>(() => readPreferences().locale);
   const listRef = useRef<HTMLDivElement | null>(null);
   const previewScrollTopRef = useRef(0);
+  const sourceReadySentRef = useRef(false);
   const english = locale === 'en-US';
   const copy = getSourceCopy(english);
 
   useEffect(() => {
-    void window.desktop?.getSourceState().then((nextState) => {
-      if (nextState) setState(nextState);
-    });
-    return window.desktop?.onSourceState(setState);
+    const unsubscribe = window.desktop?.onSourceState(setState);
+    void window.desktop
+      ?.getSourceState()
+      .then((nextState) => {
+        if (nextState) setState(nextState);
+        setSourceStateLoaded(true);
+      })
+      .catch(() => setSourceStateLoaded(true));
+    return unsubscribe;
   }, []);
+
+  useLayoutEffect(() => {
+    if (!sourceStateLoaded || sourceReadySentRef.current) return;
+    sourceReadySentRef.current = true;
+    void window.desktop?.markSourceRendererReady();
+  }, [sourceStateLoaded]);
 
   useEffect(() => window.desktop?.onLocaleChanged(setLocale), []);
 

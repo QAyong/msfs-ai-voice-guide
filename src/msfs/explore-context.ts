@@ -34,10 +34,15 @@ const record = (value: unknown): Record<string, unknown> | undefined =>
     ? (value as Record<string, unknown>)
     : undefined;
 
+const optionalText = (value: unknown, maximum = 120) => {
+  if (typeof value !== 'string' || !value.trim()) return undefined;
+  return value.trim().slice(0, maximum);
+};
+
 const textAt = (value: Record<string, unknown> | undefined, ...keys: string[]) => {
   for (const key of keys) {
-    const candidate = value?.[key];
-    if (typeof candidate === 'string' && candidate.trim()) return candidate.trim().slice(0, 120);
+    const candidate = optionalText(value?.[key]);
+    if (candidate) return candidate;
   }
   return undefined;
 };
@@ -61,7 +66,31 @@ export class MsfsExploreContextProvider {
       this.service.getRouteBrief(signal),
     ]);
     const geo = location.status === 'ok' ? record(location.context) : undefined;
-    const place = record(geo?.place) ?? record(geo?.address) ?? geo;
+    const place = record(geo?.place) ?? record(geo?.address) ?? record(geo?.administrative) ?? geo;
+    const country = textAt(place, 'country', 'country_name');
+    const region = textAt(place, 'region', 'state', 'province', 'admin1');
+    const city = textAt(place, 'city', 'town', 'municipality');
+    const locality = textAt(place, 'locality', 'district', 'suburb');
+    const placeContext =
+      country || region || city || locality
+        ? {
+            ...(country ? { country } : {}),
+            ...(region ? { region } : {}),
+            ...(city ? { city } : {}),
+            ...(locality ? { locality } : {}),
+          }
+        : undefined;
+    const originIcao =
+      route.status === 'ok' ? optionalText(route.route.departure.icao, 16) : undefined;
+    const destinationIcao =
+      route.status === 'ok' ? optionalText(route.route.destination.icao, 16) : undefined;
+    const routeContext =
+      originIcao || destinationIcao
+        ? {
+            ...(originIcao ? { originIcao } : {}),
+            ...(destinationIcao ? { destinationIcao } : {}),
+          }
+        : undefined;
     const parsed = msfsExploreContextSchema.safeParse({
       capturedAt: new Date().toISOString(),
       ...(snapshot.status === 'ok'
@@ -74,32 +103,8 @@ export class MsfsExploreContextProvider {
             },
           }
         : {}),
-      ...(place
-        ? {
-            place: {
-              ...(textAt(place, 'country', 'country_name')
-                ? { country: textAt(place, 'country', 'country_name') }
-                : {}),
-              ...(textAt(place, 'region', 'state', 'province')
-                ? { region: textAt(place, 'region', 'state', 'province') }
-                : {}),
-              ...(textAt(place, 'city', 'town', 'municipality')
-                ? { city: textAt(place, 'city', 'town', 'municipality') }
-                : {}),
-              ...(textAt(place, 'locality', 'district', 'suburb')
-                ? { locality: textAt(place, 'locality', 'district', 'suburb') }
-                : {}),
-            },
-          }
-        : {}),
-      ...(route.status === 'ok'
-        ? {
-            route: {
-              originIcao: route.route.departure.icao,
-              destinationIcao: route.route.destination.icao,
-            },
-          }
-        : {}),
+      ...(placeContext ? { place: placeContext } : {}),
+      ...(routeContext ? { route: routeContext } : {}),
     });
     if (!parsed.success) return undefined;
     const context = parsed.data;

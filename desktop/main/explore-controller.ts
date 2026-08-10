@@ -108,6 +108,9 @@ export class ExploreController {
     try {
       const conversation = conversationFingerprint(request);
       const msfsPromise = this.dependencies.getMsfsContext(controller.signal);
+      const recentConversation = request.recentConversation.length
+        ? request.recentConversation.map(({ role, text }) => ({ role, text }))
+        : undefined;
 
       if (
         request.recentConversation.length &&
@@ -118,8 +121,8 @@ export class ExploreController {
         return { ok: true, result: this.last.result, reused: true };
       }
 
-      const msfs = request.recentConversation.length ? undefined : await msfsPromise;
-      if (!request.recentConversation.length && !msfs) {
+      const msfs = await msfsPromise.catch(() => undefined);
+      if (!recentConversation && !msfs) {
         return { ok: false, code: 'no_context', message: '当前没有可用于探索的对话或飞行上下文。' };
       }
       if (request.recentConversation.length)
@@ -134,7 +137,7 @@ export class ExploreController {
       }
       const result = await service.explore(
         {
-          recentConversation: request.recentConversation.map(({ role, text }) => ({ role, text })),
+          ...(recentConversation ? { recentConversation } : {}),
           ...(msfs ? { msfs } : {}),
           preferences: request.preferences,
           locale: request.locale,

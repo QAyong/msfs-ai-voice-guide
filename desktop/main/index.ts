@@ -199,6 +199,9 @@ let sourceViewLoad: ((source: GuideSource, initialUrl: string) => void) | null =
 let sourcePreview: CompanionPreview | null = null;
 let selectedSource: GuideSource | null = null;
 let sourceWindowState: SourceWindowState | null = null;
+let sourceRendererReady = false;
+let sourceRendererReadyPromise: Promise<void> | null = null;
+let resolveSourceRendererReady: (() => void) | null = null;
 let sourceLoadTimer: NodeJS.Timeout | null = null;
 let sourceViewPrewarm: Promise<WebContentsView | null> | null = null;
 let sourceMoreMenuBlurTimer: NodeJS.Timeout | null = null;
@@ -221,6 +224,7 @@ let assistantCollapsed = false;
 let assistantMenuOpen = false;
 let assistantMenuDirection: MenuDirection = 'down';
 let assistantDockSide: DockSide = 'right';
+let assistantAlwaysOnTop = true;
 let isPositioningAssistant = false;
 let isPositioningSource = false;
 let sourceWindowFollowMode: SourceWindowFollowMode = startSourceWindowSession();
@@ -1076,6 +1080,40 @@ const getExploreController = () =>
     present: async (result) => openExplorePreview(result),
   }));
 
+const assistantTopmostLevel = process.platform === 'win32' ? 'screen-saver' : 'floating';
+
+const resetSourceRendererReady = () => {
+  sourceRendererReady = false;
+  sourceRendererReadyPromise = new Promise<void>((resolve) => {
+    resolveSourceRendererReady = resolve;
+  });
+};
+
+const markSourceRendererReady = () => {
+  if (sourceRendererReady) return;
+  sourceRendererReady = true;
+  resolveSourceRendererReady?.();
+  resolveSourceRendererReady = null;
+};
+
+const waitForSourceRendererReady = async () => {
+  if (sourceRendererReady) return;
+  await sourceRendererReadyPromise;
+};
+
+const reassertAssistantTopmost = () => {
+  if (!isLiveWindow(assistantWindow) || !assistantAlwaysOnTop) return;
+  assistantWindow.setAlwaysOnTop(true, assistantTopmostLevel);
+  assistantWindow.moveTop();
+};
+
+const setAssistantAlwaysOnTop = (enabled: boolean) => {
+  assistantAlwaysOnTop = enabled;
+  if (!isLiveWindow(assistantWindow)) return;
+  assistantWindow.setAlwaysOnTop(enabled, enabled ? assistantTopmostLevel : 'normal');
+  if (enabled) assistantWindow.moveTop();
+};
+
 const setAssistantBounds = (bounds: Electron.Rectangle) => {
   if (!isLiveWindow(assistantWindow)) return;
   const window = assistantWindow;
@@ -1085,10 +1123,13 @@ const setAssistantBounds = (bounds: Electron.Rectangle) => {
     currentBounds.y === bounds.y &&
     currentBounds.width === bounds.width &&
     currentBounds.height === bounds.height
-  )
+  ) {
+    reassertAssistantTopmost();
     return;
+  }
   isPositioningAssistant = true;
   window.setBounds(bounds);
+  reassertAssistantTopmost();
   setTimeout(() => {
     isPositioningAssistant = false;
   }, 0);
@@ -1114,6 +1155,7 @@ const setAssistantMenuOpen = (open: boolean): MenuDirection => {
       width: collapsedMenuSize.width,
       height: collapsedMenuSize.height,
     });
+    reassertAssistantTopmost();
     assistantMenuOpen = true;
     return assistantMenuDirection;
   }
@@ -1126,6 +1168,7 @@ const setAssistantMenuOpen = (open: boolean): MenuDirection => {
     width: collapsedSize.width,
     height: collapsedSize.height,
   });
+  reassertAssistantTopmost();
   assistantMenuOpen = false;
   return assistantMenuDirection;
 };
@@ -1454,15 +1497,18 @@ const startSourceLoadTimer = (view: WebContentsView, currentUrl: string) => {
   }, sourceLoadTimeoutMs);
 };
 
-const dockAssistantWindow = (useCursorDisplay = true) => {
-  if (!isLiveWindow(assistantWindow)) return;
-  const bounds = assistantWindow.getBounds();
+const getDockedAssistantBounds = (bounds: Electron.Rectangle, useCursorDisplay = true) => {
   const display = useCursorDisplay
     ? screen.getDisplayNearestPoint(screen.getCursorScreenPoint())
     : screen.getDisplayMatching(bounds);
   const docked = dockToNearestSide(bounds, display.workArea);
   assistantDockSide = docked.side;
-  setAssistantBounds({ ...bounds, x: docked.x, y: docked.y });
+  return { ...bounds, x: docked.x, y: docked.y };
+};
+
+const dockAssistantWindow = (useCursorDisplay = true) => {
+  if (!isLiveWindow(assistantWindow)) return;
+  setAssistantBounds(getDockedAssistantBounds(assistantWindow.getBounds(), useCursorDisplay));
 };
 
 const constrainExpandedAssistant = (useCursorDisplay = true) => {
@@ -1493,10 +1539,14 @@ const positionSourceNextToAssistant = () => {
   setSourcePosition(placement.x, placement.y);
 };
 
-const restoreSourceWindow = (focus: boolean) => {
+const restoreSourceWindow = async (focus: boolean) => {
+  if (!isLiveWindow(sourceWindow)) return false;
+  await waitForSourceRendererReady();
   if (!isLiveWindow(sourceWindow)) return false;
   if (sourceWindow.isMinimized()) sourceWindow.restore();
   positionSourceNextToAssistant();
+  sourceWindow.setAlwaysOnTop(true, assistantTopmostLevel);
+  sourceWindow.moveTop();
   sourceWindow.show();
   if (focus) sourceWindow.focus();
   return true;
@@ -1505,6 +1555,7 @@ const restoreSourceWindow = (focus: boolean) => {
 const handleAssistantMove = () => {
   if (!isLiveWindow(assistantWindow) || isPositioningAssistant) return;
   positionSourceNextToAssistant();
+  reassertAssistantTopmost();
   schedulePersistWindowState();
 };
 
@@ -1513,6 +1564,7 @@ const handleAssistantMoved = () => {
   if (assistantCollapsed) dockAssistantWindow();
   else constrainExpandedAssistant();
   positionSourceNextToAssistant();
+  reassertAssistantTopmost();
   schedulePersistWindowState();
 };
 
@@ -1520,6 +1572,7 @@ const handleDisplayChange = () => {
   if (isLiveWindow(assistantWindow)) {
     if (assistantCollapsed) dockAssistantWindow(false);
     else constrainExpandedAssistant(false);
+    reassertAssistantTopmost();
   }
   if (!isLiveWindow(sourceWindow)) return;
   positionSourceNextToAssistant();
@@ -1936,7 +1989,7 @@ const ensureSourceMoreMenuWindow = async (): Promise<BrowserWindow | null> => {
       },
     });
     sourceMoreMenuWindow = window;
-    window.setAlwaysOnTop(true, 'floating');
+    window.setAlwaysOnTop(true, assistantTopmostLevel);
     attachDevelopmentDiagnostics(window);
     window.on('blur', hideSourceMoreMenuAfterBlur);
     window.on('closed', () => {
@@ -2016,7 +2069,11 @@ const createAssistantWindow = async () => {
     frame: false,
     transparent: true,
     resizable: true,
+    fullscreenable: false,
     alwaysOnTop: true,
+    skipTaskbar: true,
+    hasShadow: false,
+    backgroundColor: '#00000000',
     icon: getAppIconPath(),
     webPreferences: {
       preload: join(mainDir, '../preload/index.cjs'),
@@ -2026,7 +2083,7 @@ const createAssistantWindow = async () => {
     },
   });
   assistantWindow = window;
-  window.setAlwaysOnTop(true, 'floating');
+  setAssistantAlwaysOnTop(true);
   attachDevelopmentDiagnostics(window);
   window.on('close', (event) => {
     if (shutdownComplete) {
@@ -2049,10 +2106,16 @@ const createAssistantWindow = async () => {
     if (!assistantCollapsed && !assistantMenuOpen)
       expandedAssistantBounds = isLiveWindow(window) ? window.getBounds() : null;
     positionSourceNextToAssistant();
+    reassertAssistantTopmost();
     schedulePersistWindowState();
   });
+  window.on('always-on-top-changed', (_event, enabled) => {
+    if (enabled && assistantAlwaysOnTop) window.moveTop();
+  });
+  window.setResizable(!assistantCollapsed);
   if (assistantCollapsed) dockAssistantWindow(false);
   else constrainExpandedAssistant(false);
+  reassertAssistantTopmost();
   await loadRenderer(window, 'assistant');
 };
 
@@ -2090,9 +2153,10 @@ const createSourceWindow = async () => {
     },
   });
   sourceWindow = window;
+  resetSourceRendererReady();
   sourceWindowNormalBounds = window.getBounds();
   sourceWindowFollowMode = startSourceWindowSession();
-  window.setAlwaysOnTop(true, 'floating');
+  window.setAlwaysOnTop(true, assistantTopmostLevel);
   attachDevelopmentDiagnostics(window);
   window.on('enter-html-full-screen', () => {
     if (sourceView) enterSourceVideoFullscreen(sourceView);
@@ -2127,6 +2191,7 @@ const createSourceWindow = async () => {
     sourcePreview = null;
     selectedSource = null;
     sourceWindowState = null;
+    markSourceRendererReady();
     resetSourceNavigationState();
     sourceWindowNormalBounds = null;
     resetSourceReadingPreference();
@@ -2149,12 +2214,19 @@ ipcMain.handle('assistant:set-collapsed', (event, collapsed: boolean) => {
   if (collapsed) {
     expandedAssistantBounds = window.getBounds();
     if (isLiveWindow(sourceWindow)) sourceWindow.close();
+    window.setResizable(false);
     window.setMinimumSize(collapsedSize.width, collapsedSize.height);
-    window.setSize(collapsedSize.width, collapsedSize.height);
-    dockAssistantWindow(false);
+    setAssistantBounds(
+      getDockedAssistantBounds(
+        { ...window.getBounds(), width: collapsedSize.width, height: collapsedSize.height },
+        false,
+      ),
+    );
+    reassertAssistantTopmost();
     schedulePersistWindowState();
     return;
   }
+  window.setResizable(true);
   window.setMinimumSize(240, 220);
   const collapsedBounds = window.getBounds();
   const restoredSize = getRestorableSize(
@@ -2169,6 +2241,7 @@ ipcMain.handle('assistant:set-collapsed', (event, collapsed: boolean) => {
     restoredSize,
   );
   setAssistantBounds(restored);
+  reassertAssistantTopmost();
   schedulePersistWindowState();
 });
 
@@ -2474,9 +2547,7 @@ ipcMain.handle('app:quit-confirmed', (event) => {
 
 ipcMain.handle('assistant:set-always-on-top', (event, enabled: boolean) => {
   if (!isAssistantSender(event.sender) && !isUtilitySender(event.sender)) return;
-  if (isLiveWindow(assistantWindow)) {
-    assistantWindow.setAlwaysOnTop(enabled, enabled ? 'floating' : 'normal');
-  }
+  setAssistantAlwaysOnTop(enabled);
 });
 
 ipcMain.handle('source:open', async (event, url: string) => {
@@ -2491,7 +2562,7 @@ ipcMain.handle('source:open', async (event, url: string) => {
   sourcePreview = preview;
   selectedSource = preview.sources[0] ?? null;
   if (!isLiveWindow(sourceWindow)) await createSourceWindow();
-  if (!restoreSourceWindow(false)) return false;
+  if (!(await restoreSourceWindow(false))) return false;
   return selectedSource ? showRemoteSource(selectedSource) : false;
 });
 
@@ -2503,7 +2574,7 @@ const openCompanionPreview = async (preview: CompanionPreview) => {
   resetSourceReadingPreference();
   publishSourceWindowState({ mode: 'preview', preview });
   if (!isLiveWindow(sourceWindow)) await createSourceWindow();
-  if (!restoreSourceWindow(true)) return false;
+  if (!(await restoreSourceWindow(true))) return false;
   publishSourceWindowState({ mode: 'preview', preview });
   void ensurePrewarmedSourceView();
   return true;
@@ -2557,6 +2628,12 @@ ipcMain.on('explore:prefill-suggestion', (event, value: unknown) => {
 ipcMain.handle('source:get-state', (event) =>
   isSourceSender(event.sender) ? sourceWindowState : null,
 );
+
+ipcMain.handle('source:renderer-ready', (event) => {
+  if (!isSourceSender(event.sender)) return false;
+  markSourceRendererReady();
+  return true;
+});
 
 ipcMain.handle('source:select', async (event, url: string) => {
   if (!isSourceSender(event.sender) || !sourcePreview) return false;
