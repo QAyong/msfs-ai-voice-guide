@@ -4,10 +4,11 @@ import { normalizeSecureMarkdownUrl } from './markdown-url.js';
 
 type MessageMarkdownProps = {
   children: string;
+  english: boolean;
   onOpenLink(url: string): Promise<void>;
 };
 
-export const MessageMarkdown = ({ children, onOpenLink }: MessageMarkdownProps) => (
+export const MessageMarkdown = ({ children, english, onOpenLink }: MessageMarkdownProps) => (
   <ReactMarkdown
     remarkPlugins={[remarkGfm]}
     skipHtml
@@ -29,7 +30,9 @@ export const MessageMarkdown = ({ children, onOpenLink }: MessageMarkdownProps) 
         );
       },
       img: ({ alt }) => (
-        <span className="markdown-image-placeholder">{alt ? `图片：${alt}` : '图片链接'}</span>
+        <span className="markdown-image-placeholder">
+          {english ? (alt ? `Image: ${alt}` : 'Image link') : alt ? `图片：${alt}` : '图片链接'}
+        </span>
       ),
     }}
   >

@@ -87,6 +87,22 @@ describe('ExploreController', () => {
     );
   });
 
+  it('localizes exploration errors for the English locale', async () => {
+    const controller = new ExploreController({
+      createService: async () => ({ explore: async () => result }) as unknown as ExploreService,
+      getMsfsContext: async () => undefined,
+      present: async () => true,
+    });
+
+    await expect(
+      controller.execute({ ...request, locale: 'en-US', recentConversation: [] }),
+    ).resolves.toMatchObject({
+      ok: false,
+      code: 'no_context',
+      message: 'There is no conversation or flight context to explore yet.',
+    });
+  });
+
   it('includes available MSFS context in a conversation-led exploration', async () => {
     let receivedInput: unknown;
     const controller = new ExploreController({

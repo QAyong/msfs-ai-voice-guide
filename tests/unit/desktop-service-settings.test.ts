@@ -124,6 +124,16 @@ describe('desktop service settings', () => {
     expect(second.status).toBe('rate_limited');
   });
 
+  it('localizes service-check failures for the English locale', async () => {
+    const checker = new ServiceAvailabilityChecker();
+    const result = await checker.check('llm', {}, 'en-US');
+
+    expect(result).toMatchObject({
+      status: 'unavailable',
+      message: 'Enter the address and credentials required by this service first.',
+    });
+  });
+
   it('checks the selected Bocha search provider with the provider payload', async () => {
     const fetchMock = vi
       .fn<typeof fetch>()

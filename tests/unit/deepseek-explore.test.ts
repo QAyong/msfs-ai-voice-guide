@@ -10,6 +10,17 @@ const input: ExplorePlannerInput = {
   locale: 'zh-CN' as const,
 };
 
+const roleForPrompt = (systemPrompt: string) =>
+  systemPrompt.includes('topic planner')
+    ? 'topics'
+    : systemPrompt.includes('encyclopedia lookup')
+      ? 'encyclopedia'
+      : systemPrompt.includes('video search')
+        ? 'video'
+        : systemPrompt.includes('Xiaoxiao') || systemPrompt.includes('晓晓')
+          ? 'browsing-introduction'
+          : 'suggested-prompts';
+
 describe('DeepSeek explore planner', () => {
   it('runs topic, source, prompt, and introduction roles in parallel with non-thinking mode', async () => {
     let activeRequests = 0;
@@ -34,15 +45,7 @@ describe('DeepSeek explore planner', () => {
       expect(body.thinking).toEqual({ type: 'disabled' });
       expect(body.messages?.[0]?.role).toBe('system');
       const systemPrompt = body.messages?.[0]?.content ?? '';
-      const role = systemPrompt.includes('topic planner')
-        ? 'topics'
-        : systemPrompt.includes('encyclopedia lookup')
-          ? 'encyclopedia'
-          : systemPrompt.includes('video search')
-            ? 'video'
-            : systemPrompt.includes('晓晓')
-              ? 'browsing-introduction'
-              : 'suggested-prompts';
+      const role = roleForPrompt(systemPrompt);
       roles.push(role);
 
       if (role === 'browsing-introduction') {
@@ -50,7 +53,11 @@ describe('DeepSeek explore planner', () => {
           string,
           unknown
         >;
-        expect(Object.keys(introductionInput).sort()).toEqual(['recentConversation', 'topics']);
+        expect(Object.keys(introductionInput).sort()).toEqual([
+          'locale',
+          'recentConversation',
+          'topics',
+        ]);
       }
 
       try {
@@ -159,6 +166,117 @@ describe('DeepSeek explore planner', () => {
       introduction:
         '结合你对长沙历史、景点和文化的兴趣，我给你推荐下面这些内容：从长沙本身到岳麓山和橘子洲，带你看看这座城市的历史底蕴、自然风光与城市记忆。',
     });
+    expect(fetchMock).toHaveBeenCalledTimes(5);
+  });
+
+  it('uses English instructions and content for every English explore role', async () => {
+    vi.restoreAllMocks();
+    const englishInput: ExplorePlannerInput = {
+      recentConversation: [
+        { role: 'user', text: 'I am flying near London and want to explore its history.' },
+      ],
+      preferences: { encyclopedia: 'wikipedia', videoPlatforms: ['youtube'] },
+      locale: 'en-US',
+    };
+    const systemPrompts: string[] = [];
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async (_input, init) => {
+      const body = JSON.parse(String(init?.body)) as {
+        messages?: Array<{ role: string; content: string }>;
+      };
+      const systemPrompt = body.messages?.[0]?.content ?? '';
+      systemPrompts.push(systemPrompt);
+      const role = roleForPrompt(systemPrompt);
+      const content =
+        role === 'topics'
+          ? {
+              topics: [
+                { id: 'london', title: 'London', reason: 'The city provides the overall context.' },
+                {
+                  id: 'tower-bridge',
+                  title: 'Tower Bridge',
+                  reason: 'A landmark with a distinctive history.',
+                },
+                {
+                  id: 'british-museum',
+                  title: 'British Museum',
+                  reason: 'A major place for art and culture.',
+                },
+              ],
+            }
+          : role === 'encyclopedia'
+            ? {
+                topics: [
+                  {
+                    topicId: 'london',
+                    encyclopediaQuery: 'London',
+                    encyclopediaFallbackQueries: [],
+                    alternateNames: [],
+                  },
+                  {
+                    topicId: 'tower-bridge',
+                    encyclopediaQuery: 'Tower Bridge',
+                    encyclopediaFallbackQueries: [],
+                    alternateNames: [],
+                  },
+                  {
+                    topicId: 'british-museum',
+                    encyclopediaQuery: 'British Museum',
+                    encyclopediaFallbackQueries: [],
+                    alternateNames: [],
+                  },
+                ],
+              }
+            : role === 'video'
+              ? {
+                  topics: [
+                    { topicId: 'london', videoQuery: 'London history and landmarks' },
+                    { topicId: 'tower-bridge', videoQuery: 'Tower Bridge history' },
+                    { topicId: 'british-museum', videoQuery: 'British Museum highlights' },
+                  ],
+                }
+              : role === 'suggested-prompts'
+                ? {
+                    suggestedPrompts: [
+                      'What are the most important moments in London history?',
+                      'How was Tower Bridge designed and built?',
+                      'Which highlights should I see at the British Museum?',
+                    ],
+                  }
+                : {
+                    introduction:
+                      'London offers a rich mix of history, architecture, and culture, from Tower Bridge to the British Museum. Let’s explore the stories behind these landmarks.',
+                  };
+      return Response.json({ choices: [{ message: { content: JSON.stringify(content) } }] });
+    });
+
+    await expect(
+      new DeepSeekExplorePlanner({
+        apiKey: 'test-key',
+        baseUrl: 'https://deepseek.example.test',
+        model: 'deepseek-test-model',
+      }).plan(englishInput),
+    ).resolves.toMatchObject({
+      topics: [
+        { id: 'london', title: 'London', encyclopediaQuery: 'London' },
+        { id: 'tower-bridge', title: 'Tower Bridge', encyclopediaQuery: 'Tower Bridge' },
+        { id: 'british-museum', title: 'British Museum', encyclopediaQuery: 'British Museum' },
+      ],
+      suggestedPrompts: [
+        'What are the most important moments in London history?',
+        'How was Tower Bridge designed and built?',
+        'Which highlights should I see at the British Museum?',
+      ],
+      introduction:
+        'London offers a rich mix of history, architecture, and culture, from Tower Bridge to the British Museum. Let’s explore the stories behind these landmarks.',
+    });
+    expect(systemPrompts).toHaveLength(5);
+    expect(systemPrompts.every((prompt) => !/[\u4e00-\u9fff]/u.test(prompt))).toBe(true);
+    expect(
+      systemPrompts.some((prompt) => prompt.includes('Write every question in natural English.')),
+    ).toBe(true);
+    expect(systemPrompts.some((prompt) => prompt.includes('no more than 60 English words'))).toBe(
+      true,
+    );
     expect(fetchMock).toHaveBeenCalledTimes(5);
   });
 });

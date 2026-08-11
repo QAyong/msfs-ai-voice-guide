@@ -5,7 +5,7 @@ export class YouTubeSearchPageProvider extends SearchPageVideoProvider {
   constructor() {
     super({
       id: 'youtube',
-      siteName: 'YouTube · 网页搜索',
+      siteName: (locale) => (locale === 'en-US' ? 'YouTube · Web search' : 'YouTube · 网页搜索'),
       allowedHosts: ['www.youtube.com'],
       buildSearchUrl: (query) => {
         const url = new URL('https://www.youtube.com/results');

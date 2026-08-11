@@ -63,7 +63,7 @@ export const exploreResultSchema = z.object({
   generatedAt: z.string().datetime(),
   topics: z.array(exploreTopicSchema).min(3).max(5),
   suggestedPrompts: z.array(z.string().trim().min(2).max(160)).length(3),
-  introduction: z.string().trim().max(100).default(''),
+  introduction: z.string().trim().max(180).default(''),
   unavailableProviders: z.array(z.string().trim().min(1).max(80)).max(6).default([]),
 });
 

@@ -64,7 +64,12 @@ process.once('SIGINT', () => void stop());
 
 parentPort.postMessage({ type: 'started' });
 void server.run().catch((error: unknown) => {
-  const message = error instanceof Error ? error.message : 'AI Worker 启动失败';
+  const message =
+    error instanceof Error
+      ? error.message
+      : process.env.GUIDE_LOCALE === 'en-US'
+        ? 'The AI worker failed to start.'
+        : 'AI Worker 启动失败';
   parentPort.postMessage({ type: 'error', message: message.slice(0, 320) });
   void stop(1);
 });

@@ -106,12 +106,16 @@ try {
     }
   }
 
-  const appSmoke = spawnSync(join(unpackedRoot, '晓晓飞行导游.exe'), [], {
-    env: { ...process.env, MSFS_PACKAGED_RUNTIME_SMOKE: '1' },
-    encoding: 'utf8',
-    timeout: 40_000,
-    windowsHide: true,
-  });
+  const appSmoke = spawnSync(
+    join(unpackedRoot, '晓晓飞行导游.exe'),
+    ['--disable-gpu', '--disable-gpu-compositing', '--in-process-gpu'],
+    {
+      env: { ...process.env, MSFS_PACKAGED_RUNTIME_SMOKE: '1' },
+      encoding: 'utf8',
+      timeout: 40_000,
+      windowsHide: true,
+    },
+  );
   if (appSmoke.error || appSmoke.status !== 0) {
     throw new Error(
       `安装态 Agent 子进程冒烟失败：${appSmoke.stderr || appSmoke.stdout || appSmoke.error}`,

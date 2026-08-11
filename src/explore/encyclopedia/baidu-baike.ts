@@ -4,7 +4,7 @@ export class BaiduBaikeSearchPageProvider extends SearchPageEncyclopediaProvider
   constructor() {
     super({
       id: 'baidu_baike',
-      siteName: '百度百科 · 搜索主题',
+      siteName: (locale) => (locale === 'en-US' ? 'Baidu Baike · Search' : '百度百科 · 搜索主题'),
       allowedHosts: ['baike.baidu.com'],
       buildSearchUrl: (query) => {
         const url = new URL('https://baike.baidu.com/search/word');

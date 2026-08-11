@@ -17,4 +17,17 @@ describe('MSFS connection monitor', () => {
     expect(execute).not.toHaveBeenCalled();
     expect(onStatus).toHaveBeenCalledWith(result);
   });
+
+  it('localizes the disabled status for the English locale', async () => {
+    const monitor = new MsfsConnectionMonitor({
+      client: { execute: vi.fn() } as never,
+      isVisible: () => false,
+      onStatus: vi.fn(),
+      getLocale: () => 'en-US',
+    });
+
+    await expect(monitor.refresh()).resolves.toMatchObject({
+      message: 'MSFS tools are disabled.',
+    });
+  });
 });

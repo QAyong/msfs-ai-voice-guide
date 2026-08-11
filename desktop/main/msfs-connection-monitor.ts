@@ -6,12 +6,14 @@ import {
   msfsConnectionStatusSchema,
   type MsfsConnectionStatus,
 } from '../../shared/msfs-desktop.js';
+import { localizeDesktopText, type DesktopLocale } from '../../shared/desktop-locale.js';
 
 export type MsfsConnectionMonitorOptions = {
   client: MsfsCliClient;
   isVisible: () => boolean;
   onStatus: (status: MsfsConnectionStatus) => void;
   onDiagnostic?: (event: MsfsConnectionDiagnostic) => void;
+  getLocale?: () => DesktopLocale;
   intervalMs?: number;
 };
 
@@ -67,13 +69,18 @@ export class MsfsConnectionMonitor {
   }
 
   async refresh(): Promise<MsfsConnectionStatus> {
+    const locale = this.options.getLocale?.() ?? 'zh-CN';
     if (this.checking) {
       return (
         this.lastStatus ??
         msfsConnectionStatusSchema.parse({
           visible: this.options.isVisible(),
           connected: false,
-          message: '正在检测 MSFS 游戏连接。',
+          message: localizeDesktopText(
+            locale,
+            'Checking the MSFS game connection.',
+            '正在检测 MSFS 游戏连接。',
+          ),
           timestamp: new Date().toISOString(),
         })
       );
@@ -96,10 +103,10 @@ export class MsfsConnectionMonitor {
         visible,
         connected,
         message: !visible
-          ? 'MSFS 工具已关闭。'
+          ? localizeDesktopText(locale, 'MSFS tools are disabled.', 'MSFS 工具已关闭。')
           : connected
-            ? 'MSFS 游戏已连接。'
-            : 'MSFS 游戏未连接。',
+            ? localizeDesktopText(locale, 'MSFS is connected.', 'MSFS 游戏已连接。')
+            : localizeDesktopText(locale, 'MSFS is not connected.', 'MSFS 游戏未连接。'),
         timestamp: new Date().toISOString(),
       });
       this.options.onDiagnostic?.({

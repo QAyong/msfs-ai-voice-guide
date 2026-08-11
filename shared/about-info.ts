@@ -15,12 +15,14 @@ export const aboutLinkSchema = z.object({
 export const aboutSupportChannelSchema = z.object({
   id: z.enum(['alipay', 'wechat']),
   label: z.string().min(1).max(120),
+  labelEn: z.string().min(1).max(120).optional(),
   qrAsset: z.enum(['alipay-qr', 'wechat-qr']),
 });
 
 export const aboutInfoSchema = z.object({
   schemaVersion: z.literal(1),
   productName: z.string().min(1).max(120),
+  productNameEn: z.string().min(1).max(120).optional(),
   version: z.string().min(1).max(120),
   supportChannels: z.array(aboutSupportChannelSchema).readonly(),
   links: z.array(aboutLinkSchema).readonly(),

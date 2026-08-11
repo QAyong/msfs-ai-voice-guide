@@ -38,6 +38,11 @@ import type {
 import { aboutOpenLinkRequestSchema } from '../../shared/about-info.js';
 import type { AboutInfo, AboutLinkId } from '../../shared/about-info.js';
 
+const currentLocaleIsEnglish = () =>
+  typeof document !== 'undefined' && document.documentElement.lang === 'en-US';
+const localizedPreloadText = (english: string, chinese: string) =>
+  currentLocaleIsEnglish() ? english : chinese;
+
 contextBridge.exposeInMainWorld('desktop', {
   setCollapsed: (collapsed: boolean) => ipcRenderer.invoke('assistant:set-collapsed', collapsed),
   getAssistantState: () => ipcRenderer.invoke('assistant:get-state'),
@@ -58,7 +63,10 @@ contextBridge.exposeInMainWorld('desktop', {
       return Promise.resolve({
         available: false,
         active: false,
-        message: '全局按住说话键无效。',
+        message: localizedPreloadText(
+          'The global push-to-talk key is invalid.',
+          '全局按住说话键无效。',
+        ),
       } satisfies GlobalPushToTalkStatus);
     }
     return ipcRenderer.invoke(
@@ -105,7 +113,11 @@ contextBridge.exposeInMainWorld('desktop', {
     if (!parsed.success) {
       return Promise.resolve({
         ok: false as const,
-        readiness: { status: 'error' as const, message: '设置格式无效。', issues: [] },
+        readiness: {
+          status: 'error' as const,
+          message: localizedPreloadText('The settings format is invalid.', '设置格式无效。'),
+          issues: [],
+        },
       });
     }
     return ipcRenderer.invoke('settings:save-settings', parsed.data);
@@ -116,7 +128,10 @@ contextBridge.exposeInMainWorld('desktop', {
       return Promise.resolve({
         target: request.target,
         status: 'unavailable',
-        message: '服务检测参数无效。',
+        message: localizedPreloadText(
+          'The service check parameters are invalid.',
+          '服务检测参数无效。',
+        ),
       });
     }
     return ipcRenderer.invoke('settings:test-service', parsed.data);
@@ -132,7 +147,14 @@ contextBridge.exposeInMainWorld('desktop', {
     const parsed = exploreRequestSchema.safeParse(request);
     return parsed.success
       ? ipcRenderer.invoke('explore:request', parsed.data)
-      : Promise.resolve({ ok: false, code: 'configuration', message: '探索请求格式无效。' });
+      : Promise.resolve({
+          ok: false,
+          code: 'configuration',
+          message: localizedPreloadText(
+            'The exploration request is invalid.',
+            '探索请求格式无效。',
+          ),
+        });
   },
   cancelExplore: () => ipcRenderer.invoke('explore:cancel') as Promise<boolean>,
   prefillExploreSuggestion: (text: string) =>

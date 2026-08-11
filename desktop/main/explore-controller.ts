@@ -5,6 +5,7 @@ import type {
 } from '../../shared/explore-contracts.js';
 import type { ExploreService } from '../../src/explore/service.js';
 import type { MsfsExploreContext } from '../../src/msfs/explore-context.js';
+import { localizeDesktopText } from '../../shared/desktop-locale.js';
 
 const movementThresholdMeters = 10_000;
 
@@ -101,7 +102,15 @@ export class ExploreController {
 
   async execute(request: ExploreRequest): Promise<ExploreResponse> {
     if (this.active) {
-      return { ok: false, code: 'busy', message: '探索正在进行中。' };
+      return {
+        ok: false,
+        code: 'busy',
+        message: localizeDesktopText(
+          request.locale,
+          'Exploration is already in progress.',
+          '探索正在进行中。',
+        ),
+      };
     }
     const controller = new AbortController();
     this.active = controller;
@@ -123,7 +132,15 @@ export class ExploreController {
 
       const msfs = await msfsPromise.catch(() => undefined);
       if (!recentConversation && !msfs) {
-        return { ok: false, code: 'no_context', message: '当前没有可用于探索的对话或飞行上下文。' };
+        return {
+          ok: false,
+          code: 'no_context',
+          message: localizeDesktopText(
+            request.locale,
+            'There is no conversation or flight context to explore yet.',
+            '当前没有可用于探索的对话或飞行上下文。',
+          ),
+        };
       }
       if (request.recentConversation.length)
         this.refreshCachedMsfsContext(conversation, msfsPromise);
@@ -132,7 +149,11 @@ export class ExploreController {
         return {
           ok: false,
           code: 'configuration',
-          message: '探索规划服务尚未配置，请在设置中填写 DeepSeek API Key。',
+          message: localizeDesktopText(
+            request.locale,
+            'The exploration planner is not configured. Add a DeepSeek API key in Settings.',
+            '探索规划服务尚未配置，请在设置中填写 DeepSeek API Key。',
+          ),
         };
       }
       const result = await service.explore(
@@ -154,15 +175,27 @@ export class ExploreController {
       return { ok: true, result, reused: false };
     } catch (error) {
       if (controller.signal.aborted) {
-        return { ok: false, code: 'cancelled', message: '探索已取消。' };
+        return {
+          ok: false,
+          code: 'cancelled',
+          message: localizeDesktopText(request.locale, 'Exploration cancelled.', '探索已取消。'),
+        };
       }
       return {
         ok: false,
         code: 'planner_failed',
         message:
           error instanceof Error && error.message.includes('Planner')
-            ? '本次无法生成探索主题。'
-            : '本次探索暂时不可用，请稍后重试。',
+            ? localizeDesktopText(
+                request.locale,
+                'The exploration topics could not be generated.',
+                '本次无法生成探索主题。',
+              )
+            : localizeDesktopText(
+                request.locale,
+                'Exploration is temporarily unavailable. Try again later.',
+                '本次探索暂时不可用，请稍后重试。',
+              ),
       };
     } finally {
       if (this.active === controller) this.active = null;

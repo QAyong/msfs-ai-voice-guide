@@ -24,7 +24,7 @@ export const explorePlanSchema = z
   .object({
     topics: z.array(exploreTopicSchema).min(3).max(5),
     suggestedPrompts: z.array(z.string().trim().min(2).max(160)).length(3),
-    introduction: z.string().trim().max(100).optional(),
+    introduction: z.string().trim().max(180).optional(),
   })
   .superRefine((plan, context) => {
     const seenQueries = new Map<string, number>();

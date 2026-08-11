@@ -108,7 +108,11 @@ import {
   getLocalLiveKitServerPath,
   shouldAutoStartLocalLiveKit,
 } from './local-livekit-runtime.js';
-import { checkDesktopConfiguration, localLiveKitFailureReadiness } from './readiness.js';
+import {
+  checkDesktopConfiguration,
+  localLiveKitFailureReadiness,
+  localizeReadinessDetail,
+} from './readiness.js';
 import { createDesktopSessionCredentials } from './session-token.js';
 import { getSourceViewBounds, SOURCE_TITLE_BAR_HEIGHT } from './source-view-bounds.js';
 import { getLandscapeSourceWindowBounds } from './source-window-fullscreen.js';
@@ -161,6 +165,7 @@ import {
   type MsfsConfigurationDiagnostic,
   type MsfsConnectionStatus,
 } from '../../shared/msfs-desktop.js';
+import { localizeDesktopText, type DesktopLocale } from '../../shared/desktop-locale.js';
 
 const ignoreProcessOutputErrors = (stream: NodeJS.WriteStream) => {
   stream.on('error', () => undefined);
@@ -186,7 +191,7 @@ const sourceMobileUserAgent =
 
 type MenuDirection = 'up' | 'down';
 type UtilityKind = 'settings' | 'quit';
-type GuideLocale = 'en-US' | 'zh-CN';
+type GuideLocale = DesktopLocale;
 type VisibleServiceCredentials = Record<ServiceCredentialKey, string>;
 
 let assistantWindow: BrowserWindow | null = null;
@@ -284,10 +289,11 @@ const getAboutInfo = (): AboutInfo =>
   aboutInfoSchema.parse({
     schemaVersion: 1,
     productName: '晓晓飞行导游',
+    productNameEn: 'Xiaoxiao Flight Guide',
     version: '1.0',
     supportChannels: [
-      { id: 'wechat', label: '微信', qrAsset: 'wechat-qr' },
-      { id: 'alipay', label: '支付宝', qrAsset: 'alipay-qr' },
+      { id: 'wechat', label: '微信', labelEn: 'WeChat', qrAsset: 'wechat-qr' },
+      { id: 'alipay', label: '支付宝', labelEn: 'Alipay', qrAsset: 'alipay-qr' },
     ],
     links: aboutLinks,
   });
@@ -359,6 +365,7 @@ const globalPushToTalk = new GlobalPushToTalkController({
     resourcesPath: getPackagedResourcesPath(),
     projectRoot: process.cwd(),
   }),
+  getLocale: () => guideLocale,
   onEvent: (event: GlobalPushToTalkEvent) => {
     if (isLiveWindow(assistantWindow)) assistantWindow.webContents.send('voice:global-ptt', event);
   },
@@ -605,6 +612,7 @@ const createMsfsConfigurationChecker = async (): Promise<MsfsConfigurationChecke
     timeoutMs: Number.isInteger(timeoutValue) && timeoutValue >= 500 ? timeoutValue : 15_000,
     maxConcurrency:
       Number.isInteger(concurrencyValue) && concurrencyValue >= 1 ? concurrencyValue : 1,
+    locale: guideLocale,
     client,
     packageSourcePath: join(
       getPackagedResourcesPath(),
@@ -620,7 +628,7 @@ const getMsfsConnectionStatus = async (): Promise<MsfsConnectionStatus> => {
     return msfsConnectionStatusSchema.parse({
       visible: false,
       connected: false,
-      message: 'MSFS 工具已关闭。',
+      message: localizeDesktopText(guideLocale, 'MSFS tools are disabled.', 'MSFS 工具已关闭。'),
       timestamp: new Date().toISOString(),
     });
   }
@@ -635,7 +643,9 @@ const getMsfsConnectionStatus = async (): Promise<MsfsConnectionStatus> => {
   return msfsConnectionStatusSchema.parse({
     visible: true,
     connected,
-    message: connected ? 'MSFS 游戏已连接。' : 'MSFS 游戏未连接。',
+    message: connected
+      ? localizeDesktopText(guideLocale, 'MSFS is connected.', 'MSFS 游戏已连接。')
+      : localizeDesktopText(guideLocale, 'MSFS is not connected.', 'MSFS 游戏未连接。'),
     timestamp: new Date().toISOString(),
   });
 };
@@ -665,6 +675,7 @@ const startMsfsConnectionMonitor = async () => {
     client: await getMsfsClient('monitor'),
     isVisible: hasEnabledMsfsTools,
     onStatus: publishMsfsConnectionStatus,
+    getLocale: () => guideLocale,
     onDiagnostic: (event) => {
       void getDiagnosticsLogger().append('main', {
         event: 'msfs_connection',
@@ -700,12 +711,20 @@ const runMsfsConfigurationDiagnostic = async (): Promise<MsfsConfigurationDiagno
   } catch {
     return msfsConfigurationDiagnosticSchema.parse({
       status: 'needs_setup',
-      message: 'MSFS CLI 检测失败，请稍后重试。',
+      message: localizeDesktopText(
+        guideLocale,
+        'The MSFS CLI check failed. Try again later.',
+        'MSFS CLI 检测失败，请稍后重试。',
+      ),
       checks: [
         {
           id: 'cli_runtime',
           status: 'error',
-          message: '无法完成 MSFS CLI 检测。',
+          message: localizeDesktopText(
+            guideLocale,
+            'The MSFS CLI check could not be completed.',
+            '无法完成 MSFS CLI 检测。',
+          ),
         },
       ],
       checkedAt: new Date().toISOString(),
@@ -816,10 +835,10 @@ const startConfiguredAgent = async (
       });
       Object.assign(environment, applyLocalLiveKitEnvironment(environment, localConnection));
     } catch (error) {
-      return { readiness: localLiveKitFailureReadiness(error) };
+      return { readiness: localLiveKitFailureReadiness(error, guideLocale) };
     }
   }
-  const configuration = checkDesktopConfiguration(environment);
+  const configuration = checkDesktopConfiguration(environment, guideLocale);
   if (!configuration.ok) return { readiness: configuration.readiness };
 
   try {
@@ -835,8 +854,16 @@ const startConfiguredAgent = async (
     return {
       readiness: {
         status: 'error',
-        message: 'AI 服务启动失败。',
-        issues: [error instanceof Error ? error.message.slice(0, 320) : '请稍后重试。'],
+        message: localizeDesktopText(
+          guideLocale,
+          'The AI service failed to start.',
+          'AI 服务启动失败。',
+        ),
+        issues: [
+          error instanceof Error
+            ? localizeReadinessDetail(error.message, guideLocale).slice(0, 320)
+            : localizeDesktopText(guideLocale, 'Try again later.', '请稍后重试。'),
+        ],
       },
     };
   }
@@ -887,7 +914,13 @@ const applyDesktopSettings = async (
     (key) => request.credentials[key] !== undefined,
   );
   if (hasCredentialUpdate && !safeStorage.isEncryptionAvailable()) {
-    return desktopSettingsFailure('系统加密服务不可用，未保存任何凭据。');
+    return desktopSettingsFailure(
+      localizeDesktopText(
+        request.locale,
+        'System encryption is unavailable. No credentials were saved.',
+        '系统加密服务不可用，未保存任何凭据。',
+      ),
+    );
   }
 
   const previousLocale = guideLocale;
@@ -911,7 +944,13 @@ const applyDesktopSettings = async (
     await restoreStoredServiceSettings(previousServices);
     await writeStoredToolSettings(previousTools);
     if (hasCredentialUpdate) await writeStoredServiceCredentials(previousCredentials);
-    return desktopSettingsFailure('无法安全保存服务配置，未保存任何内容。');
+    return desktopSettingsFailure(
+      localizeDesktopText(
+        request.locale,
+        'The service settings could not be saved securely. Nothing was saved.',
+        '无法安全保存服务配置，未保存任何内容。',
+      ),
+    );
   }
 
   guideLocale = request.locale;
@@ -2259,7 +2298,11 @@ ipcMain.handle('diagnostics:get-readiness', async (event) => {
   if (!isAssistantSender(event.sender) && !isUtilitySender(event.sender)) {
     return {
       status: 'error',
-      message: '不允许的诊断请求。',
+      message: localizeDesktopText(
+        guideLocale,
+        'Diagnostic request is not allowed.',
+        '不允许的诊断请求。',
+      ),
       issues: [],
     } satisfies DesktopReadiness;
   }
@@ -2271,7 +2314,11 @@ ipcMain.handle('diagnostics:retry', async (event) => {
   if (!isAssistantSender(event.sender) && !isUtilitySender(event.sender)) {
     return {
       status: 'error',
-      message: '不允许的诊断请求。',
+      message: localizeDesktopText(
+        guideLocale,
+        'Diagnostic request is not allowed.',
+        '不允许的诊断请求。',
+      ),
       issues: [],
     } satisfies DesktopReadiness;
   }
@@ -2284,7 +2331,11 @@ ipcMain.handle('msfs:get-connection-status', async (event): Promise<MsfsConnecti
     return msfsConnectionStatusSchema.parse({
       visible: false,
       connected: false,
-      message: '无权读取 MSFS 游戏连接状态。',
+      message: localizeDesktopText(
+        guideLocale,
+        'You are not allowed to read the MSFS connection status.',
+        '无权读取 MSFS 游戏连接状态。',
+      ),
       timestamp: new Date().toISOString(),
     });
   }
@@ -2299,7 +2350,11 @@ ipcMain.handle('msfs:check-configuration', async (event): Promise<MsfsConfigurat
   if (!isUtilitySender(event.sender)) {
     return msfsConfigurationDiagnosticSchema.parse({
       status: 'needs_setup',
-      message: '无权检测 MSFS 配置。',
+      message: localizeDesktopText(
+        guideLocale,
+        'You are not allowed to check MSFS configuration.',
+        '无权检测 MSFS 配置。',
+      ),
       checks: [],
       checkedAt: new Date().toISOString(),
     });
@@ -2327,10 +2382,17 @@ const diagnosticConfigurationSummary = async () => {
 
 ipcMain.handle('diagnostics:export', async (event): Promise<DiagnosticExportResult> => {
   if (!isUtilitySender(event.sender)) {
-    return { ok: false, message: '无权导出诊断包。' };
+    return {
+      ok: false,
+      message: localizeDesktopText(
+        guideLocale,
+        'You are not allowed to export diagnostics.',
+        '无权导出诊断包。',
+      ),
+    };
   }
   const saveDialogOptions = {
-    title: '导出诊断包',
+    title: localizeDesktopText(guideLocale, 'Export diagnostics', '导出诊断包'),
     defaultPath: `msfs-ai-guide-diagnostics-${new Date().toISOString().slice(0, 10)}.zip`,
     filters: [{ name: 'ZIP archive', extensions: ['zip'] }],
     showOverwriteConfirmation: true,
@@ -2339,7 +2401,15 @@ ipcMain.handle('diagnostics:export', async (event): Promise<DiagnosticExportResu
     ? await dialog.showSaveDialog(utilityWindow, saveDialogOptions)
     : await dialog.showSaveDialog(saveDialogOptions);
   if (result.canceled || !result.filePath) {
-    return { ok: false, cancelled: true, message: '已取消导出诊断包。' };
+    return {
+      ok: false,
+      cancelled: true,
+      message: localizeDesktopText(
+        guideLocale,
+        'Diagnostic export cancelled.',
+        '已取消导出诊断包。',
+      ),
+    };
   }
 
   try {
@@ -2367,13 +2437,23 @@ ipcMain.handle('diagnostics:export', async (event): Promise<DiagnosticExportResu
       configurationSummary: await diagnosticConfigurationSummary(),
     });
     void logger.append('main', { event: 'diagnostic_exported' });
-    return { ok: true, message: '诊断包已导出。' };
+    return {
+      ok: true,
+      message: localizeDesktopText(guideLocale, 'Diagnostics exported.', '诊断包已导出。'),
+    };
   } catch (error) {
     void getDiagnosticsLogger().append('main', {
       event: 'diagnostic_export_failed',
       message: error instanceof Error ? error.message : 'unknown error',
     });
-    return { ok: false, message: '无法写入诊断包，请确认目标位置可用且磁盘空间充足。' };
+    return {
+      ok: false,
+      message: localizeDesktopText(
+        guideLocale,
+        'The diagnostics archive could not be written. Check the destination and available disk space.',
+        '无法写入诊断包，请确认目标位置可用且磁盘空间充足。',
+      ),
+    };
   }
 });
 
@@ -2404,7 +2484,15 @@ ipcMain.handle('livekit:create-session', async (event): Promise<DesktopSessionRe
   if (!isAssistantSender(event.sender)) {
     return {
       ok: false,
-      readiness: { status: 'error', message: '不允许的会话请求。', issues: [] },
+      readiness: {
+        status: 'error',
+        message: localizeDesktopText(
+          guideLocale,
+          'Session request is not allowed.',
+          '不允许的会话请求。',
+        ),
+        issues: [],
+      },
     };
   }
   const result = await startConfiguredAgent(true);
@@ -2431,18 +2519,42 @@ ipcMain.handle('about:open-link', async (event, value: unknown): Promise<boolean
 
 ipcMain.handle('voice:get-global-ptt-status', (event): GlobalPushToTalkStatus => {
   if (!isAssistantSender(event.sender) && !isUtilitySender(event.sender)) {
-    return { available: false, active: false, message: '无权读取全局按住说话状态。' };
+    return {
+      available: false,
+      active: false,
+      message: localizeDesktopText(
+        guideLocale,
+        'You are not allowed to read global push-to-talk status.',
+        '无权读取全局按住说话状态。',
+      ),
+    };
   }
   return globalPushToTalk.getStatus();
 });
 
 ipcMain.handle('voice:configure-global-ptt', (event, value: unknown): GlobalPushToTalkStatus => {
   if (!isAssistantSender(event.sender)) {
-    return { available: false, active: false, message: '无权配置全局按住说话。' };
+    return {
+      available: false,
+      active: false,
+      message: localizeDesktopText(
+        guideLocale,
+        'You are not allowed to configure global push-to-talk.',
+        '无权配置全局按住说话。',
+      ),
+    };
   }
   const parsed = globalPushToTalkConfigurationSchema.safeParse(value);
   if (!parsed.success) {
-    return { available: false, active: false, message: '全局按住说话键无效。' };
+    return {
+      available: false,
+      active: false,
+      message: localizeDesktopText(
+        guideLocale,
+        'The global push-to-talk key is invalid.',
+        '全局按住说话键无效。',
+      ),
+    };
   }
   return globalPushToTalk.configure(parsed.data);
 });
@@ -2451,7 +2563,13 @@ ipcMain.handle(
   'settings:get-credential-status',
   async (event): Promise<ServiceCredentialStatus> => {
     if (!isUtilitySender(event.sender))
-      return emptyServiceCredentialStatus('无权访问服务凭据状态。');
+      return emptyServiceCredentialStatus(
+        localizeDesktopText(
+          guideLocale,
+          'You are not allowed to access service credential status.',
+          '无权访问服务凭据状态。',
+        ),
+      );
     return getServiceCredentialStatus();
   },
 );
@@ -2477,7 +2595,7 @@ ipcMain.handle(
 ipcMain.handle('settings:get-service-settings', async (event): Promise<DesktopServiceSettings> => {
   if (!isUtilitySender(event.sender)) return defaultDesktopServiceSettings;
   const environment = await getEffectiveServiceEnvironment();
-  const configuration = checkDesktopConfiguration(environment);
+  const configuration = checkDesktopConfiguration(environment, guideLocale);
   return configuration.ok
     ? serviceSettingsFromConfig(configuration.config)
     : ((await readStoredServiceSettings()) ?? defaultDesktopServiceSettings);
@@ -2494,21 +2612,61 @@ ipcMain.handle(
 ipcMain.handle(
   'settings:save-credentials',
   async (event, value: unknown): Promise<ServiceCredentialStatus> => {
-    if (!isUtilitySender(event.sender)) return emptyServiceCredentialStatus('无权保存服务凭据。');
+    if (!isUtilitySender(event.sender)) {
+      return emptyServiceCredentialStatus(
+        localizeDesktopText(
+          guideLocale,
+          'You are not allowed to save credentials.',
+          '无权保存服务凭据。',
+        ),
+      );
+    }
     const parsed = serviceCredentialUpdatesSchema.safeParse(value);
-    if (!parsed.success) return emptyServiceCredentialStatus('凭据格式无效，未保存任何内容。');
+    if (!parsed.success) {
+      return emptyServiceCredentialStatus(
+        localizeDesktopText(
+          guideLocale,
+          'The credential format is invalid. Nothing was saved.',
+          '凭据格式无效，未保存任何内容。',
+        ),
+      );
+    }
     try {
-      return emptyServiceCredentialStatus('服务凭据必须随“保存并重新连接”原子提交。');
+      return emptyServiceCredentialStatus(
+        localizeDesktopText(
+          guideLocale,
+          'Service credentials must be submitted atomically with “Save and reconnect”.',
+          '服务凭据必须随“保存并重新连接”原子提交。',
+        ),
+      );
     } catch {
-      return emptyServiceCredentialStatus('无法安全保存凭据。');
+      return emptyServiceCredentialStatus(
+        localizeDesktopText(
+          guideLocale,
+          'Credentials could not be saved securely.',
+          '无法安全保存凭据。',
+        ),
+      );
     }
   },
 );
 
 ipcMain.handle('settings:save-settings', async (event, value: unknown) => {
-  if (!isUtilitySender(event.sender)) return desktopSettingsFailure('无权保存设置。');
+  if (!isUtilitySender(event.sender)) {
+    return desktopSettingsFailure(
+      localizeDesktopText(guideLocale, 'You are not allowed to save settings.', '无权保存设置。'),
+    );
+  }
   const parsed = desktopSettingsSaveRequestSchema.safeParse(value);
-  if (!parsed.success) return desktopSettingsFailure('设置格式无效，未保存任何内容。');
+  if (!parsed.success) {
+    return desktopSettingsFailure(
+      localizeDesktopText(
+        guideLocale,
+        'The settings format is invalid. Nothing was saved.',
+        '设置格式无效，未保存任何内容。',
+      ),
+    );
+  }
   return applyDesktopSettings(parsed.data);
 });
 
@@ -2520,7 +2678,11 @@ ipcMain.handle(
       return {
         target: parsed.success ? parsed.data.target : 'llm',
         status: 'unavailable',
-        message: '服务检测请求无效。',
+        message: localizeDesktopText(
+          guideLocale,
+          'The service check request is invalid.',
+          '服务检测请求无效。',
+        ),
       };
     }
     const credentials = mergeCredentialUpdates(
@@ -2528,7 +2690,7 @@ ipcMain.handle(
       parsed.data.credentials,
     );
     const environment = await getEffectiveServiceEnvironment(parsed.data.services, credentials);
-    return serviceAvailabilityChecker.check(parsed.data.target, environment);
+    return serviceAvailabilityChecker.check(parsed.data.target, environment, guideLocale);
   },
 );
 
@@ -2601,11 +2763,27 @@ ipcMain.handle('source:open-preview', async (event, value: unknown) => {
 
 ipcMain.handle('explore:request', async (event, value: unknown) => {
   if (!isLiveWindow(assistantWindow) || !isAssistantSender(event.sender)) {
-    return { ok: false, code: 'configuration', message: '不允许的探索请求。' };
+    return {
+      ok: false,
+      code: 'configuration',
+      message: localizeDesktopText(
+        guideLocale,
+        'Exploration request is not allowed.',
+        '不允许的探索请求。',
+      ),
+    };
   }
   const parsed = exploreRequestSchema.safeParse(value);
   if (!parsed.success) {
-    return { ok: false, code: 'configuration', message: '探索请求格式无效。' };
+    return {
+      ok: false,
+      code: 'configuration',
+      message: localizeDesktopText(
+        guideLocale,
+        'The exploration request format is invalid.',
+        '探索请求格式无效。',
+      ),
+    };
   }
   return getExploreController().execute(parsed.data);
 });

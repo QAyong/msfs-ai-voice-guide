@@ -1,6 +1,7 @@
 import { utilityProcess, type UtilityProcess } from 'electron';
 import type { AppConfig } from '../../src/config/schema.js';
 import type { DesktopReadiness } from '../../shared/desktop-contracts.js';
+import { localizeDesktopText, type DesktopLocale } from '../../shared/desktop-locale.js';
 import { workerFailureReadiness } from './readiness.js';
 
 type RuntimeStatus = 'stopped' | 'starting' | 'ready' | 'error';
@@ -13,6 +14,7 @@ export class EmbeddedAgentRuntime {
   private error: unknown = null;
   private fingerprint = '';
   private stopping = false;
+  private locale: DesktopLocale = 'zh-CN';
 
   constructor(
     private readonly healthPort = 8098,
@@ -25,12 +27,19 @@ export class EmbeddedAgentRuntime {
 
   getReadiness(): DesktopReadiness {
     if (this.status === 'ready') {
-      return { status: 'ready', message: 'AI 服务已就绪。', issues: [] };
+      return {
+        status: 'ready',
+        message: localizeDesktopText(this.locale, 'AI service is ready.', 'AI 服务已就绪。'),
+        issues: [],
+      };
     }
-    if (this.status === 'error') return workerFailureReadiness(this.error);
+    if (this.status === 'error') return workerFailureReadiness(this.error, this.locale);
     return {
       status: this.status === 'starting' ? 'worker_starting' : 'checking',
-      message: this.status === 'starting' ? '正在启动 AI 服务…' : '正在检查 AI 服务…',
+      message:
+        this.status === 'starting'
+          ? localizeDesktopText(this.locale, 'Starting the AI service…', '正在启动 AI 服务…')
+          : localizeDesktopText(this.locale, 'Checking the AI service…', '正在检查 AI 服务…'),
       issues: [],
     };
   }
@@ -41,6 +50,7 @@ export class EmbeddedAgentRuntime {
     locale: 'en-US' | 'zh-CN',
     environment: NodeJS.ProcessEnv = process.env,
   ): Promise<void> {
+    this.locale = locale;
     const fingerprint = JSON.stringify([config, agentProcessPath, locale, this.healthPort]);
     if (this.child && this.fingerprint === fingerprint && this.status !== 'error') return;
     if (this.child) await this.stop();
@@ -88,7 +98,14 @@ export class EmbeddedAgentRuntime {
       if (this.stopping) return;
       if (this.status === 'error') return;
       this.status = 'error';
-      this.error = new Error(childErrorOutput || `AI Worker 已退出（代码 ${code}）`);
+      this.error = new Error(
+        childErrorOutput ||
+          localizeDesktopText(
+            this.locale,
+            `The AI worker exited (code ${code}).`,
+            `AI Worker 已退出（代码 ${code}）`,
+          ),
+      );
     });
   }
 
@@ -105,15 +122,34 @@ export class EmbeddedAgentRuntime {
         }
         const detail = (await response.text()).trim();
         lastFailure = detail.includes('not connected to livekit')
-          ? 'LiveKit 服务不可用，或 Worker 尚未完成注册。请确认 LiveKit Server 已启动。'
-          : `AI Worker 健康检查未通过（HTTP ${response.status}）。`;
+          ? localizeDesktopText(
+              this.locale,
+              'LiveKit is unavailable or the worker has not registered. Confirm that the LiveKit server is running.',
+              'LiveKit 服务不可用，或 Worker 尚未完成注册。请确认 LiveKit Server 已启动。',
+            )
+          : localizeDesktopText(
+              this.locale,
+              `AI worker health check failed (HTTP ${response.status}).`,
+              `AI Worker 健康检查未通过（HTTP ${response.status}）。`,
+            );
       } catch {
-        lastFailure = 'AI Worker 健康检查端口尚未就绪。';
+        lastFailure = localizeDesktopText(
+          this.locale,
+          'The AI worker health-check port is not ready.',
+          'AI Worker 健康检查端口尚未就绪。',
+        );
       }
       await new Promise((resolve) => setTimeout(resolve, 250));
     }
     this.status = 'error';
-    this.error = new Error(lastFailure || '等待 LiveKit Worker 就绪超时');
+    this.error = new Error(
+      lastFailure ||
+        localizeDesktopText(
+          this.locale,
+          'Timed out waiting for the LiveKit worker to become ready.',
+          '等待 LiveKit Worker 就绪超时',
+        ),
+    );
     return false;
   }
 

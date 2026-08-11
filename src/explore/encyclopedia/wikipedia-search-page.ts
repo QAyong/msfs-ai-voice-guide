@@ -5,7 +5,7 @@ export class WikipediaSearchPageProvider extends SearchPageEncyclopediaProvider 
   constructor() {
     super({
       id: 'wikipedia',
-      siteName: 'Wikipedia · 搜索主题',
+      siteName: (locale) => (locale === 'en-US' ? 'Wikipedia · Search' : 'Wikipedia · 搜索主题'),
       allowedHosts: ['zh.wikipedia.org', 'en.wikipedia.org'],
       buildSearchUrl: (query, locale) => {
         const url = new URL(

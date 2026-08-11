@@ -4,7 +4,7 @@ import type { EncyclopediaCandidate, EncyclopediaProvider } from './provider.js'
 export type SearchPageCardOptions = {
   id: string;
   kind: ExploreCard['kind'];
-  siteName: string;
+  siteName: string | ((locale: 'zh-CN' | 'en-US') => string);
   allowedHosts: readonly string[];
   buildSearchUrl(query: string, locale: 'zh-CN' | 'en-US'): URL;
 };
@@ -38,7 +38,7 @@ export const createSearchPageCard = (
     kind: options.kind,
     topicId: candidate.topicId,
     title: query,
-    siteName: options.siteName,
+    siteName: typeof options.siteName === 'function' ? options.siteName(locale) : options.siteName,
     sourceType: 'search_page',
     url: url.toString(),
   });

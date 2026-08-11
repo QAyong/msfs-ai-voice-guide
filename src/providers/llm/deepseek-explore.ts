@@ -62,33 +62,57 @@ const suggestedPromptsSchema = z.object({
 });
 
 const browsingIntroductionSchema = z.object({
-  introduction: z.string().trim().min(1).max(100),
+  introduction: z.string().trim().min(1).max(180),
 });
 
-const topicSystemPrompt = `You are the topic planner for a flight guide. Return JSON only.
+type ExploreLocale = 'zh-CN' | 'en-US';
+
+const topicSystemPrompt = (
+  locale: ExploreLocale,
+) => `You are the topic planner for a flight guide. Return JSON only.
 Based on the conversation and optional flight context, choose 3 to 5 concrete encyclopedia entities worth exploring.
 Return exactly {topics:[{id,title,reason}]}.
 Each topic must be a different concrete entity, not an abstract theme such as city history or city attractions.
 For a city, choose distinct entities such as the city itself, a landmark, a museum, a river, or a historical site when relevant.
-Use concise Chinese when the locale is zh-CN. Do not return URLs, search queries, video queries, aliases, or resource metadata.`;
+${locale === 'en-US' ? 'Write every title and reason in natural English.' : '用简洁、自然的简体中文写标题和理由。'}
+Do not return URLs, search queries, video queries, aliases, or resource metadata.`;
 
-const encyclopediaSystemPrompt = `You generate encyclopedia lookup queries for an existing exploration plan. Return JSON only.
+const encyclopediaSystemPrompt = (
+  locale: ExploreLocale,
+) => `You generate encyclopedia lookup queries for an existing exploration plan. Return JSON only.
 Do not change, add, or remove topics. Return exactly {topics:[{topicId,encyclopediaQuery,encyclopediaFallbackQueries,alternateNames}]}.
 encyclopediaQuery must be the concrete canonical encyclopedia entry name.
 Fallback queries and alternate names must refer to the same entity, not a new topic.
+${locale === 'en-US' ? 'Write all query strings and alternate names in natural English.' : '使用自然、准确的简体中文写所有查询词和别名。'}
 Never return URLs, summaries, reasons, video queries, or resource metadata.`;
 
-const videoSystemPrompt = `You generate video search queries for an existing exploration plan. Return JSON only.
+const videoSystemPrompt = (
+  locale: ExploreLocale,
+) => `You generate video search queries for an existing exploration plan. Return JSON only.
 Do not change, add, or remove topics. Return exactly {topics:[{topicId,videoQuery}]}.
 Each videoQuery should be a concise natural-language search query useful on video platforms.
-Use the requested locale. Never return URLs, video IDs, reasons, encyclopedia queries, or resource metadata.`;
+${locale === 'en-US' ? 'Use natural English for videoQuery.' : '使用自然、简洁的简体中文写 videoQuery。'}
+Never return URLs, video IDs, reasons, encyclopedia queries, or resource metadata.`;
 
-const suggestedPromptsSystemPrompt = `You generate follow-up questions for an exploration panel. Return JSON only.
+const suggestedPromptsSystemPrompt = (
+  locale: ExploreLocale,
+) => `You generate follow-up questions for an exploration panel. Return JSON only.
 Return exactly {suggestedPrompts:[string,string,string]}.
 Use the conversation and selected topics. Each question must be a complete natural user question.
+${locale === 'en-US' ? 'Write every question in natural English.' : '用自然、完整的简体中文写每个问题。'}
 Do not return URLs, answers, search queries, IDs, or resource metadata.`;
 
-const browsingIntroductionSystemPrompt = `你是“晓晓”，一位亲切、自然、会陪用户探索世界的飞行导游。
+const browsingIntroductionSystemPrompt = (locale: ExploreLocale) =>
+  locale === 'en-US'
+    ? `You are Xiaoxiao, a warm and natural flight guide who enjoys exploring the world with the user.
+Write a proactive browsing introduction for the exploration content that will appear below, based on recentConversation and topics.
+Return JSON only: {"introduction":"..."}.
+Write one natural paragraph of no more than 60 English words.
+Connect to the user's recent interests when possible; otherwise open naturally from the selected topics.
+Briefly explain what the topics are and what is worth noticing, then invite the user to browse the content below.
+Keep the tone warm, proactive, and companionable. Do not begin with a conditional phrase such as "if you want" or "if you are interested".
+Do not write a list, numbering, route, URL, unsupported data, or facts beyond the topics.`
+    : `你是“晓晓”，一位亲切、自然、会陪用户探索世界的飞行导游。
 请根据 recentConversation 和 topics，写一段主动推荐式的导游介绍，介绍下方即将展示的探索内容。
 只返回 JSON：{"introduction":"..."}。
 introduction 必须是一整段自然文字，控制在 100 个中文字符以内。
@@ -96,6 +120,16 @@ introduction 必须是一整段自然文字，控制在 100 个中文字符以�
 简要介绍主题是什么、有什么看点，并自然引导用户查看下方内容。
 语气亲切、主动、有陪伴感；不要使用“如果你想”“如果你感兴趣”等条件式开头。
 不要写列表、编号、浏览路线、网址、数据或主题之外的具体事实。`;
+
+const validateIntroductionLength = (introduction: string, locale: ExploreLocale): string => {
+  const length =
+    locale === 'en-US'
+      ? introduction.split(/\s+/u).filter(Boolean).length
+      : [...introduction].length;
+  const maximum = locale === 'en-US' ? 60 : 100;
+  if (length > maximum) throw new Error('Explore introduction exceeded its locale limit');
+  return introduction;
+};
 
 const withoutTrailingSlash = (value: string) => value.replace(/\/+$/u, '');
 
@@ -178,7 +212,7 @@ export class DeepSeekExplorePlanner implements ExplorePlanner {
   async plan(input: ExplorePlannerInput, signal?: AbortSignal) {
     const topicDraft = await this.requestJson(
       'topics',
-      topicSystemPrompt,
+      topicSystemPrompt(input.locale),
       input,
       topicDraftSchema,
       signal,
@@ -192,6 +226,7 @@ export class DeepSeekExplorePlanner implements ExplorePlanner {
     };
 
     const introductionInput = {
+      locale: input.locale,
       recentConversation: input.recentConversation ?? [],
       topics: topicDraft.topics,
     };
@@ -201,15 +236,21 @@ export class DeepSeekExplorePlanner implements ExplorePlanner {
       await Promise.all([
         this.requestJson(
           'encyclopedia',
-          encyclopediaSystemPrompt,
+          encyclopediaSystemPrompt(input.locale),
           sharedQueryInput,
           encyclopediaQuerySchema,
           signal,
         ),
-        this.requestJson('video', videoSystemPrompt, sharedQueryInput, videoQuerySchema, signal),
+        this.requestJson(
+          'video',
+          videoSystemPrompt(input.locale),
+          sharedQueryInput,
+          videoQuerySchema,
+          signal,
+        ),
         this.requestJson(
           'suggested-prompts',
-          suggestedPromptsSystemPrompt,
+          suggestedPromptsSystemPrompt(input.locale),
           sharedQueryInput,
           suggestedPromptsSchema,
           signal,
@@ -218,12 +259,14 @@ export class DeepSeekExplorePlanner implements ExplorePlanner {
         runWithProviderTimeout(6_000, signal, (introductionSignal) =>
           this.requestJson(
             'browsing-introduction',
-            browsingIntroductionSystemPrompt,
+            browsingIntroductionSystemPrompt(input.locale),
             introductionInput,
             browsingIntroductionSchema,
             introductionSignal,
             512,
-          ),
+          ).then((result) => ({
+            introduction: validateIntroductionLength(result.introduction, input.locale),
+          })),
         ).catch((error: unknown) => {
           if (signal?.aborted) throw error;
           return { introduction: '' };

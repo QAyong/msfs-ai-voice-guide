@@ -30,6 +30,21 @@ describe('global push-to-talk configuration', () => {
 });
 
 describe('GlobalPushToTalkController', () => {
+  it('localizes unavailable platform status', () => {
+    const controller = new GlobalPushToTalkController({
+      addonPath: 'test.node',
+      onEvent: () => undefined,
+      platform: 'linux',
+      getLocale: () => 'en-US',
+      loadAddon: () => ({ start: () => true, stop: () => undefined }),
+    });
+
+    expect(controller.getStatus()).toMatchObject({
+      available: false,
+      message: 'Global push-to-talk is supported only on Windows.',
+    });
+  });
+
   it('emits only one press and release for repeated native events', () => {
     let callback: ((event: { type: 'press' | 'release' | 'cancel' }) => void) | undefined;
     const start = vi.fn((_key: string, nextCallback: typeof callback) => {

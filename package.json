@@ -1,6 +1,6 @@
 {
   "name": "msfs-ai-voice-guide",
-  "version": "1.0.1-rc.4",
+  "version": "1.0.1-rc.5",
   "private": true,
   "type": "module",
   "main": "./out/main/index.js",

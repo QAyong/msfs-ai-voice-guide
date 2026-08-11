@@ -95,10 +95,19 @@ import {
 } from '../../../shared/guide-events.js';
 import {
   explorePreferencesSchema,
+  type ExplorePreferences,
   type ExploreVideoPlatform,
   type ExploreRequest,
 } from '../../../shared/explore-contracts.js';
-import { defaultExploreVideoPlatforms } from '../../../shared/explore-defaults.js';
+import {
+  defaultExploreEncyclopedia,
+  defaultExplorePreferences,
+  defaultExplorePreferencesByLocale,
+  defaultExploreVideoPlatforms,
+  resolveExplorePreferencesByLocale,
+  type ExploreLocale,
+  type ExplorePreferencesByLocale,
+} from '../../../shared/explore-defaults.js';
 import {
   companionPreviewSources,
   type SourceMoreMenuAction,
@@ -131,7 +140,7 @@ type BrowserDialog = UtilityDialog | 'end-conversation';
 type ExploreNoticeKind = 'context' | 'error' | 'configuration';
 type ExploreNotice = { kind: ExploreNoticeKind; title: string; description: string };
 type SettingsTab = 'general' | 'services' | 'msfs' | 'about';
-type SupportedLocale = 'zh-CN' | 'en-US';
+type SupportedLocale = ExploreLocale;
 
 const visibleGlobalPushToTalkPresetKeys = ['AltLeft', 'F8', 'MouseX1', 'MouseX2'] as const;
 
@@ -288,6 +297,7 @@ type Preferences = {
   alwaysOnTop: boolean;
   agentVolume: number;
   openSourcesInApp: boolean;
+  explorePreferencesByLocale: ExplorePreferencesByLocale;
   exploreEncyclopedia: 'wikipedia' | 'baidu_baike';
   exploreVideoPlatforms: ExploreVideoPlatform[];
   interfaceMotion: boolean;
@@ -300,11 +310,19 @@ const defaultPreferences: Preferences = {
   alwaysOnTop: true,
   agentVolume: 0.85,
   openSourcesInApp: true,
-  exploreEncyclopedia: 'wikipedia',
+  explorePreferencesByLocale: defaultExplorePreferencesByLocale(),
+  exploreEncyclopedia: defaultExploreEncyclopedia('zh-CN'),
   exploreVideoPlatforms: defaultExploreVideoPlatforms('zh-CN'),
   interfaceMotion: true,
   voiceInputMode: 'push_to_talk',
   globalPushToTalkKey: 'AltLeft',
+};
+
+const parseExplorePreferences = (value: unknown): ExplorePreferences | undefined => {
+  const parsed = explorePreferencesSchema.safeParse(value);
+  return parsed.success
+    ? { ...parsed.data, videoPlatforms: [...parsed.data.videoPlatforms] }
+    : undefined;
 };
 
 const readPreferences = (): Preferences => {
@@ -314,11 +332,27 @@ const readPreferences = (): Preferences => {
     const raw = JSON.parse(saved) as Record<string, unknown>;
     const parsed = { ...defaultPreferences, ...raw } as Preferences;
     const locale: SupportedLocale = raw.locale === 'en-US' ? 'en-US' : 'zh-CN';
-    const savedVideoPlatforms = Array.isArray(raw.exploreVideoPlatforms)
-      ? raw.exploreVideoPlatforms.filter(
-          (value): value is ExploreVideoPlatform => value === 'youtube' || value === 'bilibili',
-        )
-      : [];
+    const rawExplorePreferencesByLocale =
+      raw.explorePreferencesByLocale && typeof raw.explorePreferencesByLocale === 'object'
+        ? (raw.explorePreferencesByLocale as Record<string, unknown>)
+        : undefined;
+    const savedExplorePreferencesByLocale: Partial<ExplorePreferencesByLocale> = {};
+    if (rawExplorePreferencesByLocale) {
+      const chinesePreferences = parseExplorePreferences(rawExplorePreferencesByLocale['zh-CN']);
+      const englishPreferences = parseExplorePreferences(rawExplorePreferencesByLocale['en-US']);
+      if (chinesePreferences) savedExplorePreferencesByLocale['zh-CN'] = chinesePreferences;
+      if (englishPreferences) savedExplorePreferencesByLocale['en-US'] = englishPreferences;
+    }
+    const legacyExplorePreferences = parseExplorePreferences({
+      encyclopedia: raw.exploreEncyclopedia,
+      videoPlatforms: raw.exploreVideoPlatforms,
+    });
+    const explorePreferencesByLocale = resolveExplorePreferencesByLocale(
+      locale,
+      savedExplorePreferencesByLocale,
+      legacyExplorePreferences,
+    );
+    const currentExplorePreferences = explorePreferencesByLocale[locale];
     return {
       ...parsed,
       agentVolume: Math.min(1, Math.max(0, Number(parsed.agentVolume) || 0)),
@@ -329,12 +363,9 @@ const readPreferences = (): Preferences => {
       globalPushToTalkKey: isGlobalPushToTalkKey(parsed.globalPushToTalkKey)
         ? parsed.globalPushToTalkKey
         : defaultPreferences.globalPushToTalkKey,
-      exploreEncyclopedia:
-        raw.exploreEncyclopedia === 'baidu_baike'
-          ? 'baidu_baike'
-          : defaultPreferences.exploreEncyclopedia,
-      exploreVideoPlatforms:
-        savedVideoPlatforms.length > 0 ? savedVideoPlatforms : defaultExploreVideoPlatforms(locale),
+      explorePreferencesByLocale,
+      exploreEncyclopedia: currentExplorePreferences.encyclopedia,
+      exploreVideoPlatforms: [...currentExplorePreferences.videoPlatforms],
     };
   } catch {
     return defaultPreferences;
@@ -394,6 +425,28 @@ type ServiceCredentialStatus = {
 };
 type ServiceTestState = { checking: boolean; result?: ServiceCheckResult };
 type SaveState = 'idle' | 'saving' | 'success' | 'error';
+
+const msfsDiagnosticCheckLabel = (
+  id: MsfsConfigurationDiagnostic['checks'][number]['id'],
+  english: boolean,
+): string => {
+  const labels = english
+    ? {
+        cli_runtime: 'CLI runtime',
+        simconnect: 'SimConnect',
+        user_config: 'User configuration',
+        community_package: 'Community Package',
+        route_bridge: 'Route Bridge',
+      }
+    : {
+        cli_runtime: 'CLI 运行环境',
+        simconnect: 'SimConnect',
+        user_config: '用户配置',
+        community_package: 'Community Package',
+        route_bridge: '航路桥接',
+      };
+  return labels[id];
+};
 
 const defaultServiceSettings: ServiceSettings = defaultDesktopServiceSettings;
 const defaultToolSettings: DesktopToolSettings = defaultDesktopToolSettings;
@@ -524,10 +577,12 @@ type AboutPanelProps = {
 };
 
 const AboutPanel = ({ english, info, onOpenLink }: AboutPanelProps) => {
-  const productName = info?.productName ?? (english ? 'Xiaoxiao Flight Guide' : '晓晓飞行导游');
+  const productName = english
+    ? (info?.productNameEn ?? info?.productName ?? 'Xiaoxiao Flight Guide')
+    : (info?.productName ?? '晓晓飞行导游');
   const fallbackSupportChannels: readonly AboutSupportChannel[] = [
-    { id: 'wechat', label: english ? 'WeChat' : '微信', qrAsset: 'wechat-qr' },
-    { id: 'alipay', label: english ? 'Alipay' : '支付宝', qrAsset: 'alipay-qr' },
+    { id: 'wechat', label: '微信', labelEn: 'WeChat', qrAsset: 'wechat-qr' },
+    { id: 'alipay', label: '支付宝', labelEn: 'Alipay', qrAsset: 'alipay-qr' },
   ];
   const supportChannels = info?.supportChannels ?? (window.desktop ? [] : fallbackSupportChannels);
   const qrImages: Record<AboutSupportChannel['qrAsset'], string> = {
@@ -617,29 +672,32 @@ const AboutPanel = ({ english, info, onOpenLink }: AboutPanelProps) => {
             </small>
           </div>
           <div className="about-support-grid">
-            {supportChannels.map((channel) => (
-              <article className="about-support-card" key={channel.id}>
-                <img
-                  src={qrImages[channel.qrAsset]}
-                  alt={
-                    english
-                      ? `${channel.label} support QR code for ${productName}`
-                      : `${productName}${channel.label}赞赏码`
-                  }
-                />
-                <span className="about-support-copy">
-                  <span className="about-support-icon" aria-hidden="true">
-                    <HeartIcon size={17} weight="fill" />
+            {supportChannels.map((channel) => {
+              const channelLabel = english ? (channel.labelEn ?? channel.label) : channel.label;
+              return (
+                <article className="about-support-card" key={channel.id}>
+                  <img
+                    src={qrImages[channel.qrAsset]}
+                    alt={
+                      english
+                        ? `${channelLabel} support QR code for ${productName}`
+                        : `${productName}${channelLabel}赞赏码`
+                    }
+                  />
+                  <span className="about-support-copy">
+                    <span className="about-support-icon" aria-hidden="true">
+                      <HeartIcon size={17} weight="fill" />
+                    </span>
+                    <strong>{channelLabel}</strong>
+                    <small>
+                      {english
+                        ? 'Open the app and scan to support the project.'
+                        : '打开对应应用扫一扫，支持这个小项目。'}
+                    </small>
                   </span>
-                  <strong>{channel.label}</strong>
-                  <small>
-                    {english
-                      ? 'Open the app and scan to support the project.'
-                      : '打开对应应用扫一扫，支持这个小项目。'}
-                  </small>
-                </span>
-              </article>
-            ))}
+                </article>
+              );
+            })}
           </div>
         </section>
       ) : null}
@@ -655,8 +713,10 @@ const AboutPanel = ({ english, info, onOpenLink }: AboutPanelProps) => {
             {promotions.map((link) => (
               <button key={link.id} type="button" onClick={() => onOpenLink(link.id)}>
                 <span>
-                  <strong>{link.label}</strong>
-                  {link.description ? <small>{link.description}</small> : null}
+                  <strong>{english ? (link.labelEn ?? link.label) : link.label}</strong>
+                  {(english ? link.descriptionEn : link.description) ? (
+                    <small>{english ? link.descriptionEn : link.description}</small>
+                  ) : null}
                 </span>
                 <span>{link.hostname}</span>
                 <ArrowSquareOutIcon size={16} weight="bold" aria-hidden="true" />
@@ -747,6 +807,16 @@ const SettingsDialog = ({ onClose, preferences, savePreferences }: SettingsDialo
       };
   const updateDraft = <Key extends keyof Preferences>(key: Key, value: Preferences[Key]) =>
     setDraft((current) => ({ ...current, [key]: value }));
+  const persistCurrentExplorePreferences = (nextPreferences: Preferences): Preferences => ({
+    ...nextPreferences,
+    explorePreferencesByLocale: {
+      ...nextPreferences.explorePreferencesByLocale,
+      [nextPreferences.locale]: {
+        encyclopedia: nextPreferences.exploreEncyclopedia,
+        videoPlatforms: [...nextPreferences.exploreVideoPlatforms],
+      },
+    },
+  });
   useEffect(() => {
     let active = true;
     void Promise.all([
@@ -839,7 +909,16 @@ const SettingsDialog = ({ onClose, preferences, savePreferences }: SettingsDialo
     };
   }, []);
   const updateDraftLocale = (locale: SupportedLocale) => {
-    updateDraft('locale', locale);
+    setDraft((current) => {
+      const explorePreferences =
+        current.explorePreferencesByLocale[locale] ?? defaultExplorePreferences(locale);
+      return {
+        ...current,
+        locale,
+        exploreEncyclopedia: explorePreferences.encyclopedia,
+        exploreVideoPlatforms: [...explorePreferences.videoPlatforms],
+      };
+    });
     setServices((current) => ({
       ...current,
       tts: {
@@ -849,15 +928,16 @@ const SettingsDialog = ({ onClose, preferences, savePreferences }: SettingsDialo
     }));
   };
   const saveAllSettings = async (nextPreferences: Preferences): Promise<boolean> => {
+    const persistedPreferences = persistCurrentExplorePreferences(nextPreferences);
     const nextServices: ServiceSettings = {
       ...services,
       tts: {
         ...services.tts,
-        speaker: alignTtsSpeakerToLocale(services.tts.speaker, nextPreferences.locale),
+        speaker: alignTtsSpeakerToLocale(services.tts.speaker, persistedPreferences.locale),
       },
     };
     const parsed = desktopSettingsSaveRequestSchema.safeParse({
-      locale: nextPreferences.locale,
+      locale: persistedPreferences.locale,
       services: nextServices,
       credentials: credentialUpdates,
       tools,
@@ -869,7 +949,7 @@ const SettingsDialog = ({ onClose, preferences, savePreferences }: SettingsDialo
       return false;
     }
     if (!window.desktop) {
-      savePreferences(nextPreferences);
+      savePreferences(persistedPreferences);
       setServices(nextServices);
       setTools(tools);
       return true;
@@ -879,7 +959,7 @@ const SettingsDialog = ({ onClose, preferences, savePreferences }: SettingsDialo
       setNotice(result.readiness.message);
       return false;
     }
-    savePreferences(nextPreferences);
+    savePreferences(persistedPreferences);
     setServices(nextServices);
     setTools(parsed.data.tools);
     const [savedCredentialStatus, savedCredentials] = await Promise.all([
@@ -901,19 +981,7 @@ const SettingsDialog = ({ onClose, preferences, savePreferences }: SettingsDialo
       return false;
     }
     const localeChanged = draft.locale !== preferences.locale;
-    const previousDefaultPlatforms = defaultExploreVideoPlatforms(preferences.locale);
-    const keptPreviousDefaultPlatforms =
-      draft.exploreVideoPlatforms.length === previousDefaultPlatforms.length &&
-      draft.exploreVideoPlatforms.every(
-        (platform, index) => platform === previousDefaultPlatforms[index],
-      );
-    const nextPreferences =
-      localeChanged && keptPreviousDefaultPlatforms
-        ? {
-            ...draft,
-            exploreVideoPlatforms: defaultExploreVideoPlatforms(draft.locale),
-          }
-        : draft;
+    const nextPreferences = persistCurrentExplorePreferences(draft);
     if (!localeChanged) {
       savePreferences(nextPreferences);
       return true;
@@ -1089,8 +1157,8 @@ const SettingsDialog = ({ onClose, preferences, savePreferences }: SettingsDialo
         <button
           type="button"
           className="utility-close no-drag"
-          aria-label="关闭设置"
-          title="关闭"
+          aria-label={english ? 'Close settings' : '关闭设置'}
+          title={english ? 'Close' : '关闭'}
           onClick={onClose}
         >
           <XIcon size={16} weight="bold" aria-hidden="true" />
@@ -1744,7 +1812,7 @@ const SettingsDialog = ({ onClose, preferences, savePreferences }: SettingsDialo
                         )}
                       </span>
                       <span>
-                        <strong>{item.id.replaceAll('_', ' ')}</strong>
+                        <strong>{msfsDiagnosticCheckLabel(item.id, english)}</strong>
                         <small>{item.message}</small>
                         {item.detail ? <small>{item.detail}</small> : null}
                       </span>
@@ -1932,6 +2000,7 @@ const ServiceField = ({
 }) => {
   const [revealed, setRevealed] = useState(false);
   const isSecret = type === 'password';
+  const english = document.documentElement.lang === 'en-US';
   return (
     <label className="service-field">
       <span>{label}</span>
@@ -1951,9 +2020,23 @@ const ServiceField = ({
                 ? 'credential-visibility-toggle no-drag is-revealed'
                 : 'credential-visibility-toggle no-drag'
             }
-            aria-label={revealed ? `隐藏 ${label}` : `显示 ${label}`}
+            aria-label={
+              english
+                ? `${revealed ? 'Hide' : 'Show'} ${label}`
+                : revealed
+                  ? `隐藏 ${label}`
+                  : `显示 ${label}`
+            }
             aria-pressed={revealed}
-            title={revealed ? '隐藏内容' : '显示内容'}
+            title={
+              english
+                ? revealed
+                  ? 'Hide value'
+                  : 'Show value'
+                : revealed
+                  ? '隐藏内容'
+                  : '显示内容'
+            }
             disabled={disabled || value.length === 0}
             onClick={() => setRevealed((current) => !current)}
           >
@@ -2163,10 +2246,11 @@ const SettingsDropdown = ({
 };
 
 type QuitDialogProps = {
+  english: boolean;
   onClose(): void;
 };
 
-const QuitDialog = ({ onClose }: QuitDialogProps) => {
+const QuitDialog = ({ english, onClose }: QuitDialogProps) => {
   const confirmQuit = async () => {
     if (window.desktop) await window.desktop.quitApp();
     else onClose();
@@ -2181,23 +2265,27 @@ const QuitDialog = ({ onClose }: QuitDialogProps) => {
         <button
           type="button"
           className="utility-close no-drag"
-          aria-label="关闭退出确认"
-          title="关闭"
+          aria-label={english ? 'Close quit confirmation' : '关闭退出确认'}
+          title={english ? 'Close' : '关闭'}
           onClick={onClose}
         >
           <XIcon size={16} weight="bold" aria-hidden="true" />
         </button>
       </header>
       <section className="quit-copy">
-        <h1>退出云迹导游？</h1>
-        <p>当前语音连接和来源窗口将会关闭。</p>
+        <h1>{english ? 'Quit Xiaoxiao Flight Guide?' : '退出云迹导游？'}</h1>
+        <p>
+          {english
+            ? 'The current voice connection and source window will close.'
+            : '当前语音连接和来源窗口将会关闭。'}
+        </p>
       </section>
       <footer className="quit-actions">
         <button type="button" className="cancel-button" onClick={onClose}>
-          取消
+          {english ? 'Cancel' : '取消'}
         </button>
         <button type="button" className="quit-button" onClick={() => void confirmQuit()}>
-          退出应用
+          {english ? 'Quit app' : '退出应用'}
         </button>
       </footer>
     </main>
@@ -2271,6 +2359,7 @@ const maximumTextMessageLength = 4000;
 
 const Assistant = () => {
   const { preferences, savePreferences, updatePreference } = usePreferences();
+  const english = preferences.locale === 'en-US';
   const [readiness, setReadiness] = useState<DesktopReadiness | null>(null);
   const [starting, setStarting] = useState(true);
   const [startupError, setStartupError] = useState('');
@@ -2299,7 +2388,11 @@ const Assistant = () => {
     () =>
       TokenSource.literal(async () => {
         const result = await window.desktop?.createLiveKitSession();
-        if (!result) throw new Error('桌面端连接接口不可用');
+        if (!result) {
+          throw new Error(
+            english ? 'The desktop connection interface is unavailable.' : '桌面端连接接口不可用',
+          );
+        }
         if (!result.ok) {
           setReadiness(result.readiness);
           throw new Error(result.readiness.message);
@@ -2310,7 +2403,7 @@ const Assistant = () => {
           serverUrl: result.credentials.serverUrl,
         };
       }),
-    [],
+    [english],
   );
   const session = useSession(tokenSource, { agentConnectTimeoutMilliseconds: 30_000 });
   const sessionRef = useRef(session);
@@ -2332,13 +2425,19 @@ const Assistant = () => {
       return true;
     } catch (error) {
       if (!controller.signal.aborted) {
-        setStartupError(error instanceof Error ? error.message : '语音服务连接失败');
+        setStartupError(
+          error instanceof Error
+            ? error.message
+            : english
+              ? 'The voice service connection failed.'
+              : '语音服务连接失败',
+        );
       }
       return false;
     } finally {
       if (!controller.signal.aborted) setStarting(false);
     }
-  }, []);
+  }, [english]);
 
   const endSession = useCallback(async () => {
     connectAbortRef.current?.abort();
@@ -2472,6 +2571,15 @@ const AssistantView = ({
         waitingForGuide: 'Preparing Xiaoxiao',
         waitingForYou: 'Ready to talk',
         youCanStart: 'You can start a conversation',
+        guideNotInSession: 'The voice guide has not joined the session.',
+        textMessageFailed: 'The text message could not be sent. Try again.',
+        pushToTalkStartFailed: 'Could not start push-to-talk.',
+        pushToTalkFinishFailed: 'Could not finish push-to-talk.',
+        continuousStartFailed: 'Could not start continuous conversation.',
+        continuousStopFailed: 'Could not stop continuous conversation.',
+        voiceDisconnectFailed: 'Could not disconnect voice.',
+        voiceRestoreFailed: 'Could not restore voice.',
+        endConversationFailed: 'Could not end the conversation.',
       }
     : {
         collapse: '收起',
@@ -2510,6 +2618,15 @@ const AssistantView = ({
         waitingForGuide: '正在准备晓晓',
         waitingForYou: '等待你说话',
         youCanStart: '可以开始对话了',
+        guideNotInSession: '语音导游尚未加入会话',
+        textMessageFailed: '文字消息发送失败，请重试',
+        pushToTalkStartFailed: '按住说话启动失败',
+        pushToTalkFinishFailed: '按住说话结束失败',
+        continuousStartFailed: '连续对话启动失败',
+        continuousStopFailed: '连续对话停止失败',
+        voiceDisconnectFailed: '挂断语音失败',
+        voiceRestoreFailed: '恢复语音失败',
+        endConversationFailed: '结束当前对话失败',
       };
 
   const publishOptions = useMemo(() => ({ name: 'desktop-microphone' }), []);
@@ -2655,7 +2772,7 @@ const AssistantView = ({
 
   const performGuideRpc = useCallback(
     async (method: GuideVoiceRpcMethod) => {
-      if (!agent.identity) throw new Error('语音导游尚未加入会话');
+      if (!agent.identity) throw new Error(copy.guideNotInSession);
       await perform(
         {
           destinationIdentity: agent.identity,
@@ -2666,10 +2783,11 @@ const AssistantView = ({
         serializers.raw(),
       );
     },
-    [agent.identity, perform],
+    [agent.identity, copy.guideNotInSession, perform],
   );
 
-  const agentFailure = agent.state === 'failed' ? agent.failureReasons.join('；') : '';
+  const agentFailure =
+    agent.state === 'failed' ? agent.failureReasons.join(english ? '; ' : '；') : '';
   const errorMessage = microphoneError || controlError || startupError || agentFailure;
   const userStateValue = agent.attributes[guideVoiceAttributes.userState];
   const userState = isGuideUserState(userStateValue) ? userStateValue : undefined;
@@ -2747,7 +2865,7 @@ const AssistantView = ({
       await sendText(message);
       setTextDraft((current) => (current === textDraft ? '' : current));
     } catch (error) {
-      setTextInputError(error instanceof Error ? error.message : '文字消息发送失败，请重试');
+      setTextInputError(error instanceof Error ? error.message : copy.textMessageFailed);
     }
   }, [isSendingText, sendText, textDraft, textInputBlocked]);
 
@@ -2868,7 +2986,7 @@ const AssistantView = ({
     })()
       .catch(async (error) => {
         pushToTalkPressedRef.current = false;
-        setControlError(error instanceof Error ? error.message : '按住说话启动失败');
+        setControlError(error instanceof Error ? error.message : copy.pushToTalkStartFailed);
         if (pushToTalkTurnActiveRef.current) {
           pushToTalkTurnActiveRef.current = false;
           await performGuideRpc(guideVoiceRpc.cancelTurn).catch(() => undefined);
@@ -2900,7 +3018,7 @@ const AssistantView = ({
         }
       })()
         .catch(async (error) => {
-          setControlError(error instanceof Error ? error.message : '按住说话结束失败');
+          setControlError(error instanceof Error ? error.message : copy.pushToTalkFinishFailed);
           await microphone.toggle(false).catch(() => undefined);
         })
         .finally(() => {
@@ -2922,7 +3040,7 @@ const AssistantView = ({
       await performGuideRpc(guideVoiceRpc.startContinuous);
       await microphone.toggle(true);
     } catch (error) {
-      setControlError(error instanceof Error ? error.message : '连续对话启动失败');
+      setControlError(error instanceof Error ? error.message : copy.continuousStartFailed);
       await microphone.toggle(false).catch(() => undefined);
       await performGuideRpc(guideVoiceRpc.stopContinuous).catch(() => undefined);
     } finally {
@@ -2940,7 +3058,7 @@ const AssistantView = ({
       await microphone.toggle(false);
       await performGuideRpc(guideVoiceRpc.stopContinuous);
     } catch (error) {
-      setControlError(error instanceof Error ? error.message : '连续对话停止失败');
+      setControlError(error instanceof Error ? error.message : copy.continuousStopFailed);
       await microphone.toggle(false).catch(() => undefined);
     } finally {
       continuousTransitionRef.current = false;
@@ -2976,7 +3094,7 @@ const AssistantView = ({
       else await microphone.toggle(false);
       await performGuideRpc(guideVoiceRpc.suspendVoice);
     } catch (error) {
-      setControlError(error instanceof Error ? error.message : '挂断语音失败');
+      setControlError(error instanceof Error ? error.message : copy.voiceDisconnectFailed);
       await microphone.toggle(false).catch(() => undefined);
     } finally {
       setVoiceTransitioning(false);
@@ -2998,7 +3116,7 @@ const AssistantView = ({
       else await performGuideRpc(guideVoiceRpc.resumeVoice);
       onVoiceChannelChange(true);
     } catch (error) {
-      setControlError(error instanceof Error ? error.message : '恢复语音失败');
+      setControlError(error instanceof Error ? error.message : copy.voiceRestoreFailed);
       onVoiceChannelChange(false);
     } finally {
       setVoiceTransitioning(false);
@@ -3166,7 +3284,7 @@ const AssistantView = ({
       await performGuideRpc(guideVoiceRpc.suspendVoice).catch(() => undefined);
       await endSession();
     } catch (error) {
-      setControlError(error instanceof Error ? error.message : '结束当前对话失败');
+      setControlError(error instanceof Error ? error.message : copy.endConversationFailed);
       return;
     } finally {
       setSourcesByMessage({});
@@ -3262,7 +3380,7 @@ const AssistantView = ({
         <div
           className="ball-menu no-drag"
           role="menu"
-          aria-label="悬浮助手菜单"
+          aria-label={english ? 'Floating assistant menu' : '悬浮助手菜单'}
           aria-hidden={!menuOpen}
         >
           <button
@@ -3297,7 +3415,7 @@ const AssistantView = ({
                 onClose={() => setBrowserDialog(null)}
               />
             ) : browserDialog === 'quit' ? (
-              <QuitDialog onClose={() => setBrowserDialog(null)} />
+              <QuitDialog english={english} onClose={() => setBrowserDialog(null)} />
             ) : (
               <EndConversationDialog
                 closing={closingConversation}
@@ -3475,7 +3593,9 @@ const AssistantView = ({
                 ) : (
                   <div key={message.id} className="guide-reply">
                     <div className="bubble markdown-content">
-                      <MessageMarkdown onOpenLink={openSource}>{message.text}</MessageMarkdown>
+                      <MessageMarkdown english={english} onOpenLink={openSource}>
+                        {message.text}
+                      </MessageMarkdown>
                     </div>
                     {message.sourcePreview ? (
                       <button
@@ -4481,11 +4601,17 @@ const SettingsRoute = () => {
   );
 };
 
-const QuitRoute = () => (
-  <div className="utility-root">
-    <QuitDialog onClose={() => void window.desktop?.closeUtilityWindow()} />
-  </div>
-);
+const QuitRoute = () => {
+  const { preferences } = usePreferences();
+  return (
+    <div className="utility-root">
+      <QuitDialog
+        english={preferences.locale === 'en-US'}
+        onClose={() => void window.desktop?.closeUtilityWindow()}
+      />
+    </div>
+  );
+};
 
 const route = location.hash;
 const content =

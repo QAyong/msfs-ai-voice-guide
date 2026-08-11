@@ -21,6 +21,12 @@ describe('explore content providers', () => {
       sourceType: 'search_page',
       url: 'https://zh.wikipedia.org/w/index.php?search=%E9%95%BF%E6%B2%99',
     });
+    await expect(
+      provider.find({ topicId: 'london', query: 'London', alternateNames: [] }, 'en-US'),
+    ).resolves.toMatchObject({
+      siteName: 'Wikipedia · Search',
+      url: 'https://en.wikipedia.org/w/index.php?search=London',
+    });
   });
 
   it('builds a trusted Baidu Baike search-page card without fetching a third-party page', async () => {
@@ -32,6 +38,11 @@ describe('explore content providers', () => {
       title: '埃菲尔铁塔',
       siteName: '百度百科 · 搜索主题',
       url: 'https://baike.baidu.com/search/word?pic=1&sug=1&word=%E5%9F%83%E8%8F%B2%E5%B0%94%E9%93%81%E5%A1%94',
+    });
+    await expect(
+      provider.find({ topicId: 'tower', query: 'Eiffel Tower', alternateNames: [] }, 'en-US'),
+    ).resolves.toMatchObject({
+      siteName: 'Baidu Baike · Search',
     });
   });
 
@@ -192,6 +203,14 @@ describe('explore content providers', () => {
         url: 'https://www.youtube.com/results?search_query=%E5%9F%83%E8%8F%B2%E5%B0%94%E9%93%81%E5%A1%94+%E6%97%85%E8%A1%8C%E8%A7%86%E9%A2%91',
       }),
     ]);
+    await expect(
+      provider.find({ topicId: 'tower', query: 'Tower Bridge history' }, 'en-US'),
+    ).resolves.toEqual([
+      expect.objectContaining({
+        siteName: 'YouTube · Web search',
+        url: 'https://www.youtube.com/results?search_query=Tower+Bridge+history',
+      }),
+    ]);
   });
 
   it('drops a search-page card when its provider creates an off-allowlist URL', async () => {
@@ -217,6 +236,12 @@ describe('explore content providers', () => {
         siteName: '哔哩哔哩 · 站内搜索',
         sourceType: 'search_page',
         url: 'https://search.bilibili.com/all?keyword=%E9%95%BF%E6%B2%99',
+      }),
+    ]);
+    await expect(provider.find({ topicId: 'london', query: 'London' }, 'en-US')).resolves.toEqual([
+      expect.objectContaining({
+        siteName: 'Bilibili · Site search',
+        url: 'https://search.bilibili.com/all?keyword=London',
       }),
     ]);
   });

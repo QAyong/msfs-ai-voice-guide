@@ -3,7 +3,7 @@ import type { VideoCandidate, VideoProvider } from './provider.js';
 
 type SearchPageVideoOptions = {
   id: 'youtube' | 'bilibili';
-  siteName: string;
+  siteName: string | ((locale: 'zh-CN' | 'en-US') => string);
   allowedHosts: readonly string[];
   buildSearchUrl(query: string): URL;
 };
@@ -14,6 +14,7 @@ const isAllowedSearchUrl = (url: URL, allowedHosts: readonly string[]) =>
 export const createVideoSearchPageCard = (
   candidate: VideoCandidate,
   options: SearchPageVideoOptions,
+  locale: 'zh-CN' | 'en-US',
 ): ExploreCard | null => {
   const query = candidate.query.trim();
   if (!query) return null;
@@ -31,7 +32,7 @@ export const createVideoSearchPageCard = (
     kind: 'video',
     topicId: candidate.topicId,
     title: query,
-    siteName: options.siteName,
+    siteName: typeof options.siteName === 'function' ? options.siteName(locale) : options.siteName,
     sourceType: 'search_page',
     url: url.toString(),
   });
@@ -55,9 +56,8 @@ export class SearchPageVideoProvider implements VideoProvider {
     locale: 'zh-CN' | 'en-US',
     signal?: AbortSignal,
   ): Promise<ExploreCard[]> {
-    void locale;
     void signal;
-    const card = createVideoSearchPageCard(candidate, this.options);
+    const card = createVideoSearchPageCard(candidate, this.options, locale);
     return card ? [card] : [];
   }
 }

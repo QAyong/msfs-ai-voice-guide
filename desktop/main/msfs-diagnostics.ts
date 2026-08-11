@@ -14,6 +14,7 @@ import {
   type MsfsConfigurationDiagnostic,
   type MsfsDiagnosticCheck,
 } from '../../shared/msfs-desktop.js';
+import { localizeDesktopText, type DesktopLocale } from '../../shared/desktop-locale.js';
 
 const packageName = 'msfs-native-cli-route-bridge';
 const packageTitle = 'MSFS Native CLI EFB Route Bridge';
@@ -32,6 +33,7 @@ export type MsfsDiagnosticsOptions = {
   executablePath: string;
   timeoutMs: number;
   maxConcurrency: number;
+  locale?: DesktopLocale;
   userCfgCandidates?: readonly string[];
   packageSourcePath?: string;
   client?: MsfsCliClient;
@@ -69,6 +71,14 @@ const exists = async (path: string): Promise<boolean> =>
   access(path, constants.F_OK)
     .then(() => true)
     .catch(() => false);
+
+const localizeMsfsDiagnosticDetail = (detail: string, locale: DesktopLocale): string =>
+  locale === 'en-US'
+    ? detail.replaceAll(
+        'Community Package 路径不在 Community2024 目录内。',
+        'The Community Package path must remain inside the Community2024 directory.',
+      )
+    : detail;
 
 export function parseInstalledPackagesPath(contents: string): string | undefined {
   const match = contents.match(/InstalledPackagesPath\s+"([^"]+)"/iu);
@@ -135,13 +145,23 @@ const resolveCommunityPath = (installedPackagesPath: string, ...parts: string[])
 
 const checkCommunityPackageFiles = async (
   path: string,
+  locale: DesktopLocale = 'zh-CN',
 ): Promise<{ ok: boolean; message: string }> => {
   const missing: string[] = [];
   for (const relativePath of communityPackageFiles) {
     const file = join(path, relativePath);
     if (!(await exists(file))) missing.push(file.slice(path.length + 1));
   }
-  if (missing.length > 0) return { ok: false, message: `缺少文件：${missing.join('、')}` };
+  if (missing.length > 0) {
+    return {
+      ok: false,
+      message: localizeDesktopText(
+        locale,
+        `Missing files: ${missing.join(', ')}`,
+        `缺少文件：${missing.join('、')}`,
+      ),
+    };
+  }
 
   try {
     const manifest = JSON.parse(await readFile(join(path, 'manifest.json'), 'utf8')) as {
@@ -150,12 +170,33 @@ const checkCommunityPackageFiles = async (
     };
     const name = manifest.package_name ?? manifest.name;
     if (name && name !== packageName) {
-      return { ok: false, message: `包名不匹配：${name}` };
+      return {
+        ok: false,
+        message: localizeDesktopText(
+          locale,
+          `Package name does not match: ${name}`,
+          `包名不匹配：${name}`,
+        ),
+      };
     }
   } catch {
-    return { ok: false, message: 'manifest.json 无法读取或格式无效。' };
+    return {
+      ok: false,
+      message: localizeDesktopText(
+        locale,
+        'manifest.json could not be read or is invalid.',
+        'manifest.json 无法读取或格式无效。',
+      ),
+    };
   }
-  return { ok: true, message: 'Community Package 文件完整。' };
+  return {
+    ok: true,
+    message: localizeDesktopText(
+      locale,
+      'Community Package files are complete.',
+      'Community Package 文件完整。',
+    ),
+  };
 };
 
 const readCommunityPackageManifest = async (path: string) => {
@@ -495,6 +536,10 @@ export class MsfsConfigurationChecker {
       });
   }
 
+  private text(english: string, chinese: string): string {
+    return localizeDesktopText(this.options.locale ?? 'zh-CN', english, chinese);
+  }
+
   async check(signal?: AbortSignal): Promise<MsfsConfigurationDiagnostic> {
     const checks: MsfsDiagnosticCheck[] = [];
     const checkedAt = new Date().toISOString();
@@ -507,21 +552,31 @@ export class MsfsConfigurationChecker {
         check(
           'cli_runtime',
           'error',
-          'MSFS CLI 运行文件不完整。',
-          [!cliExists ? '缺少 msfs.exe' : '', !daemonExists ? '缺少 msfsd.exe' : '']
+          this.text('MSFS CLI runtime files are incomplete.', 'MSFS CLI 运行文件不完整。'),
+          [
+            !cliExists ? this.text('Missing msfs.exe', '缺少 msfs.exe') : '',
+            !daemonExists ? this.text('Missing msfsd.exe', '缺少 msfsd.exe') : '',
+          ]
             .filter(Boolean)
-            .join('；'),
+            .join(this.options.locale === 'en-US' ? '; ' : '；'),
         ),
       );
       return msfsConfigurationDiagnosticSchema.parse({
         status: 'needs_setup',
-        message: 'MSFS CLI 运行文件不完整。',
+        message: this.text('MSFS CLI runtime files are incomplete.', 'MSFS CLI 运行文件不完整。'),
         checks,
         cliPath,
         checkedAt,
       });
     }
-    checks.push(check('cli_runtime', 'ok', 'MSFS CLI 运行文件完整。', cliPath));
+    checks.push(
+      check(
+        'cli_runtime',
+        'ok',
+        this.text('MSFS CLI runtime files are complete.', 'MSFS CLI 运行文件完整。'),
+        cliPath,
+      ),
+    );
 
     const status = await this.client.execute(['status'], statusDataSchema, signal);
     const simulatorState = await this.client.execute(
@@ -537,44 +592,106 @@ export class MsfsConfigurationChecker {
         check(
           'simconnect',
           connected ? 'ok' : 'warning',
-          connected ? 'MSFS 游戏已连接。' : 'MSFS 游戏当前未连接。',
+          connected
+            ? this.text('MSFS is connected.', 'MSFS 游戏已连接。')
+            : this.text('MSFS is not currently connected.', 'MSFS 游戏当前未连接。'),
           status.message,
         ),
       );
     } else if (connected) {
-      checks.push(check('simconnect', 'ok', 'MSFS 已通过 SimConnect 连接。'));
+      checks.push(
+        check(
+          'simconnect',
+          'ok',
+          this.text('MSFS is connected through SimConnect.', 'MSFS 已通过 SimConnect 连接。'),
+        ),
+      );
     } else {
-      checks.push(check('simconnect', 'warning', 'MSFS 游戏当前未连接。'));
+      checks.push(
+        check(
+          'simconnect',
+          'warning',
+          this.text('MSFS is not currently connected.', 'MSFS 游戏当前未连接。'),
+        ),
+      );
     }
 
     const userConfig = await findMsfsUserConfig(
       this.options.userCfgCandidates ?? defaultMsfsUserConfigCandidates(),
     );
     if (!userConfig) {
-      checks.push(check('user_config', 'error', '未找到 MSFS 2024 的 UserCfg.opt。'));
-      checks.push(check('community_package', 'warning', '无法定位 Community2024 目录。'));
       checks.push(
-        check('route_bridge', 'warning', '需要先定位 Community2024 后再验证 EFB Bridge。'),
+        check(
+          'user_config',
+          'error',
+          this.text('MSFS 2024 UserCfg.opt was not found.', '未找到 MSFS 2024 的 UserCfg.opt。'),
+        ),
+      );
+      checks.push(
+        check(
+          'community_package',
+          'warning',
+          this.text(
+            'The Community2024 directory could not be located.',
+            '无法定位 Community2024 目录。',
+          ),
+        ),
+      );
+      checks.push(
+        check(
+          'route_bridge',
+          'warning',
+          this.text(
+            'Locate Community2024 before validating the EFB Bridge.',
+            '需要先定位 Community2024 后再验证 EFB Bridge。',
+          ),
+        ),
       );
       return msfsConfigurationDiagnosticSchema.parse({
         status: 'needs_setup',
-        message: '未找到 MSFS 2024 的游戏配置路径。',
+        message: this.text(
+          'The MSFS 2024 game configuration path was not found.',
+          '未找到 MSFS 2024 的游戏配置路径。',
+        ),
         checks,
         cliPath,
         checkedAt,
       });
     }
-    checks.push(check('user_config', 'ok', '已找到 MSFS 2024 的游戏配置。', userConfig.path));
+    checks.push(
+      check(
+        'user_config',
+        'ok',
+        this.text('The MSFS 2024 game configuration was found.', '已找到 MSFS 2024 的游戏配置。'),
+        userConfig.path,
+      ),
+    );
 
     let communityPackagePath: string;
     try {
       communityPackagePath = resolveCommunityPackagePath(userConfig.installedPackagesPath);
     } catch (error) {
-      checks.push(check('community_package', 'error', 'Community2024 路径无效.', String(error)));
-      checks.push(check('route_bridge', 'warning', '无法验证 EFB Bridge。'));
+      checks.push(
+        check(
+          'community_package',
+          'error',
+          this.text('The Community2024 path is invalid.', 'Community2024 路径无效。'),
+          localizeMsfsDiagnosticDetail(String(error), this.options.locale ?? 'zh-CN'),
+        ),
+      );
+      checks.push(
+        check(
+          'route_bridge',
+          'warning',
+          this.text('The EFB Bridge could not be validated.', '无法验证 EFB Bridge。'),
+        ),
+      );
       return msfsConfigurationDiagnosticSchema.parse({
         status: 'needs_setup',
-        message: 'MSFS Community2024 配置路径无效。',
+        message: this.text(
+          'The MSFS Community2024 configuration path is invalid.',
+          'MSFS Community2024 配置路径无效。',
+        ),
         checks,
         cliPath,
         userCfgPath: userConfig.path,
@@ -582,20 +699,35 @@ export class MsfsConfigurationChecker {
       });
     }
 
-    const packageFiles = await checkCommunityPackageFiles(communityPackagePath);
+    const packageFiles = await checkCommunityPackageFiles(
+      communityPackagePath,
+      this.options.locale ?? 'zh-CN',
+    );
     if (!packageFiles.ok) {
       checks.push(
         check(
           'community_package',
           'error',
-          '未找到完整的 MSFS 2024 Community Package。',
+          this.text(
+            'The complete MSFS 2024 Community Package was not found.',
+            '未找到完整的 MSFS 2024 Community Package。',
+          ),
           packageFiles.message,
         ),
       );
-      checks.push(check('route_bridge', 'warning', 'EFB Route Bridge 文件不完整。'));
+      checks.push(
+        check(
+          'route_bridge',
+          'warning',
+          this.text('The EFB Route Bridge files are incomplete.', 'EFB Route Bridge 文件不完整。'),
+        ),
+      );
       return msfsConfigurationDiagnosticSchema.parse({
         status: 'needs_setup',
-        message: 'EFB Route Bridge 尚未完成配置。',
+        message: this.text(
+          'The EFB Route Bridge is not fully configured.',
+          'EFB Route Bridge 尚未完成配置。',
+        ),
         checks,
         cliPath,
         userCfgPath: userConfig.path,
@@ -604,16 +736,31 @@ export class MsfsConfigurationChecker {
       });
     }
     checks.push(
-      check('community_package', 'ok', 'Community Package 文件完整。', communityPackagePath),
+      check(
+        'community_package',
+        'ok',
+        this.text('Community Package files are complete.', 'Community Package 文件完整。'),
+        communityPackagePath,
+      ),
     );
 
     if (!connected) {
       checks.push(
-        check('route_bridge', 'warning', '游戏未启动，暂时无法验证 Bridge 是否已被加载。'),
+        check(
+          'route_bridge',
+          'warning',
+          this.text(
+            'The game is not running, so the Bridge cannot be validated yet.',
+            '游戏未启动，暂时无法验证 Bridge 是否已被加载。',
+          ),
+        ),
       );
       return msfsConfigurationDiagnosticSchema.parse({
         status: 'game_not_running',
-        message: 'CLI 与 Community Package 已配置，请启动 MSFS 进行最终验证。',
+        message: this.text(
+          'The CLI and Community Package are configured. Start MSFS for final validation.',
+          'CLI 与 Community Package 已配置，请启动 MSFS 进行最终验证。',
+        ),
         checks,
         cliPath,
         userCfgPath: userConfig.path,
@@ -634,13 +781,22 @@ export class MsfsConfigurationChecker {
           'route_bridge',
           'ok',
           routeCode === 'ROUTE_NOT_FOUND'
-            ? 'EFB Route Bridge 已加载，但当前没有设置航路。'
-            : 'EFB Route Bridge 已加载且可用。',
+            ? this.text(
+                'The EFB Route Bridge is loaded, but no route is set.',
+                'EFB Route Bridge 已加载，但当前没有设置航路。',
+              )
+            : this.text(
+                'The EFB Route Bridge is loaded and ready.',
+                'EFB Route Bridge 已加载且可用。',
+              ),
         ),
       );
       return msfsConfigurationDiagnosticSchema.parse({
         status: 'ready',
-        message: 'MSFS CLI 与游戏项目配置已完成。',
+        message: this.text(
+          'The MSFS CLI and game integration are fully configured.',
+          'MSFS CLI 与游戏项目配置已完成。',
+        ),
         checks,
         cliPath,
         userCfgPath: userConfig.path,
@@ -653,13 +809,21 @@ export class MsfsConfigurationChecker {
       check(
         'route_bridge',
         'warning',
-        'Community Package 已找到，但游戏尚未加载 EFB Route Bridge。',
-        routeCode === 'ROUTE_TIMEOUT' ? '请退出并重新启动 MSFS。' : route?.message,
+        this.text(
+          'The Community Package was found, but the game has not loaded the EFB Route Bridge.',
+          'Community Package 已找到，但游戏尚未加载 EFB Route Bridge。',
+        ),
+        routeCode === 'ROUTE_TIMEOUT'
+          ? this.text('Exit and restart MSFS.', '请退出并重新启动 MSFS。')
+          : route?.message,
       ),
     );
     return msfsConfigurationDiagnosticSchema.parse({
       status: 'needs_setup',
-      message: 'EFB Route Bridge 尚未在游戏中生效，请重启 MSFS 后重试。',
+      message: this.text(
+        'The EFB Route Bridge is not active in the game. Restart MSFS and try again.',
+        'EFB Route Bridge 尚未在游戏中生效，请重启 MSFS 后重试。',
+      ),
       checks,
       cliPath,
       userCfgPath: userConfig.path,

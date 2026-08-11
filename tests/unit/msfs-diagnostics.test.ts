@@ -138,6 +138,7 @@ describe('MSFS configuration diagnostics', () => {
         executablePath: fixture.cliPath,
         timeoutMs: 100,
         maxConcurrency: 1,
+        locale: 'en-US',
         userCfgCandidates: [fixture.userCfgPath],
         client: new MsfsCliClient({
           executablePath: fixture.cliPath,
@@ -148,6 +149,10 @@ describe('MSFS configuration diagnostics', () => {
       });
       const result = await checker.check();
       expect(result.status).toBe('game_not_running');
+      expect(result.message).toBe(
+        'The CLI and Community Package are configured. Start MSFS for final validation.',
+      );
+      expect(result.checks.every((item) => !/\p{Script=Han}/u.test(item.message))).toBe(true);
       expect(result.checks.find((item) => item.id === 'community_package')?.status).toBe('ok');
       expect(result.checks.find((item) => item.id === 'route_bridge')?.status).toBe('warning');
     } finally {
