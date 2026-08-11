@@ -119,8 +119,8 @@ export class DiagnosticLogger {
 
   constructor(options: DiagnosticLoggerOptions) {
     this.#directory = options.directory;
-    this.#maximumAgeMs = options.maximumAgeMs ?? 7 * 24 * 60 * 60 * 1_000;
-    this.#maximumBytes = options.maximumBytes ?? 10 * 1024 * 1024;
+    this.#maximumAgeMs = options.maximumAgeMs ?? 3 * 24 * 60 * 60 * 1_000;
+    this.#maximumBytes = options.maximumBytes ?? 5 * 1024 * 1024;
     this.#now = options.now ?? (() => new Date());
   }
 
@@ -142,6 +142,7 @@ export class DiagnosticLogger {
 
   async snapshot(): Promise<DiagnosticsSnapshot> {
     await this.#writeQueue;
+    await this.#prune(this.#now());
     const files = Object.fromEntries(
       await Promise.all(
         diagnosticStreams.map(async (stream) => [stream, await this.#readStream(stream)] as const),

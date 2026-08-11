@@ -53,7 +53,7 @@
 
 唯一强制排除和脱敏的类别是密钥与认证材料：API Key、Access Token、API Secret、LiveKit JWT、Bearer/Authorization Header、Cookie、`.env` 原文、加密凭据 blob，以及任何 URL 查询参数中的上述值。写入、就绪诊断和导出前均须使用同一个脱敏器。
 
-日志最多保留 7 天且总量不超过 10 MiB。导出动作由主进程打开系统保存对话框并流式创建 ZIP；Renderer 不提供路径、不读取日志目录和 ZIP 内容。ZIP 至少包含 `manifest.json`、脱敏后的主/Worker 日志、`readiness.json`、`configuration-summary.json` 和对话/工具事件记录。归档完成前写入临时文件，成功后原子替换目标；失败或取消不保留部分文件。
+日志最多保留 3 天且总量不超过 5 MiB。导出动作由主进程打开系统保存对话框并流式创建 ZIP；Renderer 不提供路径、不读取日志目录和 ZIP 内容。ZIP 至少包含 `manifest.json`、脱敏后的主/Worker 日志、`readiness.json`、`configuration-summary.json` 和对话/工具事件记录。归档完成前写入临时文件，成功后原子替换目标；失败或取消不保留部分文件。
 
 ## 原因
 

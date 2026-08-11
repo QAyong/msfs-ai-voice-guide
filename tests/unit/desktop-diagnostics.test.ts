@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, readdir, rm, stat } from 'node:fs/promises';
+import { mkdtemp, readFile, readdir, rm, stat, utimes } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -48,7 +48,7 @@ describe('desktop diagnostics', () => {
     const logger = new DiagnosticLogger({
       directory,
       maximumBytes: 160,
-      maximumAgeMs: 7 * 24 * 60 * 60 * 1_000,
+      maximumAgeMs: 3 * 24 * 60 * 60 * 1_000,
     });
 
     await logger.append('main', {
@@ -61,6 +61,26 @@ describe('desktop diagnostics', () => {
     const names = await readdir(directory);
     const total = await Promise.all(names.map(async (name) => stat(join(directory, name))));
     expect(total.reduce((sum, details) => sum + details.size, 0)).toBeLessThanOrEqual(160);
+  });
+
+  it('prunes expired files before taking a snapshot', async () => {
+    const directory = await createTemporaryDirectory();
+    const now = new Date('2026-08-11T00:00:00.000Z');
+    const logger = new DiagnosticLogger({
+      directory,
+      maximumAgeMs: 3 * 24 * 60 * 60 * 1_000,
+      now: () => now,
+    });
+
+    await logger.append('main', { message: 'expired diagnostic event' });
+    const logPath = join(directory, 'main-2026-08-11.ndjson');
+    const expiredAt = new Date('2026-08-07T00:00:00.000Z');
+    await utimes(logPath, expiredAt, expiredAt);
+
+    const snapshot = await logger.snapshot();
+
+    expect(snapshot.files.main).toBe('');
+    expect(await readdir(directory)).not.toContain('main-2026-08-11.ndjson');
   });
 
   it('writes a standard ZIP with the required diagnostic entries', async () => {

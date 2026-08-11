@@ -2059,6 +2059,9 @@ button {
   z-index: 2;
   min-width: 0;
 }
+.settings-dropdown--open {
+  z-index: 30;
+}
 .settings-select-row > .settings-dropdown-control {
   min-width: 112px;
   flex: 0 1 58%;

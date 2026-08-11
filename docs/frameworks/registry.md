@@ -22,7 +22,7 @@
 ## 规划依赖说明
 
 - Mem0 目前只是已接受的未来技术方向，不是当前运行时依赖。
-- Explore 模式当前接入 Wikipedia、百度百科、YouTube 搜索页和哔哩哔哩站内搜索页；3～5 个具体词条约束与 URL 去重已完成自动化验证和桌面构建验证。真实 Electron 来源窗口、LiveKit、MSFS 与目标网络下的端到端人工验收尚未完成。详见 [Spec-015](../specs/spec-015-user-triggered-explore-mode.md) 与 [Feature-015 Spike](compliance/feature-015-explore-content-provider-spike.md)。
+- Explore 模式当前接入 Wikipedia、百度百科、YouTube 搜索页和哔哩哔哩站内搜索页；3～5 个具体词条约束、URL 去重、真实 Electron 来源窗口、LiveKit、MSFS 与目标网络下的端到端人工验收均已完成。详见 [Spec-015](../specs/spec-015-user-triggered-explore-mode.md) 与 [Feature-015 Spike](compliance/feature-015-explore-content-provider-spike.md)。
 - Mem0 官方 LiveKit 示例当前以 Python 为主；本项目是 TypeScript，因此实施时必须同时核对 Mem0 Node SDK 和已安装 LiveKit Agents 版本，不能直接复制 Python 示例。
 - 在实际安装 Mem0、Embedding 或存储依赖后，必须用锁文件中的精确版本更新本表。
 

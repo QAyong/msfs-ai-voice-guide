@@ -1,8 +1,8 @@
 # Windows x64 打包方案 V2
 
-**最后更新：** 2026-08-07
+**最后更新：** 2026-08-11
 
-**状态：** 已实现；`1.0.1-rc.2` 安装包已生成，安装态自动校验通过
+**状态：** 已实现；`1.0.1-rc.4` 安装包已生成，安装态自动校验通过
 
 **目标平台：** Windows x64，无代码签名
 
@@ -58,9 +58,42 @@ Bridge 仍由应用首次启动逻辑管理。普通用户写入标准 `Communit
 
 ## 构建命令和产物
 
+### 构建网络代理
+
+本项目在当前开发机上打包时使用 Clash 本地代理 `127.0.0.1:7897`。执行依赖安装或打包命令前，在 PowerShell 会话中设置：
+
 ```powershell
+$env:HTTP_PROXY = 'http://127.0.0.1:7897'
+$env:HTTPS_PROXY = 'http://127.0.0.1:7897'
+$env:http_proxy = $env:HTTP_PROXY
+$env:https_proxy = $env:HTTPS_PROXY
+```
+
+该代理只用于构建过程中的依赖、工具或发布资源下载，不写入安装包，也不作为最终应用的运行时配置。
+
+### 当前 Windows 开发机的完整前置配置
+
+正式候选包不能依赖旧的 `out/msfs` 目录。每次构建都应明确指定已验证的 CLI 快照和同一批次的 Community Bridge。当前开发机可使用下面的 PowerShell 配置：
+
+```powershell
+$env:CI = 'true'
+$env:PNPM_CONFIG_NODE_LINKER = 'hoisted'
+$env:MSFS_CLI_DISTRIBUTION_DIR = (Resolve-Path '.\native\msfs-cli\build').Path
+$env:MSFS_CLI_COMMUNITY_PACKAGE_DIR = (Resolve-Path '.\native\msfs-cli\wasm-route-bridge\build\package-tool\msfs-native-cli-route-bridge').Path
+
+$rootVersion = (Get-Content '.\package.json' | ConvertFrom-Json).version
+$runtimeVersion = (Get-Content '.\packaging\desktop-runtime\package.json' | ConvertFrom-Json).version
+if ($rootVersion -ne $runtimeVersion) {
+  throw "应用版本与运行包版本不一致：$rootVersion != $runtimeVersion"
+}
+
+pnpm install --frozen-lockfile --node-linker=hoisted
 pnpm desktop:package
 ```
+
+`PNPM_CONFIG_NODE_LINKER=hoisted` 必须在依赖安装和打包命令中保持一致；不要在同一个工作区交替使用默认 isolated 和 hoisted 依赖树，否则 pnpm 可能反复重建 `node_modules`。如果依赖未变化，不需要每次重复执行 `pnpm install`。
+
+`desktop:package` 已明确传入 `--publish never`，只生成本地安装包，不访问 GitHub，也不需要 `GH_TOKEN`。如果遇到 MSBuild `FileTracker` 的 `E_ACCESSDENIED`，请在提升权限的 PowerShell 中重跑同一套命令。
 
 候选发布物位于 `release-v2/artifacts/`：
 
@@ -73,7 +106,17 @@ win-unpacked/                         # 只供内部验证，不对外发布
 
 构建只生成 NSIS x64 安装包，不生成 ZIP。安装包未签名，Windows SmartScreen 可能显示未知发布者警告。
 
-给普通用户分发时只发送 `*-win-x64-setup.exe`。`SHA256SUMS.txt` 是可选的完整性校验文件；`.blockmap`、`latest.yml`、内部报告和 `win-unpacked/` 不属于人工分发内容。旧候选安装包可移入 `release-v2/artifacts/archive/<version>/` 保存，不能与当前候选 Setup 混在产物根目录。
+给普通用户分发时只发送 `*-win-x64-setup.exe`。`SHA256SUMS.txt` 是可选的完整性校验文件；`.blockmap`、`latest.yml`、内部报告和 `win-unpacked/` 不属于人工分发内容。`pnpm desktop:package` 开始时会自动把旧候选安装包和对应 `.blockmap` 移入 `release-v2/artifacts/archive/<version>/`，因此当前产物根目录只保留本次候选 Setup。
+
+### 打包失败快速判断
+
+| 现象                                                 | 处理                                                                                                                                             |
+| ---------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `应用版本与运行包版本不一致`                         | 同时更新根目录 `package.json` 和 `packaging/desktop-runtime/package.json` 的版本号，再重跑。                                                     |
+| `GitHub Personal Access Token is not set`            | 使用仓库中的 `pnpm desktop:package`；脚本已经固定 `--publish never`，不要手动调用未带该参数的 electron-builder。                                 |
+| `应当只生成一个候选安装包`                           | 正常使用 `pnpm desktop:package` 会自动归档旧产物；如果直接调用 `scripts/report-release-artifacts.mjs`，先执行 `pnpm desktop:archive-artifacts`。 |
+| `MSFS_CLI_DISTRIBUTION_DIR` 缺失或 CLI/Bridge 不一致 | 重新设置两个快照路径；不要直接把 `out/msfs` 作为来源目录。                                                                                       |
+| `FileTracker ... E_ACCESSDENIED`                     | 关闭占用构建目录的工具，并在提升权限的 PowerShell 中重跑。                                                                                       |
 
 ## 安装态凭据显示约定
 

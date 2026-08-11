@@ -2109,7 +2109,10 @@ const SettingsDropdown = ({
   };
 
   return (
-    <div className={`settings-dropdown ${className ?? ''}`.trim()} ref={rootRef}>
+    <div
+      className={`settings-dropdown ${open ? 'settings-dropdown--open' : ''} ${className ?? ''}`.trim()}
+      ref={rootRef}
+    >
       <span>{label}</span>
       <div className="settings-dropdown-control">
         <button

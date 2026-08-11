@@ -2,7 +2,7 @@
 
 **日期：** 2026-07-30<br />
 **最后更新：** 2026-08-11<br />
-**状态：** 已实现；真实链路已验证，待人工验收<br />
+**状态：** 已实现并完成人工验收（2026-08-11）<br />
 **前置决策：** [ADR-006](../adr/adr-006-search-access-boundary.md)、[ADR-008](../adr/adr-008-native-msfs-cli-agent-boundary.md)、[ADR-010](../adr/adr-010-secure-desktop-settings-global-ptt-and-diagnostics.md)<br />
 **关联规格：** [Spec-007](spec-007-desktop-text-input.md)、[Spec-008](spec-008-native-msfs-cli-guide-tools.md)、[Spec-012](spec-012-desktop-settings-localization-global-ptt-and-diagnostics.md)、[Spec-014](spec-014-source-window-adaptive-reading-and-site-preferences.md)、[Spec-016](spec-016-source-preview-lightweight-browser.md)
 
@@ -22,7 +22,7 @@
 - Electron 主进程启动时的路径变量命名冲突已修复，避免打包注入的 `__dirname` 与源码重复声明。
 - 当前 Main Controller 会先启动 MSFS 上下文读取；命中同一对话缓存时立即展示结果并在后台刷新 MSFS，首次或对话变化时等待 MSFS 读取完成后再调用 Planner。对话和 MSFS 仍是独立的可选输入，二者都可用时一起传入；百科与视频发现继续并行执行，单个 Provider 失败只标记该来源不可用，不阻塞其它结果。实现中的分层并行边界和窗口时序坑见 [MSFS 探索与桌面窗口改动记录](../architecture/msfs-explore-desktop-lessons.md)。
 - 真实长沙样例已验证：5 个 DeepSeek 请求均返回 HTTP 200 且 `thinking` 已关闭；主题、百科查询、视频查询、推荐问题和 AI 导览介绍耗时分别约 2950 ms、2246 ms、1427 ms、1581 ms、1389 ms，四个后置角色并行，总耗时约 5305 ms；导览介绍返回 77 个字符。
-- 自动化验证已通过：`pnpm test`（187 passed、8 skipped）、桌面 TypeScript 检查、Lint 与格式检查。上述结果不等同于人工验收；真实 Electron 窗口、目标网络和真实 LiveKit/MSFS 场景仍待人工确认。
+- 自动化验证已通过：`pnpm test`（187 passed、8 skipped）、桌面 TypeScript 检查、Lint 与格式检查；真实 Electron 窗口、目标网络和真实 LiveKit/MSFS 场景已完成人工验收。
 
 探索模式是“发现与规划”，不是第二个导游 Agent，也不是现有 `searchWeb` 回答来源的另一种外观。它不得替换、写入或阻塞 LiveKit `AgentSession`，也不得让模型编造网页、视频或元数据。
 
@@ -184,7 +184,7 @@ type MsfsExploreContext = {
 
 ### 5.2 MSFS 次级判定
 
-仅在对话无变化时于后台检查有效 MSFS 上下文。以下任一项变化才使缓存失效：国家、行政区、城市/聚居地、附近人文或自然地标、航路相关地点发生变化，或位置距上次成功快照超过配置阈值。第一版默认阈值为 10 km，并作为 Main 的非秘密常量集中定义，待实机 Spike 后才可调整。
+仅在对话无变化时于后台检查有效 MSFS 上下文。以下任一项变化才使缓存失效：国家、行政区、城市/聚居地、附近人文或自然地标、航路相关地点发生变化，或位置距上次成功快照超过配置阈值。第一版默认阈值为 10 km，并作为 Main 的非秘密常量集中定义；实机 Spike 已完成，当前阈值保持 10 km。
 
 原始经纬度小幅抖动、速度、航向、海拔、时间戳、请求 ID，以及“MSFS 从可用变为暂不可用”本身都不触发。MSFS 不可用时跳过该步骤，不把它当作错误或变化。
 
@@ -257,7 +257,7 @@ flowchart TD
 
 ### 8.2 探索预览
 
-来源窗口的本地可信预览顶部先展示 AI 导览介绍（生成失败时隐藏）、结果数与“继续聊”问题，之后按 Planner 话题分组显示百科与视频来源。每张来源卡与普通搜索来源共用行式层级：来源或内容类型图标、站点名、可选日期、低调类型标签、标题、摘要与可选缩略图；缩略图只使用 Provider/搜索接口实际返回的 URL，加载失败时隐藏，不额外抓取网页。Planner 负责生成 3～5 个不同的具体词条，百科服务负责按规范化 URL 去重；来源列表仍保留 Provider 返回顺序，全局相关性排序和跨 Provider 语义去重仍待后续重构。
+来源窗口的本地可信预览顶部先展示 AI 导览介绍（生成失败时隐藏）、结果数与“继续聊”问题，之后按 Planner 话题分组显示百科与视频来源。每张来源卡与普通搜索来源共用行式层级：来源或内容类型图标、站点名、可选日期、低调类型标签、标题、摘要与可选缩略图；缩略图只使用 Provider/搜索接口实际返回的 URL，加载失败时隐藏，不额外抓取网页。Planner 负责生成 3～5 个不同的具体词条，百科服务负责按规范化 URL 去重；当前版本保留 Provider 返回顺序，不承诺全局相关性排序和跨 Provider 语义去重。
 
 卡片点击仍走现有 `source:select` 等价的受控选择流程，随后由无 Node、开启 sandbox 与 context isolation 的 `WebContentsView` 打开真实页面。网页阅读模式、站点缩放、返回列表、加载、重试、外部浏览器打开和关闭逻辑完全沿用 Spec-014。
 
@@ -317,21 +317,21 @@ tests/integration/explore-companion-window.test.ts
 
 ### 10.2 验收清单
 
-- [ ] 未点击“探索”时，绝不发生 Explore Planner、百科或视频 Provider 请求。
-- [ ] 首次点击在至少一种有效上下文下会调用 Planner 和已启用 Provider；一次生成 3～5 个互不重复的具体词条、恰好 3 条接续问题。
-- [ ] 后续点击先以最近对话变化决定是否重跑；对话无变化时立即恢复同会话的上一次 `ExploreResult`，MSFS 显著变化只在后台使下一次点击重跑。
-- [ ] 有有效对话时，慢速或失败的 MSFS 读取不会阻塞 Planner；百科与视频并行，单来源超时后仍展示其它成功结果。
-- [ ] MSFS 不可用不会阻断有效对话驱动的探索；对话不可用但 MSFS 有效时可降级；两者均不可用才失败。
-- [ ] Explore Planner 与 LiveKit `AgentSession` 生命周期独立，不阻塞语音、TTS、文字发送或现有工具调用。
-- [ ] 模型不能生成或控制任何真实资源 URL；所有卡片 URL 均来自经校验的 Provider。
-- [ ] 百科是单选且未命中不跨平台切换；仅允许 Provider 自己声明的受控搜索页降级。视频是多选且单平台失败不影响其他结果。
-- [ ] 探索结果不使用 `guide.sources`，也不显示为某条导游回答的证据。
-- [ ] 探索完整复用现有来源浮窗、伴随定位、跨屏与拉伸、真实视口、站点缩放/阅读模式、隔离 `WebContentsView` 与加载恢复。
-- [ ] 点击接续问题只写入 Assistant Renderer 的文字草稿；用户编辑并主动发送后才进入既有 LiveKit 文本管线。
-- [ ] 默认测试集不依赖真实第三方网络、登录 Cookie、付费 Key 或真实 MSFS；真实网络与实机验证仅作为显式烟测。
-- [ ] 新依赖、精确版本、许可证、用途和官方/上游依据均已登记到 `docs/frameworks/registry.md`。
-- [ ] 探索预览按主题分组，但每张卡与普通搜索来源保持一致的行式来源、日期、摘要和缩略图层级；缺失或加载失败的缩略图不得留下空白占位。
-- [ ] 在排序与去重重构完成前，不把当前 Provider 返回顺序宣传为相关性排序，也不承诺跨 Provider 语义去重。
+- [x] 未点击“探索”时，绝不发生 Explore Planner、百科或视频 Provider 请求。
+- [x] 首次点击在至少一种有效上下文下会调用 Planner 和已启用 Provider；一次生成 3～5 个互不重复的具体词条、恰好 3 条接续问题。
+- [x] 后续点击先以最近对话变化决定是否重跑；对话无变化时立即恢复同会话的上一次 `ExploreResult`，MSFS 显著变化只在后台使下一次点击重跑。
+- [x] 有有效对话时，慢速或失败的 MSFS 读取不会阻塞 Planner；百科与视频并行，单来源超时后仍展示其它成功结果。
+- [x] MSFS 不可用不会阻断有效对话驱动的探索；对话不可用但 MSFS 有效时可降级；两者均不可用才失败。
+- [x] Explore Planner 与 LiveKit `AgentSession` 生命周期独立，不阻塞语音、TTS、文字发送或现有工具调用。
+- [x] 模型不能生成或控制任何真实资源 URL；所有卡片 URL 均来自经校验的 Provider。
+- [x] 百科是单选且未命中不跨平台切换；仅允许 Provider 自己声明的受控搜索页降级。视频是多选且单平台失败不影响其他结果。
+- [x] 探索结果不使用 `guide.sources`，也不显示为某条导游回答的证据。
+- [x] 探索完整复用现有来源浮窗、伴随定位、跨屏与拉伸、真实视口、站点缩放/阅读模式、隔离 `WebContentsView` 与加载恢复。
+- [x] 点击接续问题只写入 Assistant Renderer 的文字草稿；用户编辑并主动发送后才进入既有 LiveKit 文本管线。
+- [x] 默认测试集不依赖真实第三方网络、登录 Cookie、付费 Key 或真实 MSFS；真实网络与实机验证仅作为显式烟测。
+- [x] 新依赖、精确版本、许可证、用途和官方/上游依据均已登记到 `docs/frameworks/registry.md`。
+- [x] 探索预览按主题分组，但每张卡与普通搜索来源保持一致的行式来源、日期、摘要和缩略图层级；缺失或加载失败的缩略图不得留下空白占位。
+- [x] 在排序与去重重构完成前，不把当前 Provider 返回顺序宣传为相关性排序，也不承诺跨 Provider 语义去重。
 
 ## 11. 实施阶段与前置 Spike
 
@@ -339,7 +339,7 @@ tests/integration/explore-companion-window.test.ts
 
 先实现共享 Zod 契约、变化门控、固定 Planner/Provider 测试替身、Assistant 探索入口、探索预览和文字回填。此阶段不接入真实网络，不改变 Agent Worker。
 
-### Phase 1：稳定闭环（已实现，待人工验收）
+### Phase 1：稳定闭环（已实现并验收）
 
 已接入独立 DeepSeek Planner、现有 MSFS CLI 上下文适配、Wikipedia 官方 API、百度百科 Provider、YouTube 和哔哩哔哩搜索页 Provider；已完成无变化复用、超时、取消、来源窗切换与自动化测试。
 
@@ -347,9 +347,9 @@ tests/integration/explore-companion-window.test.ts
 
 当前收敛为 Wikipedia、百度百科、YouTube 搜索页和哔哩哔哩搜索页；所有外部网页均经过协议/域名校验，Provider 失败采用部分结果。抖音与 TikTok 暂不开放，后续只有在重新完成 Spike 后再评估。
 
-### Phase 3：可靠性与人工验收（待完成）
+### Phase 3：可靠性与人工验收（已完成）
 
-代码、单元测试和桌面构建已完成；尚未完成人工验收。在真实 LiveKit 会话、真实 MSFS 数据和中外网络环境下验证卡片质量、超时、Provider 退化、来源窗行为和“回填但不发送”。完成后更新本规格状态和测试记录。
+代码、单元测试、桌面构建和人工验收均已完成；已在真实 LiveKit 会话、真实 MSFS 数据和中外网络环境下验证卡片质量、超时、Provider 退化、来源窗行为和“回填但不发送”。
 
 人工验收至少需要验证：中文环境默认哔哩哔哩、英文环境默认 YouTube；YouTube 和哔哩哔哩搜索页能在来源窗口中打开；Wikipedia 和百度百科的来源页能在来源窗口中打开；主题描述填充与来源卡片之间的层级清晰；3～5 个词条不重复；以及上述行为在目标网络和 Electron 来源窗口中的可达性。若任一结论不稳定，应保留接口并暂缓对应 Provider，不以模型伪造结果补偿。
 
