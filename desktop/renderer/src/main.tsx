@@ -4012,7 +4012,8 @@ const getSourceCopy = (english: boolean): SourceCopy =>
             : '页面无法在应用内显示。',
         errorNetwork: '网络加载失败，无法打开这个网页。',
         errorRenderer: '网页渲染进程意外退出，请重试。',
-        errorTimeout: '网页在 15 秒内没有显示首屏，请重试或改用系统浏览器打开。',
+        errorTimeout:
+          '网页加载较慢，30 秒内还没有显示首屏；页面会继续加载，也可以重试或改用系统浏览器打开。',
         explore: '探索',
         exploreResultCount: (count) => `已为你的探索路线整理 ${count} 个来源`,
         exploreEncyclopedia: '百科',

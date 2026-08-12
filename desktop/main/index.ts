@@ -191,7 +191,7 @@ const sourceSize = { width: 440, height: 600 };
 const sourceMoreMenuSize = { width: 188, height: 234 };
 const settingsSize = { width: 620, height: 640 };
 const quitDialogSize = { width: 328, height: 224 };
-const sourceLoadTimeoutMs = 15_000;
+const sourceLoadTimeoutMs = 30_000;
 const sourceSessionPartition = 'persist:source-preview';
 const sourceMobileUserAgent =
   'Mozilla/5.0 (Linux; Android 14; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Mobile Safari/537.36';
@@ -1522,13 +1522,14 @@ const failSourceLoad = (
   error: Extract<SourceWindowState, { mode: 'error' }>['error'],
   message: string,
   statusCode?: number,
+  options: { destroyView?: boolean } = {},
 ) => {
   if (!sourcePreview || !selectedSource || sourceView !== view) return;
   sourceNavigationState = {
     ...getSourceNavigationState(view),
     isLoading: false,
   };
-  destroySourceView();
+  if (options.destroyView ?? true) destroySourceView();
   publishSourceWindowState({
     mode: 'error',
     preview: sourcePreview,
@@ -1550,7 +1551,9 @@ const startSourceLoadTimer = (view: WebContentsView, currentUrl: string) => {
       view,
       currentUrl,
       'timeout',
-      '网页在 15 秒内没有显示首屏，请重试或改用系统浏览器打开。',
+      '网页加载较慢，30 秒内还没有显示首屏；页面会继续加载，也可以重试或改用系统浏览器打开。',
+      undefined,
+      { destroyView: false },
     );
   }, sourceLoadTimeoutMs);
 };
