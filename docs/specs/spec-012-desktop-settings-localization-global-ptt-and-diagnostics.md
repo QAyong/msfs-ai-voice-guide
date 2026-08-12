@@ -47,6 +47,8 @@
 
 Windows 下的原生桥接必须只匹配已配置的单键或鼠标侧键并发出 press/release，不能作为按键记录器或鼠标监控器。主进程收到 press 后调用既有按住说话开始逻辑；收到 release 后提交当前轮次。语音可用期间必须消费匹配输入，未匹配的键盘与鼠标输入继续交给系统和 MSFS。重复 press、丢失 release、Room 断开、Agent 出错、切换语音模式、禁用语音和应用退出均不得让录音保持开启。
 
+原生模块的生命周期必须与 Electron 环境绑定：模块初始化时注册 N-API environment cleanup hook；应用退出、语音模式切换或重新配置时，先停止并 join Windows hook 线程，再终止 ThreadSafeFunction，不得在 JavaScript 环境销毁后继续投递事件。所有 N-API 调用必须检查返回状态；收到 `napi_closing` 时立即停止投递并释放事件对象。hook 线程与主线程共享的配置、held 状态和停止信号必须使用原子变量或受 mutex 保护，停止请求必须在消息队列就绪后投递。
+
 非 Windows 平台、桥接模块加载失败或无可用 Room 时，设置页将全局按住说话显示为不可用，不注册 Electron `globalShortcut` 作为不完整回退；窗口内的既有鼠标按住说话继续可用。
 
 ## 服务与配置模型
@@ -101,8 +103,11 @@ type PublicSettings = {
 
 - `native/global-ptt` 使用 Windows `WH_KEYBOARD_LL` / `WH_MOUSE_LL`，仅匹配已配置的单键或 `Mouse X1/X2`。匹配输入的 press/release 会被消费；未匹配输入不记录、不传给 Renderer，继续交由系统和 MSFS。
 - 原生模块只把匹配输入的 `press` / `release` 转给主进程；主进程经白名单 IPC 将其交给现有 LiveKit 按住说话流程。重复 press 幂等；改键、断线、切换模式与退出会取消活跃轮次。
+- 原生模块注册 N-API environment cleanup hook；退出、禁用和重配置时先停止并 join hook 线程，再终止 ThreadSafeFunction。N-API 返回状态、`napi_closing` 和共享 hook 状态均有保护，避免退出阶段向已销毁的 JavaScript 环境继续投递事件。
 - 通用设置页使用键盘/鼠标点选器直接选择 `Left Alt`、`F8`、`Mouse X1` 或 `Mouse X2`。鼠标图将两个侧键均放在右手鼠标左侧拇指位，并标注前进 `X2` 与后退 `X1`；自定义录入仅接受一个受支持的键盘键。
 - `node-gyp` 在 Windows 构建 N-API `.node` 模块；桌面构建会将其暂存到 `out/main/native`。类型检查、完整 Vitest 套件、原生模块加载/启停烟测和桌面构建均已通过。
+
+2026-08-12 记录过一次 Electron native 崩溃问题：截图中的 Windows `0x80000003` 与本机历史 Application 事件中的 `global_push_to_talk.node` 崩溃证据并不具有相同异常码，但均指向 native 生命周期风险。修复后已完成 `pnpm native:build` 以及 100 次 native `start/stop` 启停冒烟；Windows/MSFS 前台长时间人工回归仍待完成。详见 [Bug-20260812](../bugs/bug-20260812-electron-global-ptt-native-crash-0x80000003.md)。
 
 已完成统一服务设置保存、Agent Worker 重启、Room 重连与失败回滚链路：主进程先保存候选配置并等待新的 Worker 就绪，成功后通知 Renderer 刷新/重连；失败时恢复上一份有效配置、凭据和语言。经 Windows `safeStorage` 保存的凭据仅在主进程中注入实际 Agent 配置。每个服务都能在不保存草稿的前提下进行连通性检测；检测具有 10 秒超时、脱敏错误反馈与 2.5 秒限流。
 
@@ -156,7 +161,7 @@ type PublicSettings = {
 - [ ] 服务/语言切换失败保留旧有效会话；成功时无旧 Token、旧 Worker 或麦克风轨道泄漏。
 - [x] ZIP 包含对话、转写、工具与服务诊断上下文，但不包含任一密钥、认证 Header、Cookie、JWT、`.env` 或凭据 blob。
 - [x] ZIP 可由标准归档工具打开；取消、磁盘满、路径无权限或归档失败时不遗留部分目标文件。
-- [x] 单元测试覆盖 Zod 边界、密钥 DTO、键位校验、press/release 状态机、脱敏器、日志保留和 ZIP 清单；Windows 人工验证覆盖 MSFS 前台的全局键位。
+- [ ] 单元测试覆盖 Zod 边界、密钥 DTO、键位校验、press/release 状态机、脱敏器、日志保留和 ZIP 清单；Windows 人工验证覆盖 MSFS 前台的全局键位。
 
 ## 相关官方依据
 

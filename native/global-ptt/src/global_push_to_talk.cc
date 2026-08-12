@@ -4,6 +4,7 @@
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 
+#include <atomic>
 #include <condition_variable>
 #include <mutex>
 #include <string>
@@ -18,84 +19,96 @@ struct GlobalPushToTalkEvent {
 
 std::mutex hook_mutex;
 std::condition_variable startup_condition;
+std::condition_variable thread_id_condition;
 std::thread hook_thread;
 DWORD hook_thread_id = 0;
-HHOOK keyboard_hook = nullptr;
-HHOOK mouse_hook = nullptr;
 napi_threadsafe_function event_callback = nullptr;
 bool startup_complete = false;
 bool startup_succeeded = false;
-bool hook_running = false;
-bool held = false;
-bool matches_mouse_button = false;
-UINT configured_virtual_key = 0;
-WORD configured_mouse_button = 0;
+bool thread_id_ready = false;
+std::atomic_bool hook_running{false};
+std::atomic_bool held{false};
+std::atomic_bool matches_mouse_button{false};
+std::atomic_bool callback_closing{false};
+std::atomic<UINT> configured_virtual_key{0};
+std::atomic<WORD> configured_mouse_button{0};
 
 void CallJavaScript(napi_env env, napi_value js_callback, void*, void* data) {
   auto* event = static_cast<GlobalPushToTalkEvent*>(data);
+  if (event == nullptr) return;
+
   if (env != nullptr && js_callback != nullptr) {
-    napi_value global;
-    napi_value value;
-    napi_value type;
-    napi_get_global(env, &global);
-    napi_create_object(env, &value);
-    napi_create_string_utf8(env, event->pressed ? "press" : "release", NAPI_AUTO_LENGTH, &type);
-    napi_set_named_property(env, value, "type", type);
-    napi_call_function(env, global, js_callback, 1, &value, nullptr);
+    napi_value global = nullptr;
+    napi_value value = nullptr;
+    napi_value type = nullptr;
+    const bool values_ready = napi_get_global(env, &global) == napi_ok &&
+                              napi_create_object(env, &value) == napi_ok &&
+                              napi_create_string_utf8(env, event->pressed ? "press" : "release",
+                                                      NAPI_AUTO_LENGTH, &type) == napi_ok &&
+                              napi_set_named_property(env, value, "type", type) == napi_ok;
+    if (values_ready) {
+      napi_call_function(env, global, js_callback, 1, &value, nullptr);
+    }
   }
   delete event;
 }
 
-void Emit(bool pressed) {
+bool Emit(bool pressed) {
   auto* event = new GlobalPushToTalkEvent{pressed};
-  if (napi_call_threadsafe_function(event_callback, event, napi_tsfn_nonblocking) != napi_ok) {
+  if (event_callback == nullptr) {
     delete event;
+    return false;
   }
+
+  const napi_status status = napi_call_threadsafe_function(event_callback, event, napi_tsfn_nonblocking);
+  if (status != napi_ok) delete event;
+  if (status == napi_closing) {
+    callback_closing.store(true);
+    PostThreadMessageW(GetCurrentThreadId(), WM_QUIT, 0, 0);
+  }
+  return status == napi_ok;
 }
 
 bool MatchesKeyboard(const KBDLLHOOKSTRUCT* key) {
-  if (configured_virtual_key == VK_LMENU) {
+  const UINT virtual_key = configured_virtual_key.load();
+  if (virtual_key == VK_LMENU) {
     return key->vkCode == VK_LMENU ||
            (key->vkCode == VK_MENU && (key->flags & LLKHF_EXTENDED) == 0);
   }
-  return key->vkCode == configured_virtual_key;
+  return key->vkCode == virtual_key;
 }
 
 LRESULT CALLBACK KeyboardHook(int code, WPARAM message, LPARAM parameter) {
-  if (code != HC_ACTION || matches_mouse_button) {
-    return CallNextHookEx(keyboard_hook, code, message, parameter);
+  if (code != HC_ACTION || matches_mouse_button.load() || callback_closing.load()) {
+    return CallNextHookEx(nullptr, code, message, parameter);
   }
   const auto* key = reinterpret_cast<KBDLLHOOKSTRUCT*>(parameter);
-  if (!MatchesKeyboard(key)) return CallNextHookEx(keyboard_hook, code, message, parameter);
+  if (!MatchesKeyboard(key)) return CallNextHookEx(nullptr, code, message, parameter);
 
   const bool pressed = message == WM_KEYDOWN || message == WM_SYSKEYDOWN;
   const bool released = message == WM_KEYUP || message == WM_SYSKEYUP;
-  if (pressed && !held) {
-    held = true;
+  if (pressed && !held.exchange(true)) {
     Emit(true);
-  } else if (released && held) {
-    held = false;
+  } else if (released && held.exchange(false)) {
     Emit(false);
   }
   return 1;
 }
 
 LRESULT CALLBACK MouseHook(int code, WPARAM message, LPARAM parameter) {
-  if (code != HC_ACTION || !matches_mouse_button) {
-    return CallNextHookEx(mouse_hook, code, message, parameter);
+  if (code != HC_ACTION || !matches_mouse_button.load() || callback_closing.load()) {
+    return CallNextHookEx(nullptr, code, message, parameter);
   }
   if (message != WM_XBUTTONDOWN && message != WM_XBUTTONUP) {
-    return CallNextHookEx(mouse_hook, code, message, parameter);
+    return CallNextHookEx(nullptr, code, message, parameter);
   }
   const auto* mouse = reinterpret_cast<MSLLHOOKSTRUCT*>(parameter);
-  if (HIWORD(mouse->mouseData) != configured_mouse_button) {
-    return CallNextHookEx(mouse_hook, code, message, parameter);
+  if (HIWORD(mouse->mouseData) != configured_mouse_button.load()) {
+    return CallNextHookEx(nullptr, code, message, parameter);
   }
-  if (message == WM_XBUTTONDOWN && !held) {
-    held = true;
+  if (message == WM_XBUTTONDOWN && !held.exchange(true)) {
     Emit(true);
-  } else if (message == WM_XBUTTONUP && held) {
-    held = false;
+  } else if (message == WM_XBUTTONUP && held.exchange(false)) {
     Emit(false);
   }
   return 1;
@@ -165,25 +178,30 @@ UINT VirtualKeyFromCode(const std::string& code) {
 }
 
 void HookThread() {
-  MSG message;
+  MSG message{};
   PeekMessageW(&message, nullptr, WM_USER, WM_USER, PM_NOREMOVE);
-  const auto keyboard = matches_mouse_button
+  {
+    std::lock_guard<std::mutex> lock(hook_mutex);
+    hook_thread_id = GetCurrentThreadId();
+    thread_id_ready = true;
+  }
+  thread_id_condition.notify_all();
+
+  const auto keyboard = matches_mouse_button.load()
                             ? nullptr
                             : SetWindowsHookExW(WH_KEYBOARD_LL, KeyboardHook, nullptr, 0);
-  const auto mouse = matches_mouse_button
+  const auto mouse = matches_mouse_button.load()
                          ? SetWindowsHookExW(WH_MOUSE_LL, MouseHook, nullptr, 0)
                          : nullptr;
   {
     std::lock_guard<std::mutex> lock(hook_mutex);
-    keyboard_hook = keyboard;
-    mouse_hook = mouse;
-    hook_running = keyboard != nullptr || mouse != nullptr;
-    startup_succeeded = hook_running;
+    hook_running.store(keyboard != nullptr || mouse != nullptr);
+    startup_succeeded = hook_running.load();
     startup_complete = true;
   }
   startup_condition.notify_all();
 
-  if (hook_running) {
+  if (hook_running.load()) {
     while (GetMessageW(&message, nullptr, 0, 0) > 0) {
       TranslateMessage(&message);
       DispatchMessageW(&message);
@@ -195,26 +213,28 @@ void HookThread() {
   napi_threadsafe_function callback = nullptr;
   {
     std::lock_guard<std::mutex> lock(hook_mutex);
-    keyboard_hook = nullptr;
-    mouse_hook = nullptr;
-    hook_running = false;
-    held = false;
+    hook_running.store(false);
+    held.store(false);
     hook_thread_id = 0;
     callback = event_callback;
     event_callback = nullptr;
   }
-  if (callback != nullptr) napi_release_threadsafe_function(callback, napi_tsfn_release);
+  if (callback != nullptr) napi_release_threadsafe_function(callback, napi_tsfn_abort);
 }
 
 void StopHook() {
   DWORD thread_id = 0;
   {
-    std::lock_guard<std::mutex> lock(hook_mutex);
+    std::unique_lock<std::mutex> lock(hook_mutex);
+    if (!hook_thread.joinable()) return;
+    thread_id_condition.wait(lock, [] { return thread_id_ready; });
     thread_id = hook_thread_id;
   }
   if (thread_id != 0) PostThreadMessageW(thread_id, WM_QUIT, 0, 0);
   if (hook_thread.joinable()) hook_thread.join();
 }
+
+void CleanupHook(void*) { StopHook(); }
 
 napi_value Stop(napi_env env, napi_callback_info) {
   StopHook();
@@ -224,23 +244,27 @@ napi_value Stop(napi_env env, napi_callback_info) {
 }
 
 napi_value Start(napi_env env, napi_callback_info info) {
-  size_t count = 2;
-  napi_value arguments[2];
-  napi_get_cb_info(env, info, &count, arguments, nullptr, nullptr);
   napi_value result;
   napi_get_boolean(env, false, &result);
-  if (count != 2) return result;
+  size_t count = 2;
+  napi_value arguments[2];
+  if (napi_get_cb_info(env, info, &count, arguments, nullptr, nullptr) != napi_ok || count != 2) {
+    return result;
+  }
 
   napi_valuetype callback_type;
-  napi_typeof(env, arguments[1], &callback_type);
-  if (callback_type != napi_function) return result;
+  if (napi_typeof(env, arguments[1], &callback_type) != napi_ok || callback_type != napi_function) {
+    return result;
+  }
 
   size_t length = 0;
   if (napi_get_value_string_utf8(env, arguments[0], nullptr, 0, &length) != napi_ok || length > 32) {
     return result;
   }
   std::vector<char> code_buffer(length + 1);
-  napi_get_value_string_utf8(env, arguments[0], code_buffer.data(), code_buffer.size(), &length);
+  if (napi_get_value_string_utf8(env, arguments[0], code_buffer.data(), code_buffer.size(), &length) != napi_ok) {
+    return result;
+  }
   const std::string code(code_buffer.data(), length);
 
   const bool is_mouse = code == "MouseX1" || code == "MouseX2";
@@ -248,31 +272,27 @@ napi_value Start(napi_env env, napi_callback_info info) {
   if (!is_mouse && virtual_key == 0) return result;
 
   StopHook();
-  napi_value resource_name;
-  napi_create_string_utf8(env, "global_push_to_talk", NAPI_AUTO_LENGTH, &resource_name);
-  if (napi_create_threadsafe_function(
-          env, arguments[1], nullptr, resource_name, 0, 1, nullptr, nullptr, nullptr, CallJavaScript,
-          &event_callback) != napi_ok) {
+  napi_value resource_name = nullptr;
+  if (napi_create_string_utf8(env, "global_push_to_talk", NAPI_AUTO_LENGTH, &resource_name) != napi_ok ||
+      napi_create_threadsafe_function(env, arguments[1], nullptr, resource_name, 0, 1, nullptr, nullptr,
+                                      nullptr, CallJavaScript, &event_callback) != napi_ok) {
     event_callback = nullptr;
     return result;
   }
 
   {
     std::lock_guard<std::mutex> lock(hook_mutex);
-    configured_virtual_key = virtual_key;
-    configured_mouse_button = code == "MouseX1" ? XBUTTON1 : XBUTTON2;
-    matches_mouse_button = is_mouse;
-    held = false;
+    configured_virtual_key.store(virtual_key);
+    configured_mouse_button.store(code == "MouseX1" ? XBUTTON1 : XBUTTON2);
+    matches_mouse_button.store(is_mouse);
+    held.store(false);
+    callback_closing.store(false);
     startup_complete = false;
     startup_succeeded = false;
-    hook_thread = std::thread([] {
-      {
-        std::lock_guard<std::mutex> lock(hook_mutex);
-        hook_thread_id = GetCurrentThreadId();
-      }
-      HookThread();
-    });
+    thread_id_ready = false;
   }
+
+  hook_thread = std::thread(HookThread);
 
   {
     std::unique_lock<std::mutex> lock(hook_mutex);
@@ -292,6 +312,7 @@ napi_value Init(napi_env env, napi_value exports) {
       {"stop", nullptr, Stop, nullptr, nullptr, nullptr, napi_default, nullptr},
   };
   napi_define_properties(env, exports, 2, descriptors);
+  napi_add_env_cleanup_hook(env, CleanupHook, nullptr);
   return exports;
 }
 

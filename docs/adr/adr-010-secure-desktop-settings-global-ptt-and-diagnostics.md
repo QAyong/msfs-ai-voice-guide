@@ -45,6 +45,8 @@
 
 匹配输入按下时，主进程通过受控通道触发既有 `startTurn`；同一物理输入在未松开前重复事件必须幂等。语音可用期间，原生钩子消费匹配输入的按下与松开，避免 MSFS 同时响应绑定键或鼠标侧键，特别是默认的 `AltLeft`。匹配输入松开时调用 `endTurn`。在断线、切换为连续对话、禁用语音、切换设置、钩子错误、应用退出或焦点/会话失效时，应用必须调用 `cancelTurn` 并解除输入的 held 状态，确保不会留下悬挂录音回合。
 
+原生桥接必须把 Electron 环境清理纳入同一生命周期：初始化时注册 N-API environment cleanup hook；停止或重配置时先向已就绪的 hook 消息队列发送停止请求并等待线程退出，再以 `napi_tsfn_abort` 终止 ThreadSafeFunction。`napi_call_threadsafe_function` 和 JS 回调创建过程必须检查返回状态，`napi_closing` 表示 JavaScript 环境正在关闭，之后不得继续投递事件。hook 线程读取的按键配置、鼠标配置和 held 状态使用原子变量或受 mutex 保护，避免退出和重配置期间的数据竞争。
+
 按住说话仍复用一个 LiveKit Session、同一麦克风轨道、STT 实例、转写和会话消息管线；Agent 端继续使用 `manual`、`commitUserTurn()` 和现有 RPC。不得通过全局按键新建 Room、绕开 LiveKit RPC 或自行传输音频。
 
 ### 日志与 ZIP 导出
@@ -67,7 +69,7 @@
 - 本 ADR 被接受后，应修订 ADR-003 和 `AGENT.md` 的“密钥只能来自环境变量”描述，将主进程受 OS 保护的凭据存储纳入受限来源；业务模块仍不得读取该存储。
 - 新增共享 Settings、Diagnostics 和 Global PTT IPC 契约，所有请求和响应在主进程边界以 Zod 校验。
 - 新增 Windows N-API 构建、签名、打包及版本兼容性验证；不可在 macOS/Linux 上伪造全局按住说话成功状态。
-- 设置、键盘钩子、键位迁移、服务重启回滚、日志脱敏/保留和 ZIP 清单均需自动化测试与 Windows 人工验证。
+- 设置、键盘钩子、键位迁移、服务重启回滚、日志脱敏/保留和 ZIP 清单均需自动化测试与 Windows 人工验证；native PTT 还必须覆盖重复 `start/stop`、应用退出清理和 `napi_closing` 路径，避免 Electron 主进程被 native addon 带崩。
 
 ## 不在此决策范围内
 

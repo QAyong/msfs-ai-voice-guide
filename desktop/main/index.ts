@@ -174,6 +174,13 @@ const ignoreProcessOutputErrors = (stream: NodeJS.WriteStream) => {
 ignoreProcessOutputErrors(process.stdout);
 ignoreProcessOutputErrors(process.stderr);
 
+// The desktop app owns local services with process-global resources (MSFS
+// daemons, LiveKit and the Agent health port), so only one main process may
+// initialize them for this user profile.
+const gotSingleInstanceLock = app.requestSingleInstanceLock({
+  action: 'focus-assistant',
+});
+
 const mainFilename = fileURLToPath(import.meta.url);
 const mainDir = dirname(mainFilename);
 
@@ -1144,6 +1151,18 @@ const reassertAssistantTopmost = () => {
   if (!isLiveWindow(assistantWindow) || !assistantAlwaysOnTop) return;
   assistantWindow.setAlwaysOnTop(true, assistantTopmostLevel);
   assistantWindow.moveTop();
+};
+
+let pendingAssistantActivation = false;
+const activateAssistantWindow = () => {
+  if (!isLiveWindow(assistantWindow)) {
+    pendingAssistantActivation = true;
+    return;
+  }
+  if (assistantWindow.isMinimized()) assistantWindow.restore();
+  assistantWindow.show();
+  reassertAssistantTopmost();
+  assistantWindow.focus();
 };
 
 const setAssistantAlwaysOnTop = (enabled: boolean) => {
@@ -2156,6 +2175,10 @@ const createAssistantWindow = async () => {
   else constrainExpandedAssistant(false);
   reassertAssistantTopmost();
   await loadRenderer(window, 'assistant');
+  if (pendingAssistantActivation) {
+    pendingAssistantActivation = false;
+    activateAssistantWindow();
+  }
 };
 
 const createSourceWindow = async () => {
@@ -2931,32 +2954,43 @@ ipcMain.handle('external:open', (event, url: string) => {
   return trustedSender && isSafeWebUrl(url) ? shell.openExternal(url) : undefined;
 });
 
-app.whenReady().then(async () => {
-  applyBundledGeoEnvironment(getPackagedResourcesPath());
-  if (process.env.MSFS_PACKAGED_RUNTIME_SMOKE === '1') {
-    const passed = await runPackagedRuntimeSmoke();
-    console.log(`Packaged runtime smoke: ${passed ? 'passed' : 'failed'}`);
-    app.exit(passed ? 0 : 1);
-    return;
-  }
-  storedWindowState = readStoredWindowState(getWindowStatePath());
-  sourceReadingPreferences = storedWindowState.sourceReadingPreferences ?? {};
-  guideLocale = await readStoredGuideLocale();
-  msfsToolSettings = await readStoredToolSettings();
-  await createAssistantWindow();
-  await installBundledMsfsCommunityPackage();
-  await startMsfsDaemons();
-  await startMsfsConnectionMonitor();
-  void startConfiguredAgent(false).then(async (result) => {
-    if ('config' in result) await agentRuntime.waitUntilReady();
-    if (!app.isPackaged) {
-      console.error(`[agent-readiness] ${JSON.stringify(agentRuntime.getReadiness())}`);
-    }
+if (gotSingleInstanceLock) {
+  app.on('second-instance', () => {
+    activateAssistantWindow();
   });
-  screen.on('display-added', handleDisplayChange);
-  screen.on('display-removed', handleDisplayChange);
-  screen.on('display-metrics-changed', handleDisplayChange);
-});
+
+  app.whenReady().then(async () => {
+    applyBundledGeoEnvironment(getPackagedResourcesPath());
+    if (process.env.MSFS_PACKAGED_RUNTIME_SMOKE === '1') {
+      const passed = await runPackagedRuntimeSmoke();
+      console.log(`Packaged runtime smoke: ${passed ? 'passed' : 'failed'}`);
+      app.exit(passed ? 0 : 1);
+      return;
+    }
+    storedWindowState = readStoredWindowState(getWindowStatePath());
+    sourceReadingPreferences = storedWindowState.sourceReadingPreferences ?? {};
+    guideLocale = await readStoredGuideLocale();
+    msfsToolSettings = await readStoredToolSettings();
+    await createAssistantWindow();
+    await installBundledMsfsCommunityPackage();
+    await startMsfsDaemons();
+    await startMsfsConnectionMonitor();
+    void startConfiguredAgent(false).then(async (result) => {
+      if ('config' in result) await agentRuntime.waitUntilReady();
+      if (!app.isPackaged) {
+        console.error(`[agent-readiness] ${JSON.stringify(agentRuntime.getReadiness())}`);
+      }
+    });
+    screen.on('display-added', handleDisplayChange);
+    screen.on('display-removed', handleDisplayChange);
+    screen.on('display-metrics-changed', handleDisplayChange);
+  });
+} else {
+  // Do not call app.quit(): this process has no resources to clean up, while
+  // before-quit would otherwise attempt to stop the primary instance's MSFS
+  // daemons through the shared CLI lifecycle.
+  app.exit(0);
+}
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();
 });
