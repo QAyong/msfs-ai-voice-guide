@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-/* global AbortSignal, URL, fetch, process */
+/* global AbortSignal, URL, fetch */
 
 const endpoint =
   process.env.VOLCENGINE_SEARCH_CUSTOM_ENDPOINT ??

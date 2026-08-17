@@ -266,7 +266,7 @@ export class MsfsCliClient {
     onError: (error: unknown) => void,
   ): ProcessWatchHandle {
     const operation = args.slice(0, 2).join('.') || args[0] || 'watch';
-    let processId: number | null | undefined;
+    const processState: { pid: number | null | undefined } = { pid: undefined };
     let handle: ProcessWatchHandle;
     try {
       handle = this.runner.watch(this.options.executablePath, this.cliArgs(args), {
@@ -276,7 +276,7 @@ export class MsfsCliClient {
             this.emitDiagnostic({
               kind: 'watch_event',
               operation,
-              ...(processId === undefined ? {} : { pid: processId }),
+              ...(processState.pid === undefined ? {} : { pid: processState.pid }),
               requestId: envelope.id,
             });
             onEnvelope(envelope);
@@ -285,7 +285,7 @@ export class MsfsCliClient {
             this.emitDiagnostic({
               kind: 'watch_error',
               operation,
-              ...(processId === undefined ? {} : { pid: processId }),
+              ...(processState.pid === undefined ? {} : { pid: processState.pid }),
             });
             onError(error);
           }
@@ -294,7 +294,7 @@ export class MsfsCliClient {
           this.emitDiagnostic({
             kind: 'watch_error',
             operation,
-            ...(processId === undefined ? {} : { pid: processId }),
+            ...(processState.pid === undefined ? {} : { pid: processState.pid }),
           });
           onError(error);
         },
@@ -302,7 +302,7 @@ export class MsfsCliClient {
           this.emitDiagnostic({
             kind: 'watch_exit',
             operation,
-            ...(processId === undefined ? {} : { pid: processId }),
+            ...(processState.pid === undefined ? {} : { pid: processState.pid }),
             exitCode,
           });
         },
@@ -311,11 +311,11 @@ export class MsfsCliClient {
       this.emitDiagnostic({ kind: 'watch_error', operation });
       throw error;
     }
-    processId = handle.pid;
+    processState.pid = handle.pid;
     this.emitDiagnostic({
       kind: 'watch_start',
       operation,
-      ...(processId === undefined ? {} : { pid: processId }),
+      ...(processState.pid === undefined ? {} : { pid: processState.pid }),
     });
     return handle;
   }

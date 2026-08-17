@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import type { MsfsGuideService } from './guide-service.js';
+import { gamePoiSchema, type MsfsGuideService } from './guide-service.js';
 
 export const msfsExploreContextSchema = z.object({
   capturedAt: z.string().datetime(),
@@ -19,6 +19,7 @@ export const msfsExploreContextSchema = z.object({
       locality: z.string().trim().min(1).max(120).optional(),
     })
     .optional(),
+  gamePois: z.array(gamePoiSchema).max(5).optional(),
   route: z
     .object({
       originIcao: z.string().trim().min(1).max(16).optional(),
@@ -104,10 +105,15 @@ export class MsfsExploreContextProvider {
           }
         : {}),
       ...(placeContext ? { place: placeContext } : {}),
+      ...(location.status === 'ok' && location.gamePois?.length
+        ? { gamePois: location.gamePois }
+        : {}),
       ...(routeContext ? { route: routeContext } : {}),
     });
     if (!parsed.success) return undefined;
     const context = parsed.data;
-    return context.position || context.place || context.route ? context : undefined;
+    return context.position || context.place || context.gamePois || context.route
+      ? context
+      : undefined;
   }
 }

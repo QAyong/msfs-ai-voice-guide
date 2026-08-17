@@ -25,6 +25,73 @@ import type { ProcessWatchHandle } from './process-runner.js';
 const sourceSchema = z.literal('native_simconnect');
 const timestampSchema = z.string().datetime();
 
+export const gamePoiSchema = z.object({
+  name: z.string().trim().min(1).max(160),
+  type: z.string().trim().min(1).max(80).optional(),
+  description: z.string().trim().min(1).max(240).optional(),
+  distanceKm: z.number().finite().nonnegative().optional(),
+  providerSource: z.string().trim().min(1).max(160).optional(),
+});
+export type GamePoi = z.infer<typeof gamePoiSchema>;
+
+const record = (value: unknown): Record<string, unknown> | undefined =>
+  value && typeof value === 'object' && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : undefined;
+
+const optionalText = (value: unknown, maximum: number) => {
+  if (typeof value !== 'string' || !value.trim()) return undefined;
+  return value.trim().slice(0, maximum);
+};
+
+const optionalDistanceKm = (value: unknown) => {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) return undefined;
+  return value;
+};
+
+/**
+ * Normalizes the Geo Cloud game_poi payload without changing the raw context.
+ * The provider currently returns { game_poi: { nearby: [...] } }.
+ */
+export const normalizeGamePois = (context: Record<string, unknown>): GamePoi[] => {
+  const gamePoi = record(context.game_poi);
+  const nearby = Array.isArray(gamePoi?.nearby) ? gamePoi.nearby : [];
+  const candidates = nearby.flatMap((value) => {
+    const item = record(value);
+    const name = optionalText(item?.name, 160);
+    if (!name) return [];
+    const parsed = gamePoiSchema.safeParse({
+      name,
+      ...(optionalText(item?.type, 80) ? { type: optionalText(item?.type, 80) } : {}),
+      ...(optionalText(item?.description, 240)
+        ? { description: optionalText(item?.description, 240) }
+        : {}),
+      ...(optionalDistanceKm(item?.dist_km) !== undefined
+        ? { distanceKm: optionalDistanceKm(item?.dist_km) }
+        : {}),
+      ...(optionalText(item?.source, 160)
+        ? { providerSource: optionalText(item?.source, 160) }
+        : {}),
+    });
+    return parsed.success ? [parsed.data] : [];
+  });
+
+  const sorted = [...candidates].sort(
+    (first, second) =>
+      (first.distanceKm ?? Number.POSITIVE_INFINITY) -
+      (second.distanceKm ?? Number.POSITIVE_INFINITY),
+  );
+  const seen = new Set<string>();
+  return sorted
+    .filter((poi) => {
+      const key = poi.name.normalize('NFKC').trim().toLocaleLowerCase();
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
+    .slice(0, 5);
+};
+
 export const flightSnapshotSchema = z.object({
   status: z.literal('ok'),
   source: sourceSchema,
@@ -60,6 +127,7 @@ export const locationContextSchema = z.object({
   source: z.literal('external_geo_cloud'),
   timestamp: timestampSchema,
   context: z.record(z.string(), z.unknown()),
+  gamePois: z.array(gamePoiSchema).max(5).optional(),
 });
 export const locationContextResultSchema = z.union([locationContextSchema, msfsUnavailableSchema]);
 export type LocationContextResult = z.infer<typeof locationContextResultSchema>;
@@ -297,11 +365,13 @@ export class MsfsGuideService {
       signal,
     );
     if (result.status !== 'ok') return this.rememberFailure(result);
+    const gamePois = normalizeGamePois(result.data.context);
     return locationContextResultSchema.parse({
       status: 'ok',
       source: result.data.origin,
       timestamp: new Date().toISOString(),
       context: result.data.context,
+      gamePois,
     });
   }
 

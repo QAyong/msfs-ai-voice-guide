@@ -20,6 +20,7 @@
 - [MSFS 运行时稳定性与桌面体验一致性](docs/specs/spec-018-msfs-runtime-stability-and-desktop-consistency.md)
 - [单 SimConnect 会话的 Pipe 等待修复](docs/specs/spec-019-single-simconnect-pipe-wait.md)
 - [双 MSFS daemon 会话隔离方案](docs/specs/spec-020-two-msfs-daemons.md)
+- [游戏内 POI 读取](docs/specs/spec-022-game-poi-reading.md)
 - [MSFS 探索与桌面窗口改动记录](docs/architecture/msfs-explore-desktop-lessons.md)
 - [MSFS 运行时回归测试矩阵](docs/testing/msfs-runtime-regression-matrix.md)
 - [MSFS CLI 发布物集成](docs/architecture/msfs-cli-release-integration.md)
@@ -51,7 +52,7 @@ pnpm install
 pnpm run verify
 ```
 
-当前已完成工程工具链、LiveKit SDK 类型契约、火山 Provider 适配器、LiveKit 会话入口、`searchWeb` 和 7 个只读 MSFS 工具；桌面端还提供 MSFS 游戏连接状态、Community2024 配置检测和 8 个工具的独立开关。
+当前已完成工程工具链、LiveKit SDK 类型契约、火山 Provider 适配器、LiveKit 会话入口、`searchWeb`、7 个只读 MSFS 工具和游戏内 POI 标准化；桌面端还提供 MSFS 游戏连接状态、Community2024 配置检测和 8 个工具的独立开关。游戏内 POI 通过现有 `getLocationContext` 获取，并可复用于探索上下文。
 
 CLI 源码位于本仓库的 `native/msfs-cli/`，后续原生功能均在此处维护。开发态可在 `.env` 中通过 `MSFS_CLI_PATH` 指向本地 `msfs.exe`；未配置时，Electron Worker 优先使用项目根目录受 Git 忽略的 `dev-runtime/msfs-cli/msfs.exe`，再回退到 `resources/msfs/msfs.exe`。执行 `pnpm msfs:native:build` 会先把当前原生 CLI 构建到 `dev-runtime/msfs-cli-build/`，随后 `pnpm msfs:stage:dev` 从该开发构建快照刷新 `dev-runtime/msfs-cli/`；如果开发快照不存在才回退到 `native/msfs-cli/build/`。`pnpm desktop:dev` 会自动执行这两步，并把开发版 bridge 切换为当前 MSFS 生效版本。安装态默认从应用私有资源目录解析。CLI 只连接真实的 MSFS 2024 SimConnect；游戏未启动或未加载飞行时，前端会显示不可读取状态而不会返回模拟数据。EFB 航路还要求在 MSFS 2024 的 `Community2024` 中安装配套 route bridge。正式打包必须使用 `MSFS_CLI_DISTRIBUTION_DIR` 指向经校验的同批发布快照；完整约定见 [MSFS CLI 发布物集成](docs/architecture/msfs-cli-release-integration.md)。开发态、EFB、探索上下文和桌面窗口的常见陷阱见 [MSFS 探索与桌面窗口改动记录](docs/architecture/msfs-explore-desktop-lessons.md)。
 

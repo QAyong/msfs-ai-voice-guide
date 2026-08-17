@@ -68,10 +68,21 @@ describe('MsfsExploreContextProvider', () => {
         source: 'external_geo_cloud',
         timestamp: '2026-07-30T00:00:00.000Z',
         context: { administrative: { country: '中国', admin1: '山东省' } },
+        gamePois: [
+          {
+            name: '泰山',
+            type: 'MVA',
+            distanceKm: 12,
+            providerSource: 'geo_cloud',
+          },
+        ],
       },
     }).get();
 
-    expect(context).toMatchObject({ place: { country: '中国', region: '山东省' } });
+    expect(context).toMatchObject({
+      place: { country: '中国', region: '山东省' },
+      gamePois: [{ name: '泰山', distanceKm: 12 }],
+    });
   });
 
   it('accepts a partially populated route context', async () => {
