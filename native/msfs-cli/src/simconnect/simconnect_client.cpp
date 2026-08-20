@@ -11,6 +11,7 @@
 #include <cstddef>
 #include <cmath>
 #include <cstdlib>
+#include <cstring>
 #include <optional>
 #include <thread>
 #include <vector>
@@ -33,6 +34,8 @@ struct SimConnectRuntime final {
     using TransmitEventEx1Fn = decltype(&SimConnect_TransmitClientEvent_EX1);
     using RequestSystemStateFn = decltype(&SimConnect_RequestSystemState);
     using EnumerateInputEventsFn = decltype(&SimConnect_EnumerateInputEvents);
+    using EnumerateInputEventParamsFn = decltype(&SimConnect_EnumerateInputEventParams);
+    using GetInputEventFn = decltype(&SimConnect_GetInputEvent);
     using SetInputEventFn = decltype(&SimConnect_SetInputEvent);
     using RequestFacilitiesListFn = decltype(&SimConnect_RequestFacilitiesList);
     using FlightLoadFn = decltype(&SimConnect_FlightLoad);
@@ -64,6 +67,8 @@ struct SimConnectRuntime final {
         transmit_event_ex1 = load<TransmitEventEx1Fn>("SimConnect_TransmitClientEvent_EX1");
         request_system_state = load<RequestSystemStateFn>("SimConnect_RequestSystemState");
         enumerate_input_events = load<EnumerateInputEventsFn>("SimConnect_EnumerateInputEvents");
+        enumerate_input_event_params = load<EnumerateInputEventParamsFn>("SimConnect_EnumerateInputEventParams");
+        get_input_event = load<GetInputEventFn>("SimConnect_GetInputEvent");
         set_input_event = load<SetInputEventFn>("SimConnect_SetInputEvent");
         request_facilities_list = load<RequestFacilitiesListFn>("SimConnect_RequestFacilitiesList");
         flight_load = load<FlightLoadFn>("SimConnect_FlightLoad");
@@ -76,7 +81,7 @@ struct SimConnectRuntime final {
         call_commbus = load<CallCommBusFn>("SimConnect_CallCommBusEvent");
         get_last_sent_packet_id = load<GetLastSentPacketIdFn>("SimConnect_GetLastSentPacketID");
         if (open && add_definition && clear_definition && request_data && set_data && call_dispatch && close &&
-            map_event && transmit_event_ex1 && request_system_state && enumerate_input_events && set_input_event &&
+            map_event && transmit_event_ex1 && request_system_state && enumerate_input_events && enumerate_input_event_params && get_input_event && set_input_event &&
             request_facilities_list && flight_load && ai_create_parked && camera_acquire && camera_release && camera_get_status &&
             subscribe_commbus && unsubscribe_commbus && call_commbus && get_last_sent_packet_id) {
             return true;
@@ -104,6 +109,8 @@ struct SimConnectRuntime final {
     TransmitEventEx1Fn transmit_event_ex1 = nullptr;
     RequestSystemStateFn request_system_state = nullptr;
     EnumerateInputEventsFn enumerate_input_events = nullptr;
+    EnumerateInputEventParamsFn enumerate_input_event_params = nullptr;
+    GetInputEventFn get_input_event = nullptr;
     SetInputEventFn set_input_event = nullptr;
     RequestFacilitiesListFn request_facilities_list = nullptr;
     FlightLoadFn flight_load = nullptr;
@@ -217,6 +224,38 @@ void CALLBACK input_dispatch(SIMCONNECT_RECV* data, DWORD, void* context) {
         state.values.push_back(json::object({{"name", json::quote(event.Name)}, {"hash", json::quote(std::to_string(event.Hash))}, {"type", std::to_string(event.eType)}}));
     }
     if (response->dwEntryNumber + 1 >= response->dwOutOf) state.complete = true;
+}
+
+struct InputParams final { UINT64 hash; bool complete = false; std::string value; };
+void CALLBACK input_params_dispatch(SIMCONNECT_RECV* data, DWORD, void* context) {
+    auto& state = *static_cast<InputParams*>(context);
+    if (data->dwID != SIMCONNECT_RECV_ID_ENUMERATE_INPUT_EVENT_PARAMS) return;
+    const auto* response = reinterpret_cast<SIMCONNECT_RECV_ENUMERATE_INPUT_EVENT_PARAMS*>(data);
+    if (response->Hash != state.hash) return;
+    state.value = response->Value;
+    state.complete = true;
+}
+
+struct InputValue final {
+    DWORD request_id;
+    bool complete = false;
+    SIMCONNECT_INPUT_EVENT_TYPE type = SIMCONNECT_INPUT_EVENT_TYPE_DOUBLE;
+    double number = 0;
+    std::string text;
+};
+void CALLBACK input_value_dispatch(SIMCONNECT_RECV* data, DWORD, void* context) {
+    auto& state = *static_cast<InputValue*>(context);
+    if (data->dwID != SIMCONNECT_RECV_ID_GET_INPUT_EVENT) return;
+    const auto* response = reinterpret_cast<SIMCONNECT_RECV_GET_INPUT_EVENT*>(data);
+    if (response->dwRequestID != state.request_id) return;
+    state.type = response->eType;
+    const auto* raw_value = reinterpret_cast<const unsigned char*>(&response->Value);
+    if (state.type == SIMCONNECT_INPUT_EVENT_TYPE_DOUBLE) {
+        std::memcpy(&state.number, raw_value, sizeof(state.number));
+    } else {
+        state.text = reinterpret_cast<const char*>(raw_value);
+    }
+    state.complete = true;
 }
 
 struct FacilityList final { DWORD request_id; bool complete = false; double latitude = 0; double longitude = 0; double radius_nm = 0; std::vector<std::string> values; };
@@ -424,7 +463,11 @@ Result SimConnectClient::send_key_event(const std::string& event_name, std::arra
 #else
     const auto ready = ensure_open(); if (!ready.ok) return ready; auto& api = runtime(); const DWORD event_id = next_id_++;
     if (FAILED(api.map_event(static_cast<HANDLE>(handle_), event_id, event_name.c_str()))) return {false, {}, "SIMCONNECT_EVENT_MAP_FAILED", "Could not map the requested Key Event."};
-    if (FAILED(api.transmit_event_ex1(static_cast<HANDLE>(handle_), SIMCONNECT_OBJECT_ID_USER, event_id, 0, SIMCONNECT_EVENT_FLAG_DEFAULT, data[0], data[1], data[2], data[3], data[4]))) return {false, {}, "SIMCONNECT_EVENT_SEND_FAILED", "Could not send the requested Key Event."};
+    if (FAILED(api.transmit_event_ex1(static_cast<HANDLE>(handle_), SIMCONNECT_OBJECT_ID_USER, event_id,
+                                      SIMCONNECT_GROUP_PRIORITY_HIGHEST,
+                                      SIMCONNECT_EVENT_FLAG_GROUPID_IS_PRIORITY,
+                                      data[0], data[1], data[2], data[3], data[4])))
+        return {false, {}, "SIMCONNECT_EVENT_SEND_FAILED", "Could not send the requested Key Event."};
     return {true, "true", {}, {}};
 #endif
 }
@@ -436,6 +479,43 @@ Result SimConnectClient::list_input_events() {
     const auto ready = ensure_open(); if (!ready.ok) return ready; auto& api = runtime(); const DWORD request = next_id_++;
     if (FAILED(api.enumerate_input_events(static_cast<HANDLE>(handle_), request))) return {false, {}, "SIMCONNECT_INPUT_ENUM_FAILED", "SimConnect rejected the input-event enumeration."};
     InputList state{request}; wait_for(api, static_cast<HANDLE>(handle_), state, input_dispatch); if (!state.complete) return {false, {}, "SIMCONNECT_TIMEOUT", "Timed out enumerating input events."}; return {true, array_json(state.values), {}, {}};
+#endif
+}
+
+Result SimConnectClient::list_input_event_params(std::uint64_t hash) {
+#if !defined(MSFS_CLI_HAS_SIMCONNECT)
+    return ensure_open();
+#else
+    const auto ready = ensure_open(); if (!ready.ok) return ready; auto& api = runtime();
+    if (FAILED(api.enumerate_input_event_params(static_cast<HANDLE>(handle_), hash))) {
+        return {false, {}, "SIMCONNECT_INPUT_PARAMS_FAILED", "SimConnect rejected the input-event parameter request."};
+    }
+    InputParams state{hash};
+    wait_for(api, static_cast<HANDLE>(handle_), state, input_params_dispatch);
+    if (!state.complete) return {false, {}, "SIMCONNECT_TIMEOUT", "Timed out reading input-event parameters."};
+    return {true, json::object({{"hash", json::quote(std::to_string(hash))}, {"params", json::quote(state.value)}}), {}, {}};
+#endif
+}
+
+Result SimConnectClient::get_input_event(std::uint64_t hash) {
+#if !defined(MSFS_CLI_HAS_SIMCONNECT)
+    return ensure_open();
+#else
+    const auto ready = ensure_open(); if (!ready.ok) return ready; auto& api = runtime(); const DWORD request = next_id_++;
+    if (FAILED(api.get_input_event(static_cast<HANDLE>(handle_), request, hash))) {
+        return {false, {}, "SIMCONNECT_INPUT_GET_FAILED", "SimConnect rejected the input-event value request."};
+    }
+    InputValue state{request};
+    wait_for(api, static_cast<HANDLE>(handle_), state, input_value_dispatch);
+    if (!state.complete) return {false, {}, "SIMCONNECT_TIMEOUT", "Timed out reading input-event value."};
+    const auto value = state.type == SIMCONNECT_INPUT_EVENT_TYPE_DOUBLE
+        ? std::to_string(state.number)
+        : json::quote(state.text);
+    return {true, json::object({
+        {"hash", json::quote(std::to_string(hash))},
+        {"type", std::to_string(static_cast<DWORD>(state.type))},
+        {"value", value},
+    }), {}, {}};
 #endif
 }
 

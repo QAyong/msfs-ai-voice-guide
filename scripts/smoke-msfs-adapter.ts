@@ -26,6 +26,8 @@ try {
   const readiness = await service.warmup();
   process.stdout.write(`${JSON.stringify(readiness)}\n`);
   if (readiness.status === 'ready') {
+    const autopilotStatus = await service.getAutopilotStatus();
+    process.stdout.write(`${JSON.stringify(autopilotStatus)}\n`);
     const snapshot = await service.getFlightSnapshot();
     process.stdout.write(`${JSON.stringify(snapshot)}\n`);
   }

@@ -502,6 +502,13 @@ const msfsToolDefinitions = [
     enDescription: 'Read the bounded flight track from this Agent session.',
   },
   {
+    key: 'setAutopilot',
+    zh: '自动驾驶操作',
+    en: 'Autopilot actions',
+    zhDescription: '允许导游执行受控的自动驾驶操作。默认关闭，实机测试前请确认飞机状态。',
+    enDescription: 'Allow controlled autopilot actions. Disabled by default; check the aircraft before testing.',
+  },
+  {
     key: 'searchWeb',
     zh: '网页搜索',
     en: 'Web search',

@@ -31,6 +31,8 @@ public:
     Result get_system_state(const std::string& state_name);
     Result send_key_event(const std::string& event_name, std::array<std::uint32_t, 5> data = {});
     Result list_input_events();
+    Result list_input_event_params(std::uint64_t hash);
+    Result get_input_event(std::uint64_t hash);
     Result set_input_event(std::uint64_t hash, double value);
     Result list_facilities(const std::string& type, double radius_nm = 0.0);
     Result flight_load(const std::string& path);

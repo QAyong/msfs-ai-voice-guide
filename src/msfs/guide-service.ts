@@ -3,6 +3,10 @@ import { MsfsCliClient } from './cli-client.js';
 import {
   facilitiesDataSchema,
   geoContextDataSchema,
+  autopilotAvailabilityDataSchema,
+  inputEventListDataSchema,
+  inputEventSetDataSchema,
+  keyEventDataSchema,
   routeDataSchema,
   routeLegSchema,
   routeSchema,
@@ -15,6 +19,7 @@ import {
 } from './schemas.js';
 import { MsfsTrackCache } from './track-cache.js';
 import {
+  msfsUnavailableCodeSchema,
   msfsReadinessSchema,
   msfsUnavailableSchema,
   type MsfsCommandResult,
@@ -206,6 +211,127 @@ export const trackHistorySchema = z.object({
 export const trackHistoryResultSchema = z.union([trackHistorySchema, msfsUnavailableSchema]);
 export type TrackHistoryResult = z.infer<typeof trackHistoryResultSchema>;
 
+export const autopilotAvailabilitySchema = z.object({
+  status: z.enum(['supported', 'unsupported', 'unknown']),
+  source: sourceSchema,
+  timestamp: timestampSchema,
+  available: z.boolean().optional(),
+  code: msfsUnavailableCodeSchema.optional(),
+  message: z.string().min(1),
+});
+export type AutopilotAvailabilityResult = z.infer<typeof autopilotAvailabilitySchema>;
+
+const autopilotCapabilityStatusSchema = z.enum(['supported', 'unsupported', 'unknown']);
+
+export const autopilotModeSchema = z.enum(['HDG', 'NAV', 'ALT', 'VS', 'FLC']);
+
+export const setAutopilotInputSchema = z
+  .object({
+    ap: z.boolean().optional().describe('是否打开或关闭自动驾驶总开关。'),
+    fd: z.boolean().optional().describe('是否打开或关闭飞行指引。'),
+    lateralMode: z
+      .enum(['HDG', 'NAV'])
+      .optional()
+      .describe('横向模式：HDG 航向保持或 NAV 导航跟踪。'),
+    verticalMode: z
+      .enum(['ALT', 'VS', 'FLC'])
+      .optional()
+      .describe('纵向模式：ALT 高度、VS 垂直速度或 FLC 高度层改变。'),
+    targetAltitudeFeet: z
+      .number()
+      .finite()
+      .min(0)
+      .max(100_000)
+      .optional()
+      .describe('目标高度，单位英尺。'),
+    targetHeadingDegrees: z
+      .number()
+      .finite()
+      .min(0)
+      .max(360)
+      .optional()
+      .describe('目标航向，单位度。'),
+    targetSpeedKnots: z
+      .number()
+      .finite()
+      .min(0)
+      .max(1_000)
+      .optional()
+      .describe('目标速度，单位节。'),
+    targetVerticalSpeedFpm: z
+      .number()
+      .finite()
+      .min(-20_000)
+      .max(20_000)
+      .optional()
+      .describe('目标垂直速度，单位英尺/分钟，可为负数。'),
+  })
+  .strict()
+  .refine((value) => Object.keys(value).length > 0, {
+    message: '至少需要提供一个自动驾驶设置。',
+  });
+export type SetAutopilotInput = z.infer<typeof setAutopilotInputSchema>;
+
+const autopilotCapabilitiesSchema = z.object({
+  autopilot: autopilotCapabilityStatusSchema,
+  flightDirector: autopilotCapabilityStatusSchema,
+  heading: autopilotCapabilityStatusSchema,
+  navigation: autopilotCapabilityStatusSchema,
+  altitude: autopilotCapabilityStatusSchema,
+  verticalSpeed: autopilotCapabilityStatusSchema,
+  flightLevelChange: autopilotCapabilityStatusSchema,
+});
+
+export const autopilotStateSchema = z.object({
+  status: z.literal('ok'),
+  source: sourceSchema,
+  timestamp: timestampSchema,
+  capabilities: autopilotCapabilitiesSchema,
+  active: z.object({
+    autopilot: z.boolean(),
+    flightDirector: z.boolean(),
+    heading: z.boolean(),
+    navigation: z.boolean(),
+    altitude: z.boolean(),
+    verticalSpeed: z.boolean(),
+    flightLevelChange: z.boolean(),
+    airspeed: z.boolean(),
+  }),
+  armed: z.object({
+    altitude: z.boolean(),
+  }),
+  targets: z.object({
+    altitudeFeet: z.number().finite(),
+    headingDegrees: z.number().finite(),
+    speedKnots: z.number().finite(),
+    verticalSpeedFpm: z.number().finite(),
+  }),
+});
+export const autopilotStateResultSchema = z.union([autopilotStateSchema, msfsUnavailableSchema]);
+export type AutopilotStateResult = z.infer<typeof autopilotStateResultSchema>;
+export type AutopilotState = z.infer<typeof autopilotStateSchema>;
+
+const autopilotActionStepSchema = z.object({
+  operation: z.string().min(1),
+  status: z.enum(['sent', 'skipped', 'failed']),
+});
+export type AutopilotActionStep = z.infer<typeof autopilotActionStepSchema>;
+
+const autopilotActionResponseSchema = z.object({
+  status: z.enum(['ok', 'rejected', 'partial']),
+  source: sourceSchema,
+  timestamp: timestampSchema,
+  message: z.string().min(1),
+  requested: setAutopilotInputSchema,
+  steps: z.array(autopilotActionStepSchema),
+  state: autopilotStateSchema.optional(),
+});
+export const autopilotActionResultSchema = z.union([
+  autopilotActionResponseSchema,
+  msfsUnavailableSchema,
+]);
+export type AutopilotActionResult = z.infer<typeof autopilotActionResultSchema>;
+
 const flightItems = [
   ['PLANE LATITUDE', 'degrees'],
   ['PLANE LONGITUDE', 'degrees'],
@@ -243,6 +369,116 @@ const requiredValue = (values: Map<string, number>, name: string): number => {
   const value = values.get(name);
   if (value === undefined) throw new Error(`Missing normalized SimVar: ${name}`);
   return value;
+};
+
+const booleanValue = (values: Map<string, number>, name: string): boolean => {
+  const value = requiredValue(values, name);
+  if (value !== 0 && value !== 1) throw new Error(`Invalid boolean SimVar: ${name}`);
+  return value === 1;
+};
+
+const capabilityFromEvidence = (
+  autopilotAvailable: boolean,
+  evidence: boolean,
+): z.infer<typeof autopilotCapabilityStatusSchema> => {
+  if (!autopilotAvailable) return 'unsupported';
+  return evidence ? 'supported' : 'unknown';
+};
+
+const normalizeHeading = (value: number): number => {
+  const normalized = value % 360;
+  return normalized === 360 || normalized === 0 ? 0 : normalized < 0 ? normalized + 360 : normalized;
+};
+
+const eventInteger = (value: number): number => Math.trunc(value) >>> 0;
+
+const circularHeadingDifference = (first: number, second: number): number => {
+  const difference = Math.abs(normalizeHeading(first) - normalizeHeading(second));
+  return Math.min(difference, 360 - difference);
+};
+
+const autopilotItems = [
+  ['AUTOPILOT AVAILABLE', 'bool'],
+  ['AUTOPILOT MASTER', 'bool'],
+  ['AUTOPILOT FLIGHT DIRECTOR ACTIVE', 'bool'],
+  ['AUTOPILOT DEFAULT ROLL MODE', 'number'],
+  ['AUTOPILOT DEFAULT PITCH MODE', 'number'],
+  ['AUTOPILOT HEADING MANUALLY TUNABLE', 'bool'],
+  ['AUTOPILOT HEADING LOCK', 'bool'],
+  ['AUTOPILOT HEADING LOCK DIR', 'degrees'],
+  ['NAV AVAILABLE:1', 'bool'],
+  ['AUTOPILOT NAV1 LOCK', 'bool'],
+  ['AUTOPILOT ALTITUDE MANUALLY TUNABLE', 'bool'],
+  ['AUTOPILOT ALTITUDE ARM', 'bool'],
+  ['AUTOPILOT ALTITUDE LOCK', 'bool'],
+  ['AUTOPILOT ALTITUDE LOCK VAR', 'feet'],
+  ['AUTOPILOT VERTICAL HOLD', 'bool'],
+  ['AUTOPILOT VERTICAL HOLD VAR', 'feet per minute'],
+  ['AUTOPILOT FLIGHT LEVEL CHANGE', 'bool'],
+  ['AUTOPILOT AIRSPEED HOLD', 'bool'],
+  ['AUTOPILOT AIRSPEED HOLD VAR', 'knots'],
+] as const;
+
+const createAutopilotState = (values: Map<string, number>) => {
+  const autopilotAvailable = booleanValue(values, 'AUTOPILOT AVAILABLE');
+  const active = {
+    autopilot: booleanValue(values, 'AUTOPILOT MASTER'),
+    flightDirector: booleanValue(values, 'AUTOPILOT FLIGHT DIRECTOR ACTIVE'),
+    heading: booleanValue(values, 'AUTOPILOT HEADING LOCK'),
+    navigation: booleanValue(values, 'AUTOPILOT NAV1 LOCK'),
+    altitude: booleanValue(values, 'AUTOPILOT ALTITUDE LOCK'),
+    verticalSpeed: booleanValue(values, 'AUTOPILOT VERTICAL HOLD'),
+    flightLevelChange: booleanValue(values, 'AUTOPILOT FLIGHT LEVEL CHANGE'),
+    airspeed: booleanValue(values, 'AUTOPILOT AIRSPEED HOLD'),
+  };
+  const defaultRollMode = Math.trunc(requiredValue(values, 'AUTOPILOT DEFAULT ROLL MODE'));
+  const defaultPitchMode = Math.trunc(requiredValue(values, 'AUTOPILOT DEFAULT PITCH MODE'));
+  const headingEvidence =
+    active.heading ||
+    booleanValue(values, 'AUTOPILOT HEADING MANUALLY TUNABLE') ||
+    defaultRollMode === 2;
+  const altitudeEvidence =
+    active.altitude ||
+    booleanValue(values, 'AUTOPILOT ALTITUDE ARM') ||
+    booleanValue(values, 'AUTOPILOT ALTITUDE MANUALLY TUNABLE') ||
+    defaultPitchMode === 2;
+  // The official enum uses 0 for "None" and 1/2/3 for an available pitch
+  // controller mode. It does not expose a separate VS-capability flag; use a
+  // non-zero pitch mode as the preflight evidence and verify VS after the event.
+  const verticalSpeedEvidence = active.verticalSpeed || defaultPitchMode !== 0;
+  const navigationAvailable = booleanValue(values, 'NAV AVAILABLE:1');
+
+  return autopilotStateSchema.parse({
+    status: 'ok',
+    source: 'native_simconnect',
+    timestamp: new Date().toISOString(),
+    capabilities: {
+      autopilot: autopilotAvailable ? 'supported' : 'unsupported',
+      // MSFS exposes the active FD state, but no generic runtime FD capability SimVar.
+      // AP availability is the conservative baseline used until real-aircraft testing.
+      flightDirector: autopilotAvailable ? 'supported' : 'unsupported',
+      heading: capabilityFromEvidence(autopilotAvailable, headingEvidence),
+      navigation: autopilotAvailable
+        ? navigationAvailable
+          ? 'supported'
+          : 'unsupported'
+        : 'unsupported',
+      altitude: capabilityFromEvidence(autopilotAvailable, altitudeEvidence),
+      verticalSpeed: capabilityFromEvidence(autopilotAvailable, verticalSpeedEvidence),
+      // The official FLC event exists, but MSFS has no separate generic FLC capability flag.
+      flightLevelChange: autopilotAvailable ? 'supported' : 'unsupported',
+    },
+    active,
+    armed: {
+      altitude: booleanValue(values, 'AUTOPILOT ALTITUDE ARM'),
+    },
+    targets: {
+      altitudeFeet: requiredValue(values, 'AUTOPILOT ALTITUDE LOCK VAR'),
+      headingDegrees: requiredValue(values, 'AUTOPILOT HEADING LOCK DIR'),
+      speedKnots: requiredValue(values, 'AUTOPILOT AIRSPEED HOLD VAR'),
+      verticalSpeedFpm: requiredValue(values, 'AUTOPILOT VERTICAL HOLD VAR'),
+    },
+  });
 };
 
 export type MsfsGuideServiceOptions = {
@@ -356,6 +592,338 @@ export class MsfsGuideService {
     } catch {
       return this.protocolFailure();
     }
+  }
+
+  async getAutopilotAvailability(signal?: AbortSignal): Promise<AutopilotAvailabilityResult> {
+    const result = await this.client.execute(
+      ['simvar', 'get', '--name', 'AUTOPILOT AVAILABLE', '--unit', 'bool'],
+      autopilotAvailabilityDataSchema,
+      signal,
+    );
+
+    if (result.status !== 'ok') {
+      return autopilotAvailabilitySchema.parse({
+        status: 'unknown',
+        source: 'native_simconnect',
+        timestamp: new Date().toISOString(),
+        code: result.code,
+        message: '当前无法确认当前飞机是否具备可用的自动驾驶。',
+      });
+    }
+
+    if (result.data.value !== 0 && result.data.value !== 1) {
+      return autopilotAvailabilitySchema.parse({
+        status: 'unknown',
+        source: 'native_simconnect',
+        timestamp: new Date().toISOString(),
+        code: 'MSFS_CLI_PROTOCOL_ERROR',
+        message: '自动驾驶可用性返回了无法识别的布尔值。',
+      });
+    }
+
+    const available = result.data.value === 1;
+    return autopilotAvailabilitySchema.parse({
+      status: available ? 'supported' : 'unsupported',
+      source: 'native_simconnect',
+      timestamp: new Date().toISOString(),
+      available,
+      message: available
+        ? '当前飞机报告具备可用的自动驾驶。'
+        : '当前飞机报告没有可用的自动驾驶。',
+    });
+  }
+
+  async getAutopilotStatus(signal?: AbortSignal): Promise<AutopilotStateResult> {
+    const result = await this.client.execute(
+      ['simvar', 'batch', '--items', itemArgument(autopilotItems)],
+      simvarBatchDataSchema,
+      signal,
+    );
+    if (result.status !== 'ok') return this.rememberFailure(result);
+
+    try {
+      return createAutopilotState(byName(result.data.items));
+    } catch {
+      return this.protocolFailure();
+    }
+  }
+
+  async setAutopilot(
+    input: SetAutopilotInput,
+    signal?: AbortSignal,
+  ): Promise<AutopilotActionResult> {
+    const request = setAutopilotInputSchema.parse(input);
+    const beforeResult = await this.getAutopilotStatus(signal);
+    if (beforeResult.status !== 'ok') return beforeResult;
+    let before: AutopilotState = beforeResult;
+
+    const requiredCapabilities = new Map<keyof AutopilotState['capabilities'], string>();
+    const requireCapability = (
+      capability: keyof AutopilotState['capabilities'],
+      label: string,
+    ) => {
+      requiredCapabilities.set(capability, label);
+    };
+
+    if (
+      request.ap !== undefined ||
+      request.lateralMode !== undefined ||
+      request.verticalMode !== undefined ||
+      request.targetSpeedKnots !== undefined
+    ) {
+      requireCapability('autopilot', '自动驾驶');
+    }
+    if (request.fd !== undefined) requireCapability('flightDirector', '飞行指引');
+    if (request.lateralMode === 'HDG' || request.targetHeadingDegrees !== undefined) {
+      requireCapability('heading', 'HDG 航向模式');
+    }
+    if (request.lateralMode === 'NAV') requireCapability('navigation', 'NAV 导航模式');
+    if (request.verticalMode === 'ALT' || request.targetAltitudeFeet !== undefined) {
+      requireCapability('altitude', 'ALT 高度保持');
+    }
+    if (request.verticalMode === 'VS' || request.targetVerticalSpeedFpm !== undefined) {
+      requireCapability('verticalSpeed', 'VS 垂直速度模式');
+    }
+    if (request.verticalMode === 'FLC') requireCapability('flightLevelChange', 'FLC 高度层改变');
+
+    let inputEvents: Map<string, string> | undefined;
+    // Input Events are aircraft-specific controls. Their names do not prove that
+    // a generic autopilot mode exists, nor that value 1 selects that mode.
+    // They are only used for the two aircraft-specific AP/FD controls that have
+    // been verified on the current aircraft; all named modes use official events.
+    if (request.ap !== undefined || request.fd !== undefined) {
+      inputEvents = await this.getAutopilotInputEvents(signal);
+    }
+
+    for (const [capability, label] of requiredCapabilities) {
+      const status = before.capabilities[capability];
+      if (status === 'supported') continue;
+      return autopilotActionResultSchema.parse({
+        status: 'rejected',
+        source: 'native_simconnect',
+        timestamp: new Date().toISOString(),
+        message:
+          status === 'unknown'
+            ? `当前无法确认${label}是否可用，没有执行任何自动驾驶设置。`
+            : `当前飞机不支持${label}，没有执行任何自动驾驶设置。`,
+        requested: request,
+        steps: [],
+        state: before,
+      });
+    }
+
+    type Action = {
+      operation: string;
+      event?: string;
+      data?: readonly number[];
+      inputEventName?: string;
+      inputEventValue?: number;
+      shouldSend: (state: AutopilotState) => boolean;
+    };
+    const actions: Action[] = [];
+    // Bring AP/FD up first, select the requested mode second, and write targets
+    // last. Some aircraft reset a target when changing vertical mode.
+    if (request.ap !== undefined) {
+      actions.push({
+        operation: request.ap ? '打开自动驾驶' : '关闭自动驾驶',
+        event: 'AP_MASTER',
+        inputEventName: 'AUTOPILOT_AP_MASTER',
+        inputEventValue: 1,
+        shouldSend: (state) => state.active.autopilot !== request.ap,
+      });
+    }
+    if (request.fd !== undefined) {
+      actions.push({
+        operation: request.fd ? '打开飞行指引' : '关闭飞行指引',
+        event: 'TOGGLE_FLIGHT_DIRECTOR',
+        inputEventName: 'AUTOPILOT_FLIGHT_DIRECTOR',
+        inputEventValue: 1,
+        shouldSend: (state) => state.active.flightDirector !== request.fd,
+      });
+    }
+    if (request.lateralMode === 'HDG') {
+      actions.push({
+        operation: '切换到 HDG 航向模式',
+        event: 'AP_PANEL_HEADING_ON',
+        shouldSend: (state) => !state.active.heading,
+      });
+    } else if (request.lateralMode === 'NAV') {
+      actions.push({
+        operation: '切换到 NAV 导航模式',
+        event: 'AP_NAV1_HOLD_ON',
+        shouldSend: (state) => !state.active.navigation,
+      });
+    }
+    if (request.verticalMode === 'ALT') {
+      actions.push({
+        operation: '切换到 ALT 高度保持模式',
+        event: 'AP_PANEL_ALTITUDE_ON',
+        shouldSend: (state) => !state.active.altitude,
+      });
+    } else if (request.verticalMode === 'VS') {
+      actions.push({
+        operation: '切换到 VS 垂直速度模式',
+        event: 'AP_VS_ON',
+        shouldSend: (state) => !state.active.verticalSpeed,
+      });
+    } else if (request.verticalMode === 'FLC') {
+      actions.push({
+        operation: '切换到 FLC 高度层改变模式',
+        event: 'FLIGHT_LEVEL_CHANGE_ON',
+        shouldSend: (state) => !state.active.flightLevelChange,
+      });
+    }
+    if (request.targetHeadingDegrees !== undefined) {
+      const target = normalizeHeading(request.targetHeadingDegrees);
+      actions.push({
+        operation: `设置目标航向 ${Math.round(target)} 度`,
+        event: 'HEADING_BUG_SET',
+        data: [Math.round(target), 0],
+        shouldSend: (state) => circularHeadingDifference(state.targets.headingDegrees, target) > 1,
+      });
+    }
+    if (request.targetAltitudeFeet !== undefined) {
+      const target = Math.round(request.targetAltitudeFeet);
+      actions.push({
+        operation: `设置目标高度 ${target} 英尺`,
+        event: 'AP_ALT_VAR_SET_ENGLISH',
+        data: [target, 0],
+        shouldSend: (state) => Math.abs(state.targets.altitudeFeet - target) > 1,
+      });
+    }
+    if (request.targetSpeedKnots !== undefined) {
+      const target = Math.round(request.targetSpeedKnots);
+      actions.push({
+        operation: `设置目标速度 ${target} 节`,
+        event: 'AP_SPD_VAR_SET',
+        data: [target, 0],
+        shouldSend: (state) => Math.abs(state.targets.speedKnots - target) > 1,
+      });
+    }
+    if (request.targetVerticalSpeedFpm !== undefined) {
+      const target = Math.round(request.targetVerticalSpeedFpm);
+      actions.push({
+        operation: `设置目标垂直速度 ${target} 英尺/分钟`,
+        event: 'AP_VS_VAR_SET_ENGLISH',
+        data: [eventInteger(target), 0],
+        shouldSend: (state) => Math.abs(state.targets.verticalSpeedFpm - target) > 1,
+      });
+    }
+
+    const steps: AutopilotActionStep[] = [];
+    let sentCount = 0;
+    let current = before;
+    const response = (
+      status: 'ok' | 'rejected' | 'partial',
+      message: string,
+      state?: AutopilotState,
+    ): AutopilotActionResult =>
+      autopilotActionResultSchema.parse({
+        status,
+        source: 'native_simconnect',
+        timestamp: new Date().toISOString(),
+        message,
+        requested: request,
+        steps,
+        ...(state ? { state } : {}),
+      });
+
+    for (const action of actions) {
+      if (!action.shouldSend(current)) {
+        steps.push({ operation: action.operation, status: 'skipped' });
+        continue;
+      }
+
+      let eventResult: MsfsCommandResult<unknown>;
+      if (action.inputEventName) {
+        if (!inputEvents) inputEvents = await this.getAutopilotInputEvents(signal);
+        const hash = inputEvents.get(action.inputEventName);
+        eventResult = hash
+          ? await this.sendAutopilotInput(hash, action.inputEventValue ?? 1, signal)
+          : await this.sendAutopilotEvent(action.event ?? '', action.data, signal);
+      } else {
+        eventResult = await this.sendAutopilotEvent(action.event ?? '', action.data, signal);
+      }
+      if (eventResult.status !== 'ok') {
+        this.rememberFailure(eventResult);
+        steps.push({ operation: action.operation, status: 'failed' });
+        const afterFailure = await this.getAutopilotStatus(signal);
+        const state = afterFailure.status === 'ok' ? afterFailure : undefined;
+        return response(
+          sentCount > 0 ? 'partial' : 'rejected',
+          `自动驾驶操作在“${action.operation}”处失败，未继续执行后续设置。`,
+          state,
+        );
+      }
+      steps.push({ operation: action.operation, status: 'sent' });
+      sentCount += 1;
+      const afterAction = await this.getAutopilotStatus(signal);
+      if (afterAction.status !== 'ok') {
+        return response(
+          'partial',
+          `“${action.operation}”已发送，但无法读取该步骤执行后的实际状态。`,
+        );
+      }
+      current = afterAction;
+    }
+
+    const after = current;
+
+    const verificationFailures: string[] = [];
+    if (request.ap !== undefined && after.active.autopilot !== request.ap) {
+      verificationFailures.push('自动驾驶总开关');
+    }
+    if (request.fd !== undefined && after.active.flightDirector !== request.fd) {
+      verificationFailures.push('飞行指引');
+    }
+    if (request.lateralMode === 'HDG' && !after.active.heading) {
+      verificationFailures.push('HDG 航向模式');
+    }
+    if (request.lateralMode === 'NAV' && !after.active.navigation) {
+      verificationFailures.push('NAV 导航模式');
+    }
+    if (request.verticalMode === 'ALT' && !after.active.altitude) {
+      verificationFailures.push('ALT 高度保持模式');
+    }
+    if (request.verticalMode === 'VS' && !after.active.verticalSpeed) {
+      verificationFailures.push('VS 垂直速度模式');
+    }
+    if (request.verticalMode === 'FLC' && !after.active.flightLevelChange) {
+      verificationFailures.push('FLC 高度层改变模式');
+    }
+    if (
+      request.targetHeadingDegrees !== undefined &&
+      circularHeadingDifference(after.targets.headingDegrees, request.targetHeadingDegrees) > 1
+    ) {
+      verificationFailures.push('目标航向');
+    }
+    if (
+      request.targetAltitudeFeet !== undefined &&
+      Math.abs(after.targets.altitudeFeet - request.targetAltitudeFeet) > 1
+    ) {
+      verificationFailures.push('目标高度');
+    }
+    if (
+      request.targetSpeedKnots !== undefined &&
+      Math.abs(after.targets.speedKnots - request.targetSpeedKnots) > 1
+    ) {
+      verificationFailures.push('目标速度');
+    }
+    if (
+      request.targetVerticalSpeedFpm !== undefined &&
+      Math.abs(after.targets.verticalSpeedFpm - request.targetVerticalSpeedFpm) > 1
+    ) {
+      verificationFailures.push('目标垂直速度');
+    }
+
+    if (verificationFailures.length > 0) {
+      return response(
+        'partial',
+        `事件已发送，但模拟器没有确认以下设置生效：${verificationFailures.join('、')}。`,
+        after,
+      );
+    }
+    return response('ok', sentCount > 0 ? '自动驾驶设置已执行并确认生效。' : '自动驾驶已经处于请求状态。', after);
   }
 
   async getLocationContext(signal?: AbortSignal): Promise<LocationContextResult> {
@@ -568,6 +1136,39 @@ export class MsfsGuideService {
       ...(altitudeFeet === undefined ? {} : { altitudeFeet }),
       timestamp: new Date(now).toISOString(),
     });
+  }
+
+  private sendAutopilotEvent(
+    event: string,
+    data: readonly number[] | undefined,
+    signal?: AbortSignal,
+  ) {
+    return this.client.execute(
+      [
+        'key-event',
+        'send',
+        '--name',
+        event,
+        ...(data && data.length > 0 ? ['--data', data.join(',')] : []),
+        '--unsafe',
+      ],
+      keyEventDataSchema,
+      signal,
+    );
+  }
+
+  private async getAutopilotInputEvents(signal?: AbortSignal): Promise<Map<string, string>> {
+    const result = await this.client.execute(['input', 'list'], inputEventListDataSchema, signal);
+    if (result.status !== 'ok') return new Map();
+    return new Map(result.data.events.map((event) => [event.name, event.hash]));
+  }
+
+  private sendAutopilotInput(hash: string, value: number, signal?: AbortSignal) {
+    return this.client.execute(
+      ['input', 'set', '--hash', hash, '--value', String(value), '--unsafe'],
+      inputEventSetDataSchema,
+      signal,
+    );
   }
 
   private rememberFailure<T>(failure: Exclude<MsfsCommandResult<T>, { status: 'ok' }>) {

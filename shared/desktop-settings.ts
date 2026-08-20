@@ -78,6 +78,7 @@ export const defaultDesktopToolSettings = {
   getNearbyFacilities: true,
   getWeatherAndSimTime: true,
   getTrackHistory: true,
+  setAutopilot: false,
   searchWeb: true,
 } as const;
 
@@ -90,6 +91,7 @@ export const desktopToolSettingsSchema = z
     getNearbyFacilities: z.boolean(),
     getWeatherAndSimTime: z.boolean(),
     getTrackHistory: z.boolean(),
+    setAutopilot: z.boolean(),
     searchWeb: z.boolean(),
   })
   .strict();

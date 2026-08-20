@@ -1,6 +1,9 @@
 import { llm } from '@livekit/agents';
 import { z } from 'zod';
-import type { MsfsGuideService } from '../msfs/guide-service.js';
+import {
+  setAutopilotInputSchema,
+  type MsfsGuideService,
+} from '../msfs/guide-service.js';
 import {
   defaultDesktopToolSettings,
   type DesktopToolSettings,
@@ -50,6 +53,13 @@ export function createMsfsGuideTools(
         '读取 MSFS 2024 EFB 当前航路概览，包括出发地、目的地、程序、巡航高度和航路点。EFB Planned Route 是唯一权威航路来源。',
       parameters: noParameters,
       execute: async (_args, { abortSignal }) => service.getRouteBrief(abortSignal),
+    }),
+    llm.tool({
+      name: 'setAutopilot',
+      description:
+        '执行受控的 MSFS 自动驾驶操作，包括 AP、FD、HDG、NAV、ALT、VS、FLC 和目标参数。只有用户已经明确要求执行时才调用；如果用户只是询问能否设置、想了解方案或缺少关键参数，不要调用。工具会在内部检查当前飞机能力，只使用白名单事件，执行后读取实际状态；能力未知或不支持时不会写入模拟器。',
+      parameters: setAutopilotInputSchema,
+      execute: async (args, { abortSignal }) => service.setAutopilot(args, abortSignal),
     }),
     llm.tool({
       name: 'getNextWaypoint',

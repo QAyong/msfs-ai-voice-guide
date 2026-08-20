@@ -18,6 +18,31 @@ export const stringSimvarDataSchema = z.object({
   value: z.string(),
 });
 
+export const autopilotAvailabilityDataSchema = simvarItemSchema.extend({
+  name: z.literal('AUTOPILOT AVAILABLE'),
+});
+
+export const keyEventDataSchema = z.object({
+  name: z.string().min(1),
+  sent: z.literal(true),
+});
+
+export const inputEventListDataSchema = z.object({
+  events: z.array(
+    z.object({
+      name: z.string().min(1),
+      hash: z.string().regex(/^\d+$/),
+      type: z.number().int(),
+    }),
+  ),
+});
+
+export const inputEventSetDataSchema = z.object({
+  hash: z.string().regex(/^\d+$/),
+  value: z.number().finite(),
+  set: z.literal(true),
+});
+
 export const statusDataSchema = z.object({
   daemon: z.string().min(1),
   simconnect: z.object({

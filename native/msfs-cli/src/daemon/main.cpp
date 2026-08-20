@@ -176,6 +176,22 @@ std::string handle_request(const std::string& request, msfs::simconnect::SimConn
         const auto result = simconnect.list_input_events(); if (!result.ok) return result_error(id, result);
         return msfs::json::ok(id, msfs::json::object({{"events", result.value_json}}));
     }
+    if (*command == "input.params") {
+        const auto hash_text = msfs::json::string_at(request, "hash");
+        if (!hash_text.has_value()) return msfs::json::error(id, "INVALID_REQUEST", "input.params requires --hash.");
+        std::uint64_t hash = 0; const auto [end, code] = std::from_chars(hash_text->data(), hash_text->data() + hash_text->size(), hash);
+        if (code != std::errc{} || end != hash_text->data() + hash_text->size()) return msfs::json::error(id, "INVALID_REQUEST", "--hash must be an unsigned 64-bit integer.");
+        const auto result = simconnect.list_input_event_params(hash); if (!result.ok) return result_error(id, result);
+        return msfs::json::ok(id, result.value_json);
+    }
+    if (*command == "input.get") {
+        const auto hash_text = msfs::json::string_at(request, "hash");
+        if (!hash_text.has_value()) return msfs::json::error(id, "INVALID_REQUEST", "input.get requires --hash.");
+        std::uint64_t hash = 0; const auto [end, code] = std::from_chars(hash_text->data(), hash_text->data() + hash_text->size(), hash);
+        if (code != std::errc{} || end != hash_text->data() + hash_text->size()) return msfs::json::error(id, "INVALID_REQUEST", "--hash must be an unsigned 64-bit integer.");
+        const auto result = simconnect.get_input_event(hash); if (!result.ok) return result_error(id, result);
+        return msfs::json::ok(id, result.value_json);
+    }
     if (*command == "input.set") {
         if (!unsafe_allowed(request)) return msfs::json::error(id, "UNSAFE_REQUIRED", "input.set changes simulator state; repeat with --unsafe.");
         const auto hash_text = msfs::json::string_at(request, "hash"); const auto value = number_field(request, "value");

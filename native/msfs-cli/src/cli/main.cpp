@@ -105,7 +105,7 @@ bool start_daemon(const msfs::pipe::DaemonRole role, std::string& error_message)
 }
 
 std::string usage_error() {
-    return msfs::json::error("cli", "USAGE", "Supported commands: status; daemon stop; system state; catalog simvar search/show; catalog event search; simvar get/set/batch/watch; key-event send; input list/set; facilities nearest; flight load; ai aircraft create-parked; camera acquire/release/status; route get/status/watch; external geo context.");
+    return msfs::json::error("cli", "USAGE", "Supported commands: status; daemon stop; system state; catalog simvar search/show; catalog event search; simvar get/set/batch/watch; key-event send; input list/params/get/set; facilities nearest; flight load; ai aircraft create-parked; camera acquire/release/status; route get/status/watch; external geo context.");
 }
 
 std::string build_request(const Arguments& args, bool& valid) {
@@ -145,6 +145,12 @@ std::string build_request(const Arguments& args, bool& valid) {
     }
     if (args.positional.size() == 2 && args.positional[0] == "input" && args.positional[1] == "list") {
         return request_json("input.list", {});
+    }
+    if (args.positional.size() == 2 && args.positional[0] == "input" && args.positional[1] == "params") {
+        return request_json("input.params", {{"hash", option(args, "hash")}});
+    }
+    if (args.positional.size() == 2 && args.positional[0] == "input" && args.positional[1] == "get") {
+        return request_json("input.get", {{"hash", option(args, "hash")} });
     }
     if (args.positional.size() == 2 && args.positional[0] == "input" && args.positional[1] == "set") {
         return request_json("input.set", {{"hash", option(args, "hash")}, {"value", option(args, "value")}, {"unsafe", option(args, "unsafe")}});
