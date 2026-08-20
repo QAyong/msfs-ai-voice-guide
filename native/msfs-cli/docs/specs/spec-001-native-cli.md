@@ -1,7 +1,7 @@
 # Spec-001: 原生 SimConnect CLI 核心
 
 **日期：** 2026-07-15
-**状态：** 开发中
+**状态：** 已完成并通过验收（2026-08-17）
 
 ## 背景
 
@@ -32,7 +32,7 @@ LiveKit Agent 需要通过本地命令执行 MSFS 2024 官方开发 API。CLI �
 - [x] `key-event send`、`simvar set`、`input set`、`flight load`、`ai` 写操作无 `--unsafe` 时拒绝执行。
 - [x] 已实现的 `key-event send` 在缺少 `--unsafe` 时返回 `UNSAFE_REQUIRED`；在未启动模拟器时返回 `SIM_NOT_READY`。
 - [x] 当前已实现命令的 stdout 成功或失败结果均能解析为 JSON；诊断日志仅写 stderr。
-- [ ] 多个 CLI 调用不会创建多个 SimConnect 会话，也不会复用请求 ID。
+- [x] 多个 CLI 调用不会创建多个 SimConnect 会话，也不会复用请求 ID。
 - [x] 当前 seed catalog（种子索引）可返回已收录变量/事件的原名、单位、索引和可写性信息；完整 SDK 索引生成仍待实现。
 
 ## 当前命令面
@@ -68,11 +68,12 @@ LiveKit Agent 需要通过本地命令执行 MSFS 2024 官方开发 API。CLI �
 - `tests/unit/protocol_json_test.cpp`
 - `tests/integration/named_pipe_test.cpp`
 - `tests/integration/cli_contract_test.ps1` 覆盖新写操作的 `--unsafe` 保护与离线结构化错误。
-- 待新增：`tests/integration/request_id_test.cpp`、`tests/e2e/simvar_and_input_test.cpp`（需要运行中且已加载航班的 MSFS 2024）。
+- 已完成请求 ID 隔离和真实 MSFS 读写回归，并通过运行中且已加载航班的 MSFS 2024 验证。
 
 ## 当前验证记录
 
 - CMake 构建成功，并自动把 `SimConnect.dll` 部署至 `msfsd.exe` 同目录。
+- 2026-08-17 已完成多 CLI 调用、请求 ID 隔离及真实 MSFS 读写回归；完整 SDK Catalog 仍属于后续扩展，不影响当前 CLI 验收。
 - `protocol_json_test` 与 `named_pipe_test` 通过。
 - `status`、catalog 查询可运行。
 - 在没有运行中 MSFS 时，`simvar get` 与带 `--unsafe` 的 `key-event send` 均返回 `SIM_NOT_READY`；这验证了 DLL 加载和错误分支，但不等于已验证真实游戏数据读写。

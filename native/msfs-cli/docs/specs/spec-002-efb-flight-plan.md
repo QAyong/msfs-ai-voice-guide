@@ -32,8 +32,8 @@ Agent 需要读取玩家当前在 MSFS 2024 EFB 中看到的飞行计划。该�
 - [x] route 请求带 CLI correlation ID，WASM 响应原样返回该 ID；daemon 会拒绝不匹配的响应。
 - [x] 2026-07-23 实机验收：官方 Toolset 构建的模块状态为 `Ready`，`route get --source efb --json` 成功返回真实 EFB 航路。
 - [x] `route watch` 输出 NDJSON，以轮询 `route get` 观察当前结果。
-- [ ] 尚未实现标准化 route hash 与只在航路变化时输出的去重策略。
-- [ ] `compat flightplan-file` 的结果始终标识 `source: "compat_file"`。
+- [x] 已实现标准化 route hash 与只在航路变化时输出的去重策略。
+- [x] `compat flightplan-file` 的结果始终标识 `source: "compat_file"`。
 
 ## 场景描述
 
@@ -55,7 +55,7 @@ Agent 需要读取玩家当前在 MSFS 2024 EFB 中看到的飞行计划。该�
 
 - 已实现：`wasm-route-bridge/build.ps1` 可使用本机 SDK 构建 WASM。
 - 已验证（2026-07-22）：在未启动 MSFS 的环境中，`tests/integration/cli_contract_test.ps1` 覆盖 `route get --source efb` 的离线错误分支并通过；`SIM_NOT_READY`、`ROUTE_BRIDGE_UNAVAILABLE`、`ROUTE_TIMEOUT` 与 `ROUTE_NOT_FOUND` 均被视为明确的预期结果。
-- 待新增：`tests/unit/route_json_test.cpp`、`tests/integration/commbus_correlation_test.cpp`、`tests/e2e/efb_route_get_test.cpp`、`tests/e2e/efb_route_watch_test.cpp`。
+- EFB route、CommBus correlation、`route get` 和 `route watch` 回归已完成并通过。
 
 上述离线验证不等同于 Community Package 已在游戏内加载，也不等同于真实 EFB 航路读取已验收。
 

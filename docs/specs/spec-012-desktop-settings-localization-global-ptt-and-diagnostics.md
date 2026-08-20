@@ -1,7 +1,7 @@
 # Spec-012：桌面服务设置、双语、全局按住说话与诊断导出
 
 **日期：** 2026-07-25  
-**状态：** 已实现，待 Windows/MSFS 人工验收
+**状态：** 已完成并通过 Windows/MSFS 人工验收（2026-08-17）
 **前置决策：** [ADR-010](../adr/adr-010-secure-desktop-settings-global-ptt-and-diagnostics.md)
 
 ## 目标
@@ -107,7 +107,7 @@ type PublicSettings = {
 - 通用设置页使用键盘/鼠标点选器直接选择 `Left Alt`、`F8`、`Mouse X1` 或 `Mouse X2`。鼠标图将两个侧键均放在右手鼠标左侧拇指位，并标注前进 `X2` 与后退 `X1`；自定义录入仅接受一个受支持的键盘键。
 - `node-gyp` 在 Windows 构建 N-API `.node` 模块；桌面构建会将其暂存到 `out/main/native`。类型检查、完整 Vitest 套件、原生模块加载/启停烟测和桌面构建均已通过。
 
-2026-08-12 记录过一次 Electron native 崩溃问题：截图中的 Windows `0x80000003` 与本机历史 Application 事件中的 `global_push_to_talk.node` 崩溃证据并不具有相同异常码，但均指向 native 生命周期风险。修复后已完成 `pnpm native:build` 以及 100 次 native `start/stop` 启停冒烟；Windows/MSFS 前台长时间人工回归仍待完成。详见 [Bug-20260812](../bugs/bug-20260812-electron-global-ptt-native-crash-0x80000003.md)。
+2026-08-12 记录过一次 Electron native 崩溃问题：截图中的 Windows `0x80000003` 与本机历史 Application 事件中的 `global_push_to_talk.node` 崩溃证据并不具有相同异常码，但均指向 native 生命周期风险。修复后已完成 `pnpm native:build`、100 次 native `start/stop` 启停冒烟，以及 Windows/MSFS 前台长时间人工回归，未再发现问题。详见 [Bug-20260812](../bugs/bug-20260812-electron-global-ptt-native-crash-0x80000003.md)。
 
 已完成统一服务设置保存、Agent Worker 重启、Room 重连与失败回滚链路：主进程先保存候选配置并等待新的 Worker 就绪，成功后通知 Renderer 刷新/重连；失败时恢复上一份有效配置、凭据和语言。经 Windows `safeStorage` 保存的凭据仅在主进程中注入实际 Agent 配置。每个服务都能在不保存草稿的前提下进行连通性检测；检测具有 10 秒超时、脱敏错误反馈与 2.5 秒限流。
 
@@ -148,20 +148,20 @@ type PublicSettings = {
 
 ## 验收标准
 
-- [ ] 设置窗口仅有“通用”和“服务配置”两个左侧纵向一级导航；通用页包含语言、语音和诊断导出，且底部主按钮为“保存”。
-- [ ] 设置页可以配置固定的 DeepSeek、豆包 STT、豆包 TTS 与豆包网页搜索；密钥只显示配置状态，服务配置页的主按钮为“保存并重新连接”。
+- [x] 设置窗口仅有“通用”和“服务配置”两个左侧纵向一级导航；通用页包含语言、语音和诊断导出，且底部主按钮为“保存”。
+- [x] 设置页可以配置固定的 DeepSeek、豆包 STT、豆包 TTS 与豆包网页搜索；密钥只显示配置状态，服务配置页的主按钮为“保存并重新连接”。
 - [x] 豆包 TTS 音色列表只来自 `resources/tts/confirmed-voices/`，按项目语言过滤；中文默认 Vivi，英文默认 Dacey，英文 Stokie 可选，旧 Tim 配置按语言迁移。
 - [x] 本地音色可试听和停止试听，并提供不受语言切换影响的自定义 speaker ID 输入。
 - [x] 保存按钮在保存中、保存成功和保存失败时显示对应的图标、颜色和文案；失败状态允许重新提交。
-- [ ] Windows `safeStorage` 可用时凭据加密持久化；不可用时拒绝明文持久化，并保留 `.env`/环境变量兼容路径。
-- [ ] 保存 English 后，所有可信 UI（含主助手、设置、菜单、来源窗口工具栏、状态、错误和无障碍标签）显示英语；既有对话、网页原文、用户输入和技术配置值不被翻译，新的 Agent 会话以英语回复、使用英文检索并优先英文来源，STT 使用 `en`；来源网页以英文 `Accept-Language` 偏好重新加载，但不强制翻译未提供英文版的网页。
-- [ ] 默认 `AltLeft` 及 `F8`、`Mouse X1`、`Mouse X2` 可在 MSFS 前台按下/松开时分别开始/结束同一按住说话轮次，且匹配键或鼠标侧键不会同时传给 MSFS。
-- [ ] 自定义单键可用，修饰键和系统保留键拒绝；连续对话模式、断线、钩子异常和应用退出不会留下活跃录音轮次。
-- [ ] 全局按住说话不记录未匹配按键，不将键流或窗口标题写入日志或发送给 Renderer。
-- [ ] 服务/语言切换失败保留旧有效会话；成功时无旧 Token、旧 Worker 或麦克风轨道泄漏。
+- [x] Windows `safeStorage` 可用时凭据加密持久化；不可用时拒绝明文持久化，并保留 `.env`/环境变量兼容路径。
+- [x] 保存 English 后，所有可信 UI（含主助手、设置、菜单、来源窗口工具栏、状态、错误和无障碍标签）显示英语；既有对话、网页原文、用户输入和技术配置值不被翻译，新的 Agent 会话以英语回复、使用英文检索并优先英文来源，STT 使用 `en`；来源网页以英文 `Accept-Language` 偏好重新加载，但不强制翻译未提供英文版的网页。
+- [x] 默认 `AltLeft` 及 `F8`、`Mouse X1`、`Mouse X2` 可在 MSFS 前台按下/松开时分别开始/结束同一按住说话轮次，且匹配键或鼠标侧键不会同时传给 MSFS。
+- [x] 自定义单键可用，修饰键和系统保留键拒绝；连续对话模式、断线、钩子异常和应用退出不会留下活跃录音轮次。
+- [x] 全局按住说话不记录未匹配按键，不将键流或窗口标题写入日志或发送给 Renderer。
+- [x] 服务/语言切换失败保留旧有效会话；成功时无旧 Token、旧 Worker 或麦克风轨道泄漏。
 - [x] ZIP 包含对话、转写、工具与服务诊断上下文，但不包含任一密钥、认证 Header、Cookie、JWT、`.env` 或凭据 blob。
 - [x] ZIP 可由标准归档工具打开；取消、磁盘满、路径无权限或归档失败时不遗留部分目标文件。
-- [ ] 单元测试覆盖 Zod 边界、密钥 DTO、键位校验、press/release 状态机、脱敏器、日志保留和 ZIP 清单；Windows 人工验证覆盖 MSFS 前台的全局键位。
+- [x] 单元测试覆盖 Zod 边界、密钥 DTO、键位校验、press/release 状态机、脱敏器、日志保留和 ZIP 清单；Windows 人工验证覆盖 MSFS 前台的全局键位。
 
 ## 相关官方依据
 

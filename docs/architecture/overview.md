@@ -1,8 +1,8 @@
 # 架构概览
 
-**最后更新：** 2026-07-25
+**最后更新：** 2026-08-17
 
-**阶段：** 第一版语音与文字闭环、网络搜索、7 个只读 MSFS 工具、Electron Room 客户端、MSFS 连接状态、配置检测、工具开关和 Windows x64 候选安装包已实现；真实模拟器冒烟与本机候选安装验证已通过。本地 LiveKit、Agent、MSFS CLI/daemon 和 Bridge 已纳入安装态生命周期；代码签名、自动更新和跨机器干净环境验收尚未完成。
+**阶段：** 第一版语音与文字闭环、网络搜索、7 个只读 MSFS 工具、游戏内 POI 标准化与探索复用、Electron Room 客户端、MSFS 连接状态、配置检测、工具开关和 Windows x64 候选安装包已实现；真实模拟器冒烟、Geo Cloud 坐标查询与本机候选安装验证已通过。本地 LiveKit、Agent、MSFS CLI/daemon 和 Bridge 已纳入安装态生命周期；代码签名、自动更新和跨机器干净环境回归不纳入当前版本范围。
 
 ## 架构目标
 
@@ -104,7 +104,7 @@ graph TD
 | WebContentsView（隔离网页视图）     | 加载用户选择的 HTTPS 百科、视频或其他源页面，并保留 Chromium 网页历史    | 禁用 Node 集成；开启上下文隔离与沙箱；拒绝权限和未经策略允许的新窗口 |
 | Node AI Agent                       | LiveKit、LLM、STT、TTS 和 `searchWeb` 工具编排                           | 不依赖桌面 Renderer；继续复用现有配置与搜索边界                      |
 
-MSFS 数据由 Agent 中的 `src/msfs/` 适配层调用随应用分发的 `msfs.exe` / `msfsd.exe`，并且只通过真实 MSFS 2024 的 SimConnect 获取。桌面 Renderer 不直接运行 CLI；模拟器不可用时，Agent 返回脱敏不可用状态而不生成位置、航路或天气数据。
+MSFS 数据由 Agent 中的 `src/msfs/` 适配层调用随应用分发的 `msfs.exe` / `msfsd.exe`，并且只通过真实 MSFS 2024 的 SimConnect 获取。Geo Cloud 地理上下文和 `game_poi` 是明确标记的外部来源，不被描述为 SimConnect 原生数据；标准化后的 `gamePois` 可复用于探索 Planner。桌面 Renderer 不直接运行 CLI；模拟器不可用时，Agent 返回脱敏不可用状态而不生成位置、航路或天气数据。
 
 来源查看流程：
 

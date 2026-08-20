@@ -1,6 +1,6 @@
 # 本地语音与文字 Agent 冒烟测试
 
-**最近一次自动化通过：** 2026-08-07，`1.0.1-rc.2` 的 V2 x64 打包目录已通过 ASAR 提取后的 LiveKit/RTC/Sharp/OpenTelemetry 导入、真实 Electron `utilityProcess`、MSFS CLI status/daemon stop、Bridge 哈希和松散文件数量校验。`rc.1` 已在当前开发机完成人工安装与主流程验证；`rc.2` 只增加凭据回显规则并已完成构建校验，仍需按本文做一次设置页视觉确认。其他 Windows 机器上的干净环境回归仍待完成。
+**最近一次自动化通过：** 2026-08-07，`1.0.1-rc.2` 的 V2 x64 打包目录已通过 ASAR 提取后的 LiveKit/RTC/Sharp/OpenTelemetry 导入、真实 Electron `utilityProcess`、MSFS CLI status/daemon stop、Bridge 哈希和松散文件数量校验。`rc.1` 已在当前开发机完成人工安装与主流程验证；`rc.2` 只增加凭据回显规则并已完成构建校验，仍需按本文做一次设置页视觉确认。其他 Windows 机器上的干净环境回归不纳入当前版本范围。
 
 ## 前置条件
 

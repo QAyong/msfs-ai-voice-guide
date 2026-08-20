@@ -1,7 +1,7 @@
 # Spec-013：关于页、语音转写纠错与来源网页首屏加速
 
 **日期：** 2026-07-28<br />
-**状态：** 提议（STT 提示词容错和来源网页首屏加速已实现；关于页与高级转写韧性待实施）<br />
+**状态：** 暂不纳入当前版本范围（STT 提示词容错和来源网页首屏加速的现有实现保留）<br />
 **前置决策：** [ADR-005](../adr/adr-005-deepseek-llm-baseline.md)、[ADR-010](../adr/adr-010-secure-desktop-settings-global-ptt-and-diagnostics.md)<br />
 **关联规格：** [Spec-004](spec-004-web-frontend-and-source-preview.md)、[Spec-012](spec-012-desktop-settings-localization-global-ptt-and-diagnostics.md)
 

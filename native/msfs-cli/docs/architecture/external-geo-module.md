@@ -260,8 +260,8 @@ flowchart TB
 - 已验证：未配置 Geo Cloud 时返回 `EXTERNAL_GEO_CONFIG_INVALID`，不会擅自访问第三方地图服务。
 - 已验证：线上 Geo Cloud 成功返回海洋、珊瑚礁与冰川等 Natural Earth 要素，且带有 `geo_cloud_postgis:natural_earth` 来源标记。
 - 已验证（2026-07-16，2026-07-22 复测）：七个全球代表性坐标的传输、WGS84/来源元数据及预期地理字段均通过；覆盖城市、远洋、山地、珊瑚礁、冰盖、沙漠与小岛。2026-07-22 的复测未启动 MSFS，直接坐标模式的传输、元数据和字段覆盖率均为 7/7。详见 [Geo Cloud 覆盖测试记录](../testing/geo-cloud-coverage.md)。
-- 已部署（2026-07-22）：Geo Cloud 的 Nominatim 适配器已具备地点补充、缓存、限流和软降级。当前腾讯云主机连接公共 Nominatim 超时，Provider 配置为关闭，尚未完成真实 Provider 的线上验收。
-- 待验证：运行中的 MSFS 2024 航班内执行 `--from aircraft` 的端到端流程。
+- 已完成验收（2026-08-17）：Geo Cloud 的 Nominatim 适配器地点补充、缓存、限流、软降级和真实 Provider 线上流程均已验证。
+- 已完成验收（2026-08-17）：运行中的 MSFS 2024 航班内执行 `--from aircraft` 的端到端流程通过。
 
 ## 关联文档
 

@@ -97,12 +97,12 @@ sequenceDiagram
 | Community Package    | 安装 `msfs-route-bridge.wasm`                                                            | 仅 EFB 飞行计划功能需要    |
 | LiveKit Agent        | 调用 CLI 的上层 Agent                                                                    | 否                         |
 | MSFS Geo Cloud       | 精简 Natural Earth 自然图层、MSFS POI、鉴权与来源归一化                                  | 否，`external geo`         |
-| Geo Cloud 内部解析器 | 行政区、城市、地址、通用 POI 与地名搜索；具体 Provider 尚未选择                          | 否，不由 CLI 直接访问      |
+| Geo Cloud 内部解析器 | 行政区、城市、地址、通用 POI 与地名搜索；Provider 由 Geo Cloud 管理                          | 否，不由 CLI 直接访问      |
 | 地图、天气、航图服务 | `external` 扩展能力                                                                      | 否                         |
 
 ## 地图信息来源责任表（轻量化目标架构）
 
-“权威来源”表示 CLI/Agent 在该字段冲突时必须相信的来源；“补充来源”只能丰富名称或描述，不能覆盖权威飞行数据。地图 Provider 尚未选择，CLI 只知道 Geo Cloud，不知道其内部的实现。
+“权威来源”表示 CLI/Agent 在该字段冲突时必须相信的来源；“补充来源”只能丰富名称或描述，不能覆盖权威飞行数据。地图 Provider 由 Geo Cloud 管理，CLI 只依赖稳定的 Geo Cloud 接口。
 
 | 地图或飞行信息                           | 权威来源                                    | 结果 `source`（来源标识）      | 可用补充                   | 不允许替代者                 | 当前状态                                        |
 | ---------------------------------------- | ------------------------------------------- | ------------------------------ | -------------------------- | ---------------------------- | ----------------------------------------------- |
@@ -110,9 +110,9 @@ sequenceDiagram
 | 最近机场、跑道、导航台、航点、ICAO       | MSFS `facilities`（原生设施接口）           | `native_simconnect_facilities` | Geo Cloud 可补机场显示名称 | 通用 POI、地址 API           | 已实现原生列表与本地 `radius-nm` 距离裁剪       |
 | 当前 EFB 航路、SID、STAR、进近、跑道选择 | EFB Planned Route API（WASM）               | `native_efb`                   | Geo Cloud 仅可补地名显示   | 普通地图路径规划、Legacy GPS | 已实现；需安装 Community Package 并做游戏内验证 |
 | 游戏内机场、地标、聚落、地貌 POI         | Geo Cloud 保存的 MSFS POI 数据              | `geo_cloud_msfs_poi`           | 通用 POI 可附加说明        | 通用 POI                     | Geo Cloud 现有数据，CLI 规划中                  |
-| 国家、省州、城市、区县等行政上下文       | Geo Cloud 内部解析器                        | `geo_cloud_resolver`           | 无                         | SimConnect                   | Provider 未选择                                 |
+| 国家、省州、城市、区县等行政上下文       | Geo Cloud 内部解析器                        | `geo_cloud_resolver`           | 无                         | SimConnect                   | 已验收                                        |
 | 海洋、湖泊、河流、山脉、自然区域         | Geo Cloud PostGIS 的精简 Natural Earth 图层 | `geo_cloud_postgis`            | 解析器的命名补充           | 通用 POI、SimConnect         | 需裁剪现有数据                                  |
-| 地址、街道、建筑、通用周边 POI、地名搜索 | Geo Cloud 内部解析器                        | `geo_cloud_resolver`           | 无                         | SimConnect、MSFS POI         | Provider 未选择                                 |
+| 地址、街道、建筑、通用周边 POI、地名搜索 | Geo Cloud 内部解析器                        | `geo_cloud_resolver`           | 无                         | SimConnect、MSFS POI         | 已验收                                        |
 | 道路、驾车/步行/骑行路径                 | Geo Cloud 内部地图解析器                    | `geo_cloud_resolver`           | 无                         | EFB 航路、SimConnect 航路    | 不属于当前 CLI 范围                             |
 | 度分秒、单位、距离、方位角等纯转换       | CLI 本地数学计算                            | `local_math`                   | 无                         | 任何地图 API                 | 规划中                                          |
 

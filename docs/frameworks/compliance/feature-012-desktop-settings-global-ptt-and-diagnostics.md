@@ -1,6 +1,6 @@
 # Feature-012：设置、全局按住说话和诊断导出的框架合规记录
 
-**状态：** 已实施；待 Windows/MSFS 人工验收
+**状态：** 已实施并通过 Windows/MSFS 人工验收（2026-08-17）
 **对应规格：** [Spec-012](../../specs/spec-012-desktop-settings-localization-global-ptt-and-diagnostics.md)  
 **对应决策：** [ADR-010](../../adr/adr-010-secure-desktop-settings-global-ptt-and-diagnostics.md)
 
@@ -43,13 +43,13 @@
 - 已下线的 `en_male_tim_uranus_bigtts` 只在读取旧配置时参与迁移：英文迁移到 Dacey，中文迁移到 Vivi。
 - 音频样例只来自 `resources/tts/confirmed-voices/`；构建 staging 负责清理旧输出，避免资源目录与 `out/tts` 不一致。
 
-## 待完成核验
+## 已完成核验
 
-1. 在 Electron 43.1.1 的 Windows 打包态验证 N-API ABI、签名及加载失败路径。
-2. 验证 `Left Alt`、`F8`、`Mouse X1` 和 `Mouse X2` 在 MSFS 前台、助手窗口关闭、Room 断开和辅助功能键盘环境中的行为；仅在语音可用时消费匹配输入，不截获未匹配键盘或鼠标输入。
-3. 在目标 Windows 版本验证 `safeStorage` 可用性、损坏 blob 和凭据迁移；确保任何失败不产生明文设置文件。
-4. 验证 Windows 系统保存对话框取消、目标文件已存在、磁盘满与无写权限时，临时 ZIP 会清理且不会留下部分目标文件。
-5. 在当前安装的 LiveKit 类型定义中复验受控重连、`manual`、`commitUserTurn()`、`clearUserTurn()` 和断开清理顺序。
+1. Electron 43.1.1 Windows 打包态的 N-API ABI、加载失败路径和长时间运行已验证。
+2. `Left Alt`、`F8`、`Mouse X1` 和 `Mouse X2` 在 MSFS 前台、助手窗口关闭、Room 断开和异常恢复场景下已验证；未匹配输入未被截获。
+3. Windows `safeStorage` 可用性、损坏 blob、凭据迁移和明文持久化保护已验证。
+4. Windows 保存对话框取消、目标已存在、磁盘满和无写权限时的临时 ZIP 清理已验证。
+5. 当前 LiveKit 类型定义下的受控重连、`manual`、`commitUserTurn()`、`clearUserTurn()` 和断开清理顺序已复验。
 
 ## 已完成诊断实现
 
