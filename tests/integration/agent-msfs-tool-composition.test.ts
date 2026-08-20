@@ -8,13 +8,14 @@ import type { SearchService } from '../../src/search/service.js';
 import { defaultDesktopToolSettings } from '../../shared/desktop-settings.js';
 
 describe('default agent MSFS tool composition', () => {
-  it('contains seven MSFS tools plus the existing searchWeb tool', () => {
+  it('contains eight MSFS tools plus the existing searchWeb tool', () => {
     const msfsTools = createMsfsGuideTools({} as MsfsGuideService);
     const search = createSearchWebTool({} as SearchService);
     const tools = composeGuideTools(msfsTools, search) as llm.FunctionTool[];
 
-    expect(tools).toHaveLength(8);
+    expect(tools).toHaveLength(9);
     expect(tools.map((tool) => tool.name)).toContain('searchWeb');
+    expect(tools.map((tool) => tool.name)).toContain('setAutopilot');
     expect(tools.filter((tool) => tool.name.startsWith('get'))).toHaveLength(7);
   });
 
@@ -28,7 +29,7 @@ describe('default agent MSFS tool composition', () => {
     const tools = composeGuideTools(msfsTools, undefined) as llm.FunctionTool[];
 
     expect(tools.map((tool) => tool.name)).not.toContain('getRouteBrief');
-    expect(tools.map((tool) => tool.name)).toHaveLength(6);
+    expect(tools.map((tool) => tool.name)).toHaveLength(7);
     expect(search.name).toBe('searchWeb');
   });
 });

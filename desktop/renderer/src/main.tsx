@@ -505,8 +505,8 @@ const msfsToolDefinitions = [
     key: 'setAutopilot',
     zh: '自动驾驶操作',
     en: 'Autopilot actions',
-    zhDescription: '允许导游执行受控的自动驾驶操作。默认关闭，实机测试前请确认飞机状态。',
-    enDescription: 'Allow controlled autopilot actions. Disabled by default; check the aircraft before testing.',
+    zhDescription: '允许导游执行受控的自动驾驶操作。默认开启，实机使用前请确认飞机状态。',
+    enDescription: 'Allow controlled autopilot actions. Enabled by default; check the aircraft before use.',
   },
   {
     key: 'searchWeb',

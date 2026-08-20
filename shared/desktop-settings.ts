@@ -78,7 +78,7 @@ export const defaultDesktopToolSettings = {
   getNearbyFacilities: true,
   getWeatherAndSimTime: true,
   getTrackHistory: true,
-  setAutopilot: false,
+  setAutopilot: true,
   searchWeb: true,
 } as const;
 
