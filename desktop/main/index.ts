@@ -113,6 +113,7 @@ import {
   getLocalLiveKitServerPath,
   shouldAutoStartLocalLiveKit,
 } from './local-livekit-runtime.js';
+import { SerialTaskQueue } from './serial-task-queue.js';
 import {
   checkDesktopConfiguration,
   localLiveKitFailureReadiness,
@@ -262,6 +263,8 @@ const createAgentRuntime = (healthPort = 8098) =>
   });
 const agentRuntime = createAgentRuntime();
 const localLiveKitRuntime = new LocalLiveKitRuntime();
+const agentStartQueue = new SerialTaskQueue();
+const settingsSaveQueue = new SerialTaskQueue();
 const serviceAvailabilityChecker = new ServiceAvailabilityChecker();
 let guideLocale: GuideLocale = 'zh-CN';
 let exploreController: ExploreController | null = null;
@@ -836,7 +839,12 @@ const schedulePersistWindowState = () => {
   }, 250);
 };
 
-const startConfiguredAgent = async (
+const startConfiguredAgent = (
+  waitUntilReady: boolean,
+): Promise<{ config: AppConfig; readiness: DesktopReadiness } | { readiness: DesktopReadiness }> =>
+  agentStartQueue.run(() => startConfiguredAgentInternal(waitUntilReady));
+
+const startConfiguredAgentInternal = async (
   waitUntilReady: boolean,
 ): Promise<
   { config: AppConfig; readiness: DesktopReadiness } | { readiness: DesktopReadiness }
@@ -921,7 +929,12 @@ const restoreStoredServiceSettings = async (settings: DesktopServiceSettings | u
   await rm(getServiceSettingsPath(), { force: true });
 };
 
-const applyDesktopSettings = async (
+const applyDesktopSettings = (
+  request: DesktopSettingsSaveRequest,
+): Promise<DesktopSettingsSaveResult> =>
+  settingsSaveQueue.run(() => applyDesktopSettingsInternal(request));
+
+const applyDesktopSettingsInternal = async (
   request: DesktopSettingsSaveRequest,
 ): Promise<DesktopSettingsSaveResult> => {
   void getDiagnosticsLogger().append('main', { event: 'settings_save_requested' });

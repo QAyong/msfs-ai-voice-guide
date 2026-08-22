@@ -69,8 +69,18 @@ export function checkDesktopConfiguration(
 }
 
 export const localizeReadinessDetail = (detail: string, locale: DesktopLocale): string => {
+  const portMatch = detail.match(/(?:127\.0\.0\.1|localhost):(\d+)/iu);
+  if (/EADDRINUSE|address already in use/iu.test(detail)) {
+    const port = portMatch?.[1] ?? '';
+    return localizeDesktopText(
+      locale,
+      `Local service port${port ? ` ${port}` : ''} is already in use; an older process may still be running.`,
+      `本地服务端口${port ? ` ${port} ` : ''}已被占用，可能有旧进程仍未退出。`,
+    );
+  }
+  const normalizedDetail = detail.replaceAll(/127\.0\.0\.1:(\d+)/gu, '本机端口 $1');
   if (locale !== 'en-US') return detail;
-  return detail
+  return normalizedDetail
     .replaceAll(
       '等待 LiveKit Worker 就绪超时',
       'Timed out waiting for the LiveKit worker to become ready',
@@ -87,6 +97,11 @@ export const localizeReadinessDetail = (detail: string, locale: DesktopLocale): 
       'The local LiveKit server was not found. Check that the app resources are complete.',
     )
     .replaceAll('本地 LiveKit Server 未能启动。', 'The local LiveKit server could not start.')
+    .replaceAll('AI Worker 未能在重启前退出。', 'The AI worker did not exit before restart.')
+    .replaceAll(
+      '本地 LiveKit Server 未能在重启前退出。',
+      'The local LiveKit server did not exit before restart.',
+    )
     .replaceAll('AI Worker 健康检查未通过（HTTP ', 'AI worker health check failed (HTTP ')
     .replaceAll('）。', ').')
     .replaceAll('[已隐藏]', '[redacted]');
@@ -100,12 +115,15 @@ export function workerFailureReadiness(
   const safeDetail = detail
     .replaceAll(/(api[_ -]?key|secret|token)\s*[=:]\s*\S+/giu, '$1=[已隐藏]')
     .slice(0, 320);
+  const isPortConflict = /EADDRINUSE|address already in use/iu.test(safeDetail);
   return {
     status: 'error',
     message: localizeDesktopText(
       locale,
-      'The AI service did not connect to LiveKit.',
-      'AI 服务没有成功连接到 LiveKit。',
+      isPortConflict
+        ? 'The AI worker port is already in use.'
+        : 'The AI service did not connect to LiveKit.',
+      isPortConflict ? 'AI Worker 端口已被占用。' : 'AI 服务没有成功连接到 LiveKit。',
     ),
     issues: safeDetail
       ? [localizeReadinessDetail(safeDetail, locale)]

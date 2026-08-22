@@ -40,6 +40,18 @@ describe('desktop readiness diagnostics', () => {
     expect(JSON.stringify(readiness)).not.toContain('local-livekit-secret');
   });
 
+  it('identifies a Worker health-port conflict instead of blaming LiveKit', () => {
+    const readiness = workerFailureReadiness(
+      new Error('Error: listen EADDRINUSE: address already in use 127.0.0.1:8098'),
+    );
+
+    expect(readiness).toMatchObject({
+      status: 'error',
+      message: 'AI Worker 端口已被占用。',
+      issues: ['本地服务端口 8098 已被占用，可能有旧进程仍未退出。'],
+    });
+  });
+
   it('localizes readiness messages for the English locale', () => {
     const configuration = checkDesktopConfiguration(
       { LIVEKIT_URL: 'https://invalid.example.test', LIVEKIT_API_SECRET: 'secret' },

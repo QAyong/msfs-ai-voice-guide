@@ -77,7 +77,6 @@ $env:https_proxy = $env:HTTPS_PROXY
 
 ```powershell
 $env:CI = 'true'
-$env:PNPM_CONFIG_NODE_LINKER = 'hoisted'
 $releaseSnapshot = (Resolve-Path '.\release-inputs\msfs-cli-official-20260809').Path
 $env:MSFS_CLI_DISTRIBUTION_DIR = $releaseSnapshot
 $env:MSFS_CLI_COMMUNITY_PACKAGE_DIR = (Resolve-Path (Join-Path $releaseSnapshot 'community\msfs-native-cli-route-bridge')).Path
@@ -88,11 +87,11 @@ if ($rootVersion -ne $runtimeVersion) {
   throw "应用版本与运行包版本不一致：$rootVersion != $runtimeVersion"
 }
 
-pnpm install --frozen-lockfile --node-linker=hoisted
+pnpm install --frozen-lockfile
 pnpm desktop:package
 ```
 
-`PNPM_CONFIG_NODE_LINKER=hoisted` 必须在依赖安装和打包命令中保持一致；不要在同一个工作区交替使用默认 isolated 和 hoisted 依赖树，否则 pnpm 可能反复重建 `node_modules`。如果依赖未变化，不需要每次重复执行 `pnpm install`。
+根目录 `pnpm-workspace.yaml` 已固定 `nodeLinker: hoisted`，因此普通安装和打包命令不再依赖临时环境变量；命令行或 CI 不得把 `PNPM_CONFIG_NODE_LINKER` 设置为 `isolated`。不要在同一个工作区交替使用两种依赖树，否则 pnpm 可能反复重建 `node_modules`。如果旧工作区已经使用过另一种 linker，先执行一次 `pnpm install --frozen-lockfile --force`；依赖未变化时，之后不需要重复安装。
 
 `desktop:package` 已明确传入 `--publish never`，只生成本地安装包，不访问 GitHub，也不需要 `GH_TOKEN`。如果遇到 MSBuild `FileTracker` 的 `E_ACCESSDENIED`，请在提升权限的 PowerShell 中重跑同一套命令。
 

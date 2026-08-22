@@ -3,6 +3,7 @@ import type { AppConfig } from '../../src/config/schema.js';
 import type { DesktopReadiness } from '../../shared/desktop-contracts.js';
 import { localizeDesktopText, type DesktopLocale } from '../../shared/desktop-locale.js';
 import { workerFailureReadiness } from './readiness.js';
+import { SerialTaskQueue } from './serial-task-queue.js';
 
 type RuntimeStatus = 'stopped' | 'starting' | 'ready' | 'error';
 type AgentProcessMessage =
@@ -15,6 +16,7 @@ export class EmbeddedAgentRuntime {
   private fingerprint = '';
   private stopping = false;
   private locale: DesktopLocale = 'zh-CN';
+  private readonly lifecycle = new SerialTaskQueue();
 
   constructor(
     private readonly healthPort = 8098,
@@ -50,10 +52,21 @@ export class EmbeddedAgentRuntime {
     locale: 'en-US' | 'zh-CN',
     environment: NodeJS.ProcessEnv = process.env,
   ): Promise<void> {
+    return this.lifecycle.run(() =>
+      this.ensureStartedInternal(config, agentProcessPath, locale, environment),
+    );
+  }
+
+  private async ensureStartedInternal(
+    config: AppConfig,
+    agentProcessPath: string,
+    locale: 'en-US' | 'zh-CN',
+    environment: NodeJS.ProcessEnv,
+  ): Promise<void> {
     this.locale = locale;
     const fingerprint = JSON.stringify([config, agentProcessPath, locale, this.healthPort]);
     if (this.child && this.fingerprint === fingerprint && this.status !== 'error') return;
-    if (this.child) await this.stop();
+    if (this.child) await this.stopInternal();
 
     this.fingerprint = fingerprint;
     this.status = 'starting';
@@ -95,7 +108,11 @@ export class EmbeddedAgentRuntime {
     child.on('exit', (code) => {
       if (this.child !== child) return;
       this.child = null;
-      if (this.stopping) return;
+      if (this.stopping) {
+        this.status = 'stopped';
+        this.error = null;
+        return;
+      }
       if (this.status === 'error') return;
       this.status = 'error';
       this.error = new Error(
@@ -154,23 +171,49 @@ export class EmbeddedAgentRuntime {
   }
 
   async stop(): Promise<void> {
+    return this.lifecycle.run(() => this.stopInternal());
+  }
+
+  private async stopInternal(): Promise<void> {
     const child = this.child;
-    this.child = null;
     this.stopping = true;
     this.status = 'stopped';
     this.error = null;
-    if (!child) return;
+    if (!child) {
+      this.stopping = false;
+      return;
+    }
 
-    const exited = new Promise<void>((resolve) => child.once('exit', () => resolve()));
+    const exited = this.waitForExit(child, 5_000);
     try {
       child.postMessage({ type: 'shutdown' });
     } catch {
       child.kill();
     }
-    const graceful = await Promise.race([
-      exited.then(() => true),
-      new Promise<false>((resolve) => setTimeout(() => resolve(false), 5_000)),
-    ]);
-    if (!graceful) child.kill();
+    if (!(await exited)) {
+      child.kill();
+      if (!(await this.waitForExit(child, 5_000))) {
+        this.status = 'error';
+        this.error = new Error('AI Worker 未能在重启前退出。');
+        this.stopping = false;
+        throw this.error;
+      }
+    }
+    this.stopping = false;
+  }
+
+  private waitForExit(child: UtilityProcess, timeoutMs: number): Promise<boolean> {
+    if (this.child !== child) return Promise.resolve(true);
+    return new Promise((resolve) => {
+      let settled = false;
+      const timer = setTimeout(() => finish(false), timeoutMs);
+      const finish = (exited: boolean) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        resolve(exited);
+      };
+      child.once('exit', () => finish(true));
+    });
   }
 }

@@ -4,6 +4,7 @@ import { createConnection, createServer } from 'node:net';
 import { join } from 'node:path';
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { createSocket } from 'node:dgram';
+import { SerialTaskQueue } from './serial-task-queue.js';
 
 const loopbackAddress = '127.0.0.1';
 const stateFileName = 'runtime-state.json';
@@ -175,13 +176,26 @@ export class LocalLiveKitRuntime {
   private fingerprint = '';
   private stopping = false;
   private output = '';
+  private readonly lifecycle = new SerialTaskQueue();
 
   async ensureStarted(options: LocalLiveKitRuntimeOptions): Promise<LocalLiveKitConnection> {
+    return this.lifecycle.run(() => this.ensureStartedInternal(options));
+  }
+
+  private async ensureStartedInternal(
+    options: LocalLiveKitRuntimeOptions,
+  ): Promise<LocalLiveKitConnection> {
     const fingerprint = JSON.stringify(options);
-    if (this.child && this.state && this.fingerprint === fingerprint && !this.child.killed) {
+    if (
+      this.child &&
+      this.state &&
+      this.fingerprint === fingerprint &&
+      this.child.exitCode === null &&
+      !this.child.killed
+    ) {
       return createLocalLiveKitConnection(this.state);
     }
-    await this.stop();
+    await this.stopInternal();
     if (!existsSync(options.executablePath)) {
       throw new Error('未找到本地 LiveKit Server。请检查应用安装资源是否完整。');
     }
@@ -201,17 +215,28 @@ export class LocalLiveKitRuntime {
   }
 
   async stop(): Promise<void> {
+    return this.lifecycle.run(() => this.stopInternal());
+  }
+
+  private async stopInternal(): Promise<void> {
     const child = this.child;
-    this.child = null;
     this.stopping = true;
-    if (!child || child.exitCode !== null) return;
-    const exited = new Promise<void>((resolve) => child.once('exit', () => resolve()));
+    if (!child || child.exitCode !== null) {
+      this.child = null;
+      this.stopping = false;
+      return;
+    }
+    const exited = this.waitForExit(child, stopTimeoutMs);
     child.kill();
-    const graceful = await Promise.race([
-      exited.then(() => true),
-      new Promise<false>((resolve) => setTimeout(() => resolve(false), stopTimeoutMs)),
-    ]);
-    if (!graceful && child.exitCode === null) child.kill('SIGKILL');
+    if (!(await exited)) {
+      if (child.exitCode === null) child.kill('SIGKILL');
+      if (!(await this.waitForExit(child, stopTimeoutMs))) {
+        this.stopping = false;
+        throw new Error('本地 LiveKit Server 未能在重启前退出。');
+      }
+    }
+    this.child = null;
+    this.stopping = false;
   }
 
   private async start(options: LocalLiveKitRuntimeOptions, state: LocalLiveKitRuntimeState) {
@@ -234,12 +259,30 @@ export class LocalLiveKitRuntime {
     child.stdout.on('data', captureOutput);
     child.stderr.on('data', captureOutput);
     child.once('error', captureOutput);
+    child.once('exit', () => {
+      if (this.child === child) this.child = null;
+    });
 
     const started = await waitForTcpPort(state.signalPort, 8_000);
     if (started && child.exitCode === null) return;
-    this.child = null;
     if (child.exitCode === null) child.kill();
+    await this.waitForExit(child, stopTimeoutMs);
     throw new Error(this.output.trim() || '本地 LiveKit Server 未能启动。');
+  }
+
+  private waitForExit(child: ChildProcessWithoutNullStreams, timeoutMs: number): Promise<boolean> {
+    if (child.exitCode !== null || this.child !== child) return Promise.resolve(true);
+    return new Promise((resolve) => {
+      let settled = false;
+      const timer = setTimeout(() => finish(false), timeoutMs);
+      const finish = (exited: boolean) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        resolve(exited);
+      };
+      child.once('close', () => finish(true));
+    });
   }
 
   private async readOrCreateState(runtimeDirectory: string): Promise<LocalLiveKitRuntimeState> {
