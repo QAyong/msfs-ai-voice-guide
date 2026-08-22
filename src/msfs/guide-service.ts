@@ -387,7 +387,11 @@ const capabilityFromEvidence = (
 
 const normalizeHeading = (value: number): number => {
   const normalized = value % 360;
-  return normalized === 360 || normalized === 0 ? 0 : normalized < 0 ? normalized + 360 : normalized;
+  return normalized === 360 || normalized === 0
+    ? 0
+    : normalized < 0
+      ? normalized + 360
+      : normalized;
 };
 
 const eventInteger = (value: number): number => Math.trunc(value) >>> 0;
@@ -627,9 +631,7 @@ export class MsfsGuideService {
       source: 'native_simconnect',
       timestamp: new Date().toISOString(),
       available,
-      message: available
-        ? '当前飞机报告具备可用的自动驾驶。'
-        : '当前飞机报告没有可用的自动驾驶。',
+      message: available ? '当前飞机报告具备可用的自动驾驶。' : '当前飞机报告没有可用的自动驾驶。',
     });
   }
 
@@ -655,13 +657,10 @@ export class MsfsGuideService {
     const request = setAutopilotInputSchema.parse(input);
     const beforeResult = await this.getAutopilotStatus(signal);
     if (beforeResult.status !== 'ok') return beforeResult;
-    let before: AutopilotState = beforeResult;
+    const before: AutopilotState = beforeResult;
 
     const requiredCapabilities = new Map<keyof AutopilotState['capabilities'], string>();
-    const requireCapability = (
-      capability: keyof AutopilotState['capabilities'],
-      label: string,
-    ) => {
+    const requireCapability = (capability: keyof AutopilotState['capabilities'], label: string) => {
       requiredCapabilities.set(capability, label);
     };
 
@@ -923,7 +922,11 @@ export class MsfsGuideService {
         after,
       );
     }
-    return response('ok', sentCount > 0 ? '自动驾驶设置已执行并确认生效。' : '自动驾驶已经处于请求状态。', after);
+    return response(
+      'ok',
+      sentCount > 0 ? '自动驾驶设置已执行并确认生效。' : '自动驾驶已经处于请求状态。',
+      after,
+    );
   }
 
   async getLocationContext(signal?: AbortSignal): Promise<LocationContextResult> {
