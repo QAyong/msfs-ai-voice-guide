@@ -92,6 +92,32 @@ const communityPackageSource = configuredCommunityPackage
 const requiredFiles = ['msfs.exe', 'msfsd.exe'];
 const optionalFiles = ['SimConnect.dll'];
 const communityFiles = ['manifest.json', 'layout.json', 'modules/msfs-route-bridge.wasm'];
+const comparePaths = (left, right) => left.localeCompare(right);
+
+const isWithin = (child, parent) => {
+  const relativePath = relative(parent, child);
+  return relativePath === '' || (!relativePath.startsWith('..') && !isAbsolute(relativePath));
+};
+
+if (
+  releaseBuild &&
+  [nativeCliProjectDirectory, developmentCliBuildDirectory, devDistributionDirectory].some((path) =>
+    isWithin(sourceDirectory, path),
+  )
+) {
+  throw new Error(
+    `正式打包不能使用开发 CLI 构建目录：${sourceDirectory}。请设置 MSFS_CLI_DISTRIBUTION_DIR 指向已验证发布快照。`,
+  );
+}
+if (
+  releaseBuild &&
+  configuredCommunityPackage &&
+  !isWithin(resolve(configuredCommunityPackage), sourceDirectory)
+) {
+  throw new Error(
+    `正式打包要求 CLI 与 Community Package 来自同一发布快照：${configuredCommunityPackage} 不在 ${sourceDirectory} 内。`,
+  );
+}
 
 for (const file of requiredFiles) {
   await access(resolve(sourceDirectory, file)).catch(() => {
@@ -124,7 +150,74 @@ const sha256 = async (path) =>
     .update(await readFile(path))
     .digest('hex');
 
+const sourceFiles = [];
+for (const file of requiredFiles) {
+  sourceFiles.push({ source: resolve(sourceDirectory, file), path: file });
+}
+for (const file of optionalFiles) {
+  if (
+    await access(resolve(sourceDirectory, file))
+      .then(() => true)
+      .catch(() => false)
+  ) {
+    sourceFiles.push({ source: resolve(sourceDirectory, file), path: file });
+  }
+}
+if (communityPackageReady) {
+  for (const file of communityFiles) {
+    sourceFiles.push({
+      source: resolve(communityPackageSource, file),
+      path: `community/msfs-native-cli-route-bridge/${file}`,
+    });
+  }
+}
+
+const sourceFileRecords = [];
+for (const file of sourceFiles.sort((left, right) => comparePaths(left.path, right.path))) {
+  const information = await stat(file.source);
+  sourceFileRecords.push({
+    path: file.path.replaceAll('\\', '/'),
+    bytes: information.size,
+    sha256: await sha256(file.source),
+  });
+}
+const sourceFingerprint = createHash('sha256')
+  .update(JSON.stringify(sourceFileRecords))
+  .digest('hex');
+
+const canReuseTarget = async (target) => {
+  try {
+    const componentManifest = JSON.parse(
+      await readFile(resolve(target, 'component-manifest.json'), 'utf8'),
+    );
+    if (
+      componentManifest.schemaVersion !== 1 ||
+      componentManifest.component !== 'msfs-cli-runtime' ||
+      componentManifest.fingerprint !== sourceFingerprint ||
+      JSON.stringify(componentManifest.files) !== JSON.stringify(sourceFileRecords)
+    ) {
+      return false;
+    }
+    for (const file of sourceFileRecords) {
+      const information = await stat(resolve(target, file.path));
+      if (
+        information.size !== file.bytes ||
+        (await sha256(resolve(target, file.path))) !== file.sha256
+      ) {
+        return false;
+      }
+    }
+    return true;
+  } catch {
+    return false;
+  }
+};
+
 for (const target of targets) {
+  if (await canReuseTarget(target)) {
+    process.stdout.write(`Reusing unchanged MSFS CLI runtime snapshot: ${target}\n`);
+    continue;
+  }
   await rm(target, { recursive: true, force: true });
   await mkdir(target, { recursive: true });
   const copiedFiles = [];
@@ -157,7 +250,7 @@ for (const target of targets) {
   }
 
   const fileRecords = [];
-  for (const file of copiedFiles.sort()) {
+  for (const file of copiedFiles.sort(comparePaths)) {
     const path = resolve(target, file);
     const information = await stat(path);
     fileRecords.push({

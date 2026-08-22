@@ -1,8 +1,8 @@
 # Windows x64 打包方案 V2
 
-**最后更新：** 2026-08-12
+**最后更新：** 2026-08-22
 
-**状态：** 已实现；`1.0.1-rc.5` 安装包已生成，安装态自动校验通过
+**状态：** 已实现；`1.0.1-rc.6` 安装包已生成，安装态自动校验通过
 
 **目标平台：** Windows x64，无代码签名
 
@@ -78,8 +78,9 @@ $env:https_proxy = $env:HTTPS_PROXY
 ```powershell
 $env:CI = 'true'
 $env:PNPM_CONFIG_NODE_LINKER = 'hoisted'
-$env:MSFS_CLI_DISTRIBUTION_DIR = (Resolve-Path '.\native\msfs-cli\build').Path
-$env:MSFS_CLI_COMMUNITY_PACKAGE_DIR = (Resolve-Path '.\native\msfs-cli\wasm-route-bridge\build\package-tool\msfs-native-cli-route-bridge').Path
+$releaseSnapshot = (Resolve-Path '.\release-inputs\msfs-cli-official-20260809').Path
+$env:MSFS_CLI_DISTRIBUTION_DIR = $releaseSnapshot
+$env:MSFS_CLI_COMMUNITY_PACKAGE_DIR = (Resolve-Path (Join-Path $releaseSnapshot 'community\msfs-native-cli-route-bridge')).Path
 
 $rootVersion = (Get-Content '.\package.json' | ConvertFrom-Json).version
 $runtimeVersion = (Get-Content '.\packaging\desktop-runtime\package.json' | ConvertFrom-Json).version
@@ -94,6 +95,21 @@ pnpm desktop:package
 `PNPM_CONFIG_NODE_LINKER=hoisted` 必须在依赖安装和打包命令中保持一致；不要在同一个工作区交替使用默认 isolated 和 hoisted 依赖树，否则 pnpm 可能反复重建 `node_modules`。如果依赖未变化，不需要每次重复执行 `pnpm install`。
 
 `desktop:package` 已明确传入 `--publish never`，只生成本地安装包，不访问 GitHub，也不需要 `GH_TOKEN`。如果遇到 MSBuild `FileTracker` 的 `E_ACCESSDENIED`，请在提升权限的 PowerShell 中重跑同一套命令。
+
+### 增量复用规则
+
+Release 构建现在使用增量复用，但不会牺牲安装包完整性：
+
+- `global-ptt` 根据源码、`binding.gyp`、Node ABI、依赖锁文件和当前平台生成指纹；指纹未变化且 `.node` 产物存在时跳过 `node-gyp rebuild`。
+- `global-ptt` 复用前还会校验 `.node` 产物 SHA-256；缓存文件缺失或二进制被替换时会重新构建。
+- MSFS CLI 和 WASM 不在 `desktop:package` 中重新编译。CLI/WASM 源码发生变化时，必须先重新构建并生成新的已验证发布快照，再更新 `MSFS_CLI_DISTRIBUTION_DIR`；暂存脚本会比较快照文件记录，未变化时复用现有 `out/msfs`。正式打包会拒绝 `native/msfs-cli`、`dev-runtime` 等开发构建目录，也会拒绝不在同一快照目录中的 Community Package。
+- LiveKit Server 和 TTS 样例按源文件指纹复用；源文件未变化时不重复复制。
+- `release-v2/app/node_modules` 按根 `package.json`、运行包 `package.json`、workspace 配置、`pnpm-lock.yaml` 以及 Node ABI、平台、架构、pnpm 和 linker 环境指纹复用；依赖或构建环境变化时不复用旧生产依赖。
+- 主进程、Preload、Renderer 和 Agent JavaScript 仍会重新构建；只要应用代码变化，`app.asar` 和 NSIS 安装器仍必须重新生成。
+
+缓存只写入 Git 忽略的 `dev-runtime/build-cache/`。需要强制重新准备时，删除该目录并删除对应的 `out/` 资源；源文件、依赖、Node ABI 或平台变化时，指纹自动失效。`pnpm desktop:clean`（不带 `--incremental`）只清理桌面代码和暂存资源，不会删除 native 构建产物或增量缓存。
+
+增量系统不能从一个外部发布快照反推出其中二进制对应的本地未编译源码版本；因此修改 CLI/WASM 源码后，必须由发布流程明确生成并切换新快照，不能只重复执行 `pnpm desktop:package`。
 
 候选发布物位于 `release-v2/artifacts/`：
 

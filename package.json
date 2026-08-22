@@ -1,6 +1,6 @@
 {
   "name": "msfs-ai-voice-guide",
-  "version": "1.0.1-rc.5",
+  "version": "1.0.1-rc.6",
   "private": true,
   "type": "module",
   "main": "./out/main/index.js",
@@ -10,7 +10,7 @@
     "desktop:dev": "pnpm msfs:native:build && pnpm msfs:stage:dev && pnpm msfs:use:dev && pnpm native:build && electron-vite dev",
     "desktop:clean": "node scripts/clean-desktop-output.mjs",
     "desktop:build": "pnpm desktop:clean && pnpm native:build && electron-vite build && node scripts/stage-global-ptt.mjs && node scripts/stage-msfs-cli.mjs --strict out/msfs && node scripts/stage-geo-config.mjs out/msfs && node scripts/stage-livekit-server.mjs out/livekit && node scripts/stage-tts-voice-samples.mjs resources/tts out/tts && node scripts/validate-release-inputs.mjs",
-    "desktop:build:release": "pnpm desktop:clean && pnpm native:build && electron-vite build && node scripts/stage-global-ptt.mjs && node scripts/stage-msfs-cli.mjs --strict --release out/msfs && node scripts/stage-geo-config.mjs out/msfs && node scripts/stage-livekit-server.mjs out/livekit && node scripts/stage-tts-voice-samples.mjs resources/tts out/tts && node scripts/validate-release-inputs.mjs",
+    "desktop:build:release": "node scripts/clean-desktop-output.mjs --incremental && pnpm native:build && electron-vite build && node scripts/stage-global-ptt.mjs && node scripts/stage-msfs-cli.mjs --strict --release out/msfs && node scripts/stage-geo-config.mjs out/msfs && node scripts/stage-livekit-server.mjs out/livekit && node scripts/stage-tts-voice-samples.mjs resources/tts out/tts && node scripts/validate-release-inputs.mjs",
     "desktop:prepare-release": "node scripts/prepare-release-app.mjs",
     "desktop:archive-artifacts": "node scripts/archive-release-artifacts.mjs",
     "desktop:package": "pnpm desktop:archive-artifacts && pnpm desktop:package:dir && electron-builder --win nsis --x64 --prepackaged release-v2/artifacts/win-unpacked --publish never && node scripts/report-release-artifacts.mjs",

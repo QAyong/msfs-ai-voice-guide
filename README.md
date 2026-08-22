@@ -67,7 +67,7 @@ pnpm desktop:package
 
 产物位于 `release-v2/artifacts/`。给普通用户分发时只需要 `*-win-x64-setup.exe`；`SHA256SUMS.txt` 可同时提供给需要校验完整性的用户。不要分发 `.blockmap`、`latest.yml`、`release-report.json` 或 `win-unpacked/`，也不提供 ZIP 便携包。开发机安装候选包时，应用版本会写入 `Community2024\_晓晓飞行导游版本库\应用版本`；开发版本仍保留在 `开发版本` 中。普通用户没有版本库，安装包会直接更新自己的 `Community2024\msfs-native-cli-route-bridge`。
 
-V2 不复制开发目录的 `node_modules`，也不在 `win-unpacked` 生成后追加依赖。构建先用独立的 `@xiaoxiao/desktop-runtime` 生成最小生产锁文件，再在 `release-v2/app` 中建立物理依赖树，最后一次性写入 `app.asar`。只有 RTC、Sharp 等原生二进制按需进入 `app.asar.unpacked`。打包后会实际验证 LiveKit Agent、OpenAI 插件、RTC、Zod、WebSocket、Sharp、Electron `utilityProcess`、MSFS CLI status/daemon stop 和 Bridge 哈希，任何一步失败都不会生成候选安装包。
+V2 不复制开发目录的 `node_modules`，也不在 `win-unpacked` 生成后追加依赖。构建先用独立的 `@xiaoxiao/desktop-runtime` 生成最小生产锁文件，再在 `release-v2/app` 中建立物理依赖树，最后一次性写入 `app.asar`。只有 RTC、Sharp 等原生二进制按需进入 `app.asar.unpacked`。打包过程会按指纹复用未变化的 global-ptt、MSFS CLI 快照、LiveKit、TTS 和生产依赖；PTT 复用前会校验二进制哈希，生产依赖缓存会校验 Node/平台环境；主进程、Preload、Renderer、Agent JavaScript 及最终安装器仍会重新生成。CLI/WASM 源码修改后必须先生成新的发布快照再打包。打包后会实际验证 LiveKit Agent、OpenAI 插件、RTC、Zod、WebSocket、Sharp、Electron `utilityProcess`、MSFS CLI status/daemon stop 和 Bridge 哈希，任何一步失败都不会生成候选安装包。
 
 如果只是修改了 CLI 或 Agent 代码，也需要重新执行 `pnpm desktop:package` 生成新版本；不要向 `release-v2` 手动复制依赖。安装包固定包含打包当时的 CLI、daemon、SimConnect DLL 和 Bridge 快照，并用 `component-manifest.json` 记录 SHA-256 与协议主版本。
 
