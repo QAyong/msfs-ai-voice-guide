@@ -9,6 +9,7 @@
 1. 阅读 `docs/adr/`（架构决策记录）中所有已接受的 ADR。
 2. 阅读当前功能对应的 `docs/specs/`（功能规格）。
 3. 对 LiveKit Agents 的任何 API、导入路径、事件名或配置项，先核验官方文档和本地 `node_modules` 中当前安装版本的 TypeScript 类型定义；不得凭记忆编写。
+4. 进行桌面开发测试或要求直接打开 Electron 应用时，先阅读 `docs/testing/desktop-development-test-workflow.md`，按改动范围选择最小启动流程；不得默认执行完整 `pnpm desktop:dev`。
 
 ## 模块结构
 

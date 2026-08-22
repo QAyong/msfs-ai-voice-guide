@@ -61,12 +61,17 @@ export class MsfsExploreContextProvider {
   ) {}
 
   async get(signal?: AbortSignal): Promise<MsfsExploreContext | undefined> {
-    const [snapshot, location, route] = await Promise.all([
+    const [snapshotResult, locationResult, routeResult] = await Promise.allSettled([
       this.service.getFlightSnapshot(signal),
       this.service.getLocationContext(signal),
       this.service.getRouteBrief(signal),
     ]);
-    const geo = location.status === 'ok' ? record(location.context) : undefined;
+    if (signal?.aborted)
+      throw new DOMException('The MSFS context request was cancelled.', 'AbortError');
+    const snapshot = snapshotResult.status === 'fulfilled' ? snapshotResult.value : undefined;
+    const location = locationResult.status === 'fulfilled' ? locationResult.value : undefined;
+    const route = routeResult.status === 'fulfilled' ? routeResult.value : undefined;
+    const geo = location?.status === 'ok' ? record(location.context) : undefined;
     const place = record(geo?.place) ?? record(geo?.address) ?? record(geo?.administrative) ?? geo;
     const country = textAt(place, 'country', 'country_name');
     const region = textAt(place, 'region', 'state', 'province', 'admin1');
@@ -82,9 +87,9 @@ export class MsfsExploreContextProvider {
           }
         : undefined;
     const originIcao =
-      route.status === 'ok' ? optionalText(route.route.departure.icao, 16) : undefined;
+      route?.status === 'ok' ? optionalText(route.route.departure.icao, 16) : undefined;
     const destinationIcao =
-      route.status === 'ok' ? optionalText(route.route.destination.icao, 16) : undefined;
+      route?.status === 'ok' ? optionalText(route.route.destination.icao, 16) : undefined;
     const routeContext =
       originIcao || destinationIcao
         ? {
@@ -94,7 +99,7 @@ export class MsfsExploreContextProvider {
         : undefined;
     const parsed = msfsExploreContextSchema.safeParse({
       capturedAt: new Date().toISOString(),
-      ...(snapshot.status === 'ok'
+      ...(snapshot?.status === 'ok'
         ? {
             position: {
               latitude: snapshot.position.latitude,
@@ -105,7 +110,7 @@ export class MsfsExploreContextProvider {
           }
         : {}),
       ...(placeContext ? { place: placeContext } : {}),
-      ...(location.status === 'ok' && location.gamePois?.length
+      ...(location?.status === 'ok' && location.gamePois?.length
         ? { gamePois: location.gamePois }
         : {}),
       ...(routeContext ? { route: routeContext } : {}),

@@ -16,6 +16,7 @@ describe('voice input control contract', () => {
       cancelTurn: 'msfs.guide.cancel_turn',
       startContinuous: 'msfs.guide.start_continuous',
       stopContinuous: 'msfs.guide.stop_continuous',
+      cancelNarration: 'msfs.guide.cancel_narration',
       suspendVoice: 'msfs.guide.suspend_voice',
       resumeVoice: 'msfs.guide.resume_voice',
     });

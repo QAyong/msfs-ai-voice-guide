@@ -28,7 +28,9 @@ import {
 } from '../../shared/source-preview.js';
 import {
   exploreRequestSchema,
+  exploreNarrationRequestSchema,
   exploreSuggestionSchema,
+  type ExploreNarrationResponse,
   type ExploreResult,
 } from '../../shared/explore-contracts.js';
 import { MsfsCliClient, type MsfsDaemonRole } from '../../src/msfs/cli-client.js';
@@ -37,6 +39,9 @@ import { MsfsExploreContextProvider } from '../../src/msfs/explore-context.js';
 import { resolveMsfsCliPath } from '../../src/msfs/path.js';
 import { statusDataSchema, systemStateDataSchema } from '../../src/msfs/schemas.js';
 import { ExploreService } from '../../src/explore/service.js';
+import { ExploreContextCache } from '../../src/explore/context-cache.js';
+import { ExploreNarrationController } from '../../src/explore/narration-controller.js';
+import { ExploreRequestCoordinator } from '../../src/explore/request-coordinator.js';
 import { EncyclopediaService } from '../../src/explore/encyclopedia/service.js';
 import { WikipediaSearchPageProvider } from '../../src/explore/encyclopedia/wikipedia-search-page.js';
 import { BaiduBaikeSearchPageProvider } from '../../src/explore/encyclopedia/baidu-baike.js';
@@ -260,6 +265,9 @@ const localLiveKitRuntime = new LocalLiveKitRuntime();
 const serviceAvailabilityChecker = new ServiceAvailabilityChecker();
 let guideLocale: GuideLocale = 'zh-CN';
 let exploreController: ExploreController | null = null;
+let exploreNarrationController: ExploreNarrationController | null = null;
+const exploreRequestCoordinator = new ExploreRequestCoordinator();
+const exploreContextCache = new ExploreContextCache();
 let msfsToolSettings: DesktopToolSettings = { ...defaultDesktopToolSettings };
 let msfsConnectionMonitor: MsfsConnectionMonitor | null = null;
 const msfsClients: Partial<Record<MsfsDaemonRole, MsfsCliClient>> = {};
@@ -1124,6 +1132,15 @@ const getExploreController = () =>
     createService: createExploreService,
     getMsfsContext: getExploreMsfsContext,
     present: async (result) => openExplorePreview(result),
+    contextCache: exploreContextCache,
+    coordinator: exploreRequestCoordinator,
+  }));
+
+const getExploreNarrationController = () =>
+  (exploreNarrationController ??= new ExploreNarrationController({
+    getMsfsContext: getExploreMsfsContext,
+    contextCache: exploreContextCache,
+    coordinator: exploreRequestCoordinator,
   }));
 
 const assistantTopmostLevel = process.platform === 'win32' ? 'screen-saver' : 'floating';
@@ -2818,6 +2835,38 @@ ipcMain.handle('explore:cancel', (event) => {
   if (!isAssistantSender(event.sender)) return false;
   exploreController?.cancel();
   return true;
+});
+
+ipcMain.handle('explore:narration-request', async (event, value: unknown) => {
+  if (!isLiveWindow(assistantWindow) || !isAssistantSender(event.sender)) {
+    return {
+      ok: false,
+      code: 'configuration',
+      message: localizeDesktopText(
+        guideLocale,
+        'Introduction request is not allowed.',
+        '不允许的介绍请求。',
+      ),
+    } satisfies ExploreNarrationResponse;
+  }
+  const parsed = exploreNarrationRequestSchema.safeParse(value);
+  if (!parsed.success) {
+    return {
+      ok: false,
+      code: 'configuration',
+      message: localizeDesktopText(
+        guideLocale,
+        'The introduction request format is invalid.',
+        '介绍请求格式无效。',
+      ),
+    } satisfies ExploreNarrationResponse;
+  }
+  return getExploreNarrationController().execute(parsed.data);
+});
+
+ipcMain.handle('explore:narration-cancel', (event) => {
+  if (!isAssistantSender(event.sender)) return false;
+  return exploreNarrationController?.cancel() ?? false;
 });
 
 ipcMain.on('explore:prefill-suggestion', (event, value: unknown) => {

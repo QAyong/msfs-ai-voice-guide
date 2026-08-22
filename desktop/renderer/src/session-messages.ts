@@ -1,5 +1,6 @@
 import type { ReceivedMessage } from '@livekit/components-react';
 import type { GuideSourcesMessage } from '../../../shared/guide-events.js';
+import { isExploreNarrationPrompt } from '../../../shared/explore-contracts.js';
 
 export type DisplayMessage = {
   id: string;
@@ -30,11 +31,12 @@ export function createDisplayMessages(
   localParticipantIdentity: string,
   sourcesByMessage: Readonly<Record<string, GuideSourcesMessage>>,
   limit = 8,
+  narrationLabel = '开启介绍',
 ): DisplayMessage[] {
   return messages
     .map<DisplayMessage | null>((message) => {
-      const text = message.message.trim();
-      if (!text) return null;
+      const rawText = message.message.trim();
+      if (!rawText) return null;
 
       const role =
         message.type === 'agentTranscript' ||
@@ -46,7 +48,7 @@ export function createDisplayMessages(
         id: message.id,
         role,
         sourcePreview: role === 'assistant' ? (sourcesByMessage[message.id] ?? null) : null,
-        text,
+        text: isExploreNarrationPrompt(rawText) ? narrationLabel : rawText,
       };
     })
     .filter((message): message is DisplayMessage => message !== null)

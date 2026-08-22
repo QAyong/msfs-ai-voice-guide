@@ -1,6 +1,7 @@
 import type { ReceivedMessage } from '@livekit/components-react';
 import type { Participant } from 'livekit-client';
 import { describe, expect, it } from 'vitest';
+import { exploreNarrationPromptMarker } from '../../shared/explore-contracts.js';
 import {
   createDisplayMessages,
   shouldAttachSourcePreview,
@@ -99,6 +100,27 @@ describe('official session message display', () => {
         role: 'assistant',
         sourcePreview: preview,
         text: '今天有小雨。',
+      },
+    ]);
+  });
+
+  it('shows the localized introduction label instead of the hidden narration prompt', () => {
+    const messages: ReceivedMessage[] = [
+      {
+        id: 'narration-user',
+        message: `${exploreNarrationPromptMarker}\nsecret prompt context`,
+        timestamp: 1,
+        type: 'chatMessage',
+        from: participant('desktop-user'),
+      },
+    ];
+
+    expect(createDisplayMessages(messages, 'desktop-user', {}, 8, 'Start introduction')).toEqual([
+      {
+        id: 'narration-user',
+        role: 'user',
+        sourcePreview: null,
+        text: 'Start introduction',
       },
     ]);
   });

@@ -1,7 +1,15 @@
 import { contextBridge, ipcRenderer } from 'electron';
 import type { GuideSourcesMessage } from '../../shared/guide-events.js';
-import { exploreRequestSchema } from '../../shared/explore-contracts.js';
-import type { ExploreRequest, ExploreResponse } from '../../shared/explore-contracts.js';
+import {
+  exploreNarrationRequestSchema,
+  exploreRequestSchema,
+} from '../../shared/explore-contracts.js';
+import type {
+  ExploreNarrationRequest,
+  ExploreNarrationResponse,
+  ExploreRequest,
+  ExploreResponse,
+} from '../../shared/explore-contracts.js';
 import type { SourceWindowState } from '../../shared/source-preview.js';
 import {
   diagnosticConversationRecordSchema,
@@ -157,6 +165,22 @@ contextBridge.exposeInMainWorld('desktop', {
         });
   },
   cancelExplore: () => ipcRenderer.invoke('explore:cancel') as Promise<boolean>,
+  requestExploreNarration: (
+    request: ExploreNarrationRequest,
+  ): Promise<ExploreNarrationResponse> => {
+    const parsed = exploreNarrationRequestSchema.safeParse(request);
+    return parsed.success
+      ? ipcRenderer.invoke('explore:narration-request', parsed.data)
+      : Promise.resolve({
+          ok: false,
+          code: 'configuration',
+          message: localizedPreloadText(
+            'The introduction request is invalid.',
+            '介绍请求格式无效。',
+          ),
+        });
+  },
+  cancelExploreNarration: () => ipcRenderer.invoke('explore:narration-cancel') as Promise<boolean>,
   prefillExploreSuggestion: (text: string) =>
     ipcRenderer.send('explore:prefill-suggestion', { text }),
   onExplorePrefillSuggestion: (callback: (text: string) => void) => {

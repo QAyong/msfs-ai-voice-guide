@@ -23,6 +23,7 @@
 - [游戏内 POI 读取](docs/specs/spec-022-game-poi-reading.md)
 - [MSFS 探索与桌面窗口改动记录](docs/architecture/msfs-explore-desktop-lessons.md)
 - [MSFS 运行时回归测试矩阵](docs/testing/msfs-runtime-regression-matrix.md)
+- [桌面开发测试最小流程](docs/testing/desktop-development-test-workflow.md)
 - [MSFS CLI 发布物集成](docs/architecture/msfs-cli-release-integration.md)
 - [Windows x64 打包方案 V2](docs/architecture/windows-packaging-v2.md)
 - [1.0.1-rc.2 候选发布说明](docs/releases/1.0.1-rc.2.md)

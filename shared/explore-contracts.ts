@@ -25,6 +25,8 @@ export const exploreConversationMessageSchema = z.object({
   text: z.string().trim().min(1).max(4_000),
 });
 
+export type ExploreConversationMessage = z.infer<typeof exploreConversationMessageSchema>;
+
 export const exploreRequestSchema = z.object({
   recentConversation: z.array(exploreConversationMessageSchema).max(16),
   preferences: explorePreferencesSchema,
@@ -81,3 +83,37 @@ export const exploreResponseSchema = z.discriminatedUnion('ok', [
 export type ExploreResponse = z.infer<typeof exploreResponseSchema>;
 
 export const exploreSuggestionSchema = z.object({ text: z.string().trim().min(2).max(160) });
+
+/**
+ * A private transport marker for the automatic tour narration turn.
+ * The renderer replaces the whole marked message with the localized
+ * "开启介绍" label before it is displayed.
+ */
+export const exploreNarrationPromptMarker = '[[msfs-ai-guide:explore-narration:v1]]';
+
+export const isExploreNarrationPrompt = (value: unknown): value is string =>
+  typeof value === 'string' && value.startsWith(`${exploreNarrationPromptMarker}\n`);
+
+export const exploreNarrationRequestSchema = z.object({
+  recentConversation: z.array(exploreConversationMessageSchema).max(16),
+  scope: z.literal('current_context'),
+  locale: z.enum(['zh-CN', 'en-US']),
+});
+
+export type ExploreNarrationRequest = z.infer<typeof exploreNarrationRequestSchema>;
+
+export const exploreNarrationResponseSchema = z.discriminatedUnion('ok', [
+  z.object({
+    ok: z.literal(true),
+    narrationId: z.string().trim().min(1).max(120),
+    contextId: z.string().trim().min(1).max(120),
+    prompt: z.string().trim().min(1).max(64_000),
+  }),
+  z.object({
+    ok: z.literal(false),
+    code: z.enum(['no_context', 'busy', 'configuration', 'cancelled']),
+    message: z.string().trim().min(1).max(240),
+  }),
+]);
+
+export type ExploreNarrationResponse = z.infer<typeof exploreNarrationResponseSchema>;

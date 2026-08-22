@@ -114,4 +114,20 @@ describe('MsfsExploreContextProvider', () => {
   it('returns unavailable only when all game context sources are unavailable', async () => {
     await expect(provider().get()).resolves.toBeUndefined();
   });
+
+  it('keeps successful MSFS fields when another context read fails', async () => {
+    const partialProvider = new MsfsExploreContextProvider({
+      getFlightSnapshot: async () => snapshot,
+      getLocationContext: async () => {
+        throw new Error('geo provider unavailable');
+      },
+      getRouteBrief: async () => {
+        throw new Error('route provider unavailable');
+      },
+    });
+
+    await expect(partialProvider.get()).resolves.toMatchObject({
+      position: { latitude: 38.351269, longitude: 120.772148 },
+    });
+  });
 });

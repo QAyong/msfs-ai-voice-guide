@@ -9,7 +9,12 @@ import type {
   DiagnosticToolEvent,
 } from '../../../shared/desktop-diagnostics.js';
 import type { GuideSourcesMessage } from '../../../shared/guide-events.js';
-import type { ExploreRequest, ExploreResponse } from '../../../shared/explore-contracts.js';
+import type {
+  ExploreNarrationRequest,
+  ExploreNarrationResponse,
+  ExploreRequest,
+  ExploreResponse,
+} from '../../../shared/explore-contracts.js';
 import type { SourceWindowState } from '../../../shared/source-preview.js';
 import type {
   DesktopSettingsSaveRequest,
@@ -77,6 +82,8 @@ declare global {
       openSourcePreview(preview: GuideSourcesMessage): Promise<boolean>;
       requestExplore(request: ExploreRequest): Promise<ExploreResponse>;
       cancelExplore(): Promise<boolean>;
+      requestExploreNarration(request: ExploreNarrationRequest): Promise<ExploreNarrationResponse>;
+      cancelExploreNarration(): Promise<boolean>;
       prefillExploreSuggestion(text: string): void;
       onExplorePrefillSuggestion(callback: (text: string) => void): () => void;
       getSourceState(): Promise<SourceWindowState | null>;

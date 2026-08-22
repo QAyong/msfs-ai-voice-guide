@@ -18,8 +18,8 @@ import {
   useRpc,
   useSession,
   useSessionMessages,
+  useMultibandTrackVolume,
   useTrackToggle,
-  useTrackVolume,
   type UseSessionReturn,
 } from '@livekit/components-react';
 import { ConnectionState, serializers, TokenSource, Track } from 'livekit-client';
@@ -97,6 +97,7 @@ import {
   explorePreferencesSchema,
   type ExplorePreferences,
   type ExploreVideoPlatform,
+  type ExploreNarrationRequest,
   type ExploreRequest,
 } from '../../../shared/explore-contracts.js';
 import {
@@ -139,10 +140,59 @@ type UtilityDialog = 'settings' | 'quit';
 type BrowserDialog = UtilityDialog | 'end-conversation';
 type ExploreNoticeKind = 'context' | 'error' | 'configuration';
 type ExploreNotice = { kind: ExploreNoticeKind; title: string; description: string };
+type ExploreNarrationPhase = 'idle' | 'preparing' | 'thinking' | 'speaking' | 'completed' | 'error';
 type SettingsTab = 'general' | 'services' | 'msfs' | 'about';
 type SupportedLocale = ExploreLocale;
 
-const visibleGlobalPushToTalkPresetKeys = ['AltLeft', 'F8', 'MouseX1', 'MouseX2'] as const;
+type PushToTalkKeyboardChoice = {
+  code: string;
+  label: string;
+  englishLabel: string;
+  chineseLabel: string;
+  className?: string;
+};
+
+const pushToTalkKeyboardChoices: readonly PushToTalkKeyboardChoice[] = [
+  { code: 'Escape', label: 'Esc', englishLabel: 'Escape key', chineseLabel: 'Esc 键' },
+  { code: 'F1', label: 'F1', englishLabel: 'F1 key', chineseLabel: 'F1 键' },
+  { code: 'F2', label: 'F2', englishLabel: 'F2 key', chineseLabel: 'F2 键' },
+  { code: 'F8', label: 'F8', englishLabel: 'F8 key', chineseLabel: 'F8 键' },
+  { code: 'F12', label: 'F12', englishLabel: 'F12 key', chineseLabel: 'F12 键' },
+  { code: 'KeyQ', label: 'Q', englishLabel: 'Q key', chineseLabel: 'Q 键' },
+  { code: 'KeyW', label: 'W', englishLabel: 'W key', chineseLabel: 'W 键' },
+  { code: 'KeyE', label: 'E', englishLabel: 'E key', chineseLabel: 'E 键' },
+  { code: 'KeyR', label: 'R', englishLabel: 'R key', chineseLabel: 'R 键' },
+  { code: 'KeyT', label: 'T', englishLabel: 'T key', chineseLabel: 'T 键' },
+  {
+    code: 'AltLeft',
+    label: 'Alt',
+    englishLabel: 'Left Alt key',
+    chineseLabel: '左 Alt 键',
+    className: 'push-to-talk-keyboard__key--alt',
+  },
+  {
+    code: 'Space',
+    label: 'Space',
+    englishLabel: 'Space key',
+    chineseLabel: '空格键',
+    className: 'push-to-talk-keyboard__key--space',
+  },
+  { code: 'F9', label: 'F9', englishLabel: 'F9 key', chineseLabel: 'F9 键' },
+  {
+    code: 'ControlRight',
+    label: 'R Ctrl',
+    englishLabel: 'Right Ctrl key',
+    chineseLabel: '右 Ctrl 键',
+    className: 'push-to-talk-keyboard__key--wide',
+  },
+  {
+    code: 'CapsLock',
+    label: 'Caps Lock',
+    englishLabel: 'Caps Lock key',
+    chineseLabel: 'Caps Lock 键',
+    className: 'push-to-talk-keyboard__key--wide',
+  },
+];
 
 const getPushToTalkDisplayKey = (key: string): string => {
   if (key.startsWith('Key')) return key.slice(3);
@@ -211,42 +261,28 @@ const PushToTalkBindingPicker = ({
           role="group"
           aria-label={english ? 'Keyboard choices' : '键盘按键选择'}
         >
-          <span className="push-to-talk-keyboard__blank">Esc</span>
-          <span className="push-to-talk-keyboard__blank">F1</span>
-          <span className="push-to-talk-keyboard__blank">F2</span>
-          <button
-            type="button"
-            className={
-              keyName === 'F8'
-                ? 'push-to-talk-keyboard__key is-active'
-                : 'push-to-talk-keyboard__key'
-            }
-            aria-pressed={keyName === 'F8'}
-            onClick={() => onSelect('F8')}
-          >
-            F8
-          </button>
-          <span className="push-to-talk-keyboard__blank">F12</span>
-          <span className="push-to-talk-keyboard__blank">Q</span>
-          <span className="push-to-talk-keyboard__blank">W</span>
-          <span className="push-to-talk-keyboard__blank">E</span>
-          <span className="push-to-talk-keyboard__blank">R</span>
-          <span className="push-to-talk-keyboard__blank">T</span>
-          <button
-            type="button"
-            className={
-              keyName === 'AltLeft'
-                ? 'push-to-talk-keyboard__key push-to-talk-keyboard__key--alt is-active'
-                : 'push-to-talk-keyboard__key push-to-talk-keyboard__key--alt'
-            }
-            aria-pressed={keyName === 'AltLeft'}
-            onClick={() => onSelect('AltLeft')}
-          >
-            Alt
-          </button>
-          <span className="push-to-talk-keyboard__blank push-to-talk-keyboard__blank--space">
-            Space
-          </span>
+          {pushToTalkKeyboardChoices.map((choice) => {
+            const active = keyName === choice.code;
+            return (
+              <button
+                key={choice.code}
+                type="button"
+                className={[
+                  'push-to-talk-keyboard__key',
+                  choice.className,
+                  active ? 'is-active' : '',
+                ]
+                  .filter(Boolean)
+                  .join(' ')}
+                aria-label={english ? choice.englishLabel : choice.chineseLabel}
+                aria-pressed={active}
+                title={english ? choice.englishLabel : choice.chineseLabel}
+                onClick={() => onSelect(choice.code)}
+              >
+                {choice.label}
+              </button>
+            );
+          })}
           <button type="button" className="push-to-talk-keyboard__custom" onClick={onSelectCustom}>
             {english ? 'Custom' : '自定义'}
           </button>
@@ -506,7 +542,8 @@ const msfsToolDefinitions = [
     zh: '自动驾驶操作',
     en: 'Autopilot actions',
     zhDescription: '允许导游执行受控的自动驾驶操作。默认开启，实机使用前请确认飞机状态。',
-    enDescription: 'Allow controlled autopilot actions. Enabled by default; check the aircraft before use.',
+    enDescription:
+      'Allow controlled autopilot actions. Enabled by default; check the aircraft before use.',
   },
   {
     key: 'searchWeb',
@@ -772,7 +809,7 @@ const SettingsDialog = ({ onClose, preferences, savePreferences }: SettingsDialo
   const [globalPushToTalkStatus, setGlobalPushToTalkStatus] =
     useState<GlobalPushToTalkStatus | null>(null);
   const [customKeyMode, setCustomKeyMode] = useState(
-    () => !visibleGlobalPushToTalkPresetKeys.includes(preferences.globalPushToTalkKey as never),
+    () => !globalPushToTalkPresetKeys.includes(preferences.globalPushToTalkKey as never),
   );
   const [pushToTalkDevice, setPushToTalkDevice] = useState<PushToTalkInputDevice>(() =>
     preferences.globalPushToTalkKey.startsWith('Mouse') ? 'mouse' : 'keyboard',
@@ -1349,7 +1386,7 @@ const SettingsDialog = ({ onClose, preferences, savePreferences }: SettingsDialo
                 keyName={draft.globalPushToTalkKey}
                 onDeviceChange={setPushToTalkDevice}
                 onSelect={(key) => {
-                  setCustomKeyMode(false);
+                  setCustomKeyMode(!globalPushToTalkPresetKeys.includes(key as never));
                   setPushToTalkDevice(key.startsWith('Mouse') ? 'mouse' : 'keyboard');
                   updateDraft('globalPushToTalkKey', key);
                 }}
@@ -2507,6 +2544,9 @@ const AssistantView = ({
   const [textInputError, setTextInputError] = useState('');
   const [exploring, setExploring] = useState(false);
   const [exploreNotice, setExploreNotice] = useState<ExploreNotice | null>(null);
+  const [exploreMenuOpen, setExploreMenuOpen] = useState(false);
+  const [exploreNarrationPhase, setExploreNarrationPhase] = useState<ExploreNarrationPhase>('idle');
+  const [exploreNarrationError, setExploreNarrationError] = useState('');
   const [closingConversation, setClosingConversation] = useState(false);
   const [voiceModeMenuOpen, setVoiceModeMenuOpen] = useState(false);
   const [usedToolsInTurn, setUsedToolsInTurn] = useState(false);
@@ -2534,6 +2574,11 @@ const AssistantView = ({
   const latestAgentMessageIdRef = useRef<string | null>(null);
   const latestAgentMessageTextRef = useRef('');
   const exploreRequestVersionRef = useRef(0);
+  const exploreNarrationRequestVersionRef = useRef(0);
+  const exploreNarrationPendingRef = useRef<{
+    requestVersion: number;
+    assistantMessageIds: Set<string>;
+  } | null>(null);
   const recordedDiagnosticMessagesRef = useRef(new Set<string>());
   const textInputRef = useRef<HTMLTextAreaElement | null>(null);
   const agent = useAgent();
@@ -2550,6 +2595,15 @@ const AssistantView = ({
         continuousConversation: 'Continuous conversation',
         endContinuousConversation: 'End continuous conversation',
         explore: 'Explore',
+        openEncyclopedia: 'Open encyclopedia',
+        startIntroduction: 'Start introduction',
+        stopIntroduction: 'Stop introduction',
+        introductionPreparing: 'Preparing introduction…',
+        introductionThinking: 'Preparing the tour…',
+        introductionSpeaking: 'Giving the tour…',
+        introductionCompleted: 'Introduction complete',
+        introductionBusy: 'Finish the current reply before starting an introduction.',
+        introductionUnavailable: 'The introduction could not be started. Try again.',
         exploring: 'Exploring…',
         exploreConfigurationDescription: 'Check the service configuration, then try again.',
         exploreConfigurationTitle: 'Explore needs setup',
@@ -2597,6 +2651,15 @@ const AssistantView = ({
         continuousConversation: '连续对话',
         endContinuousConversation: '结束连续对话',
         explore: '探索',
+        openEncyclopedia: '打开百科',
+        startIntroduction: '开启介绍',
+        stopIntroduction: '停止介绍',
+        introductionPreparing: '正在准备介绍…',
+        introductionThinking: '正在准备导游讲解…',
+        introductionSpeaking: '正在进行导游介绍…',
+        introductionCompleted: '介绍已完成',
+        introductionBusy: '请先等待当前回答结束，再开启介绍。',
+        introductionUnavailable: '介绍暂时无法开始，请重试。',
         exploring: '正在探索…',
         exploreConfigurationDescription: '请检查服务配置后重试。',
         exploreConfigurationTitle: '探索需要完成配置',
@@ -2649,12 +2712,33 @@ const AssistantView = ({
     publishOptions,
     onDeviceError: (error) => setMicrophoneError(error.message),
   });
-  const microphoneLevel = useTrackVolume(session.local.microphoneTrack);
+  const microphoneBands = useMultibandTrackVolume(session.local.microphoneTrack, {
+    bands: 7,
+    loPass: 0,
+    hiPass: 600,
+    updateInterval: 32,
+  });
+  const microphoneBandAverage =
+    microphoneBands.length === 0
+      ? 0
+      : microphoneBands.reduce((sum, band) => sum + band, 0) / microphoneBands.length;
+  const microphoneBandPeak = Math.max(0, ...microphoneBands);
+  const microphoneVisualLevel = Math.min(
+    1,
+    Math.max(0, (microphoneBandPeak * 0.7 + microphoneBandAverage * 0.3 - 0.04) * 1.45),
+  );
   const continuousActive = preferences.voiceInputMode === 'continuous' && microphone.enabled;
 
   const displayMessages = useMemo(
-    () => createDisplayMessages(messages, session.room.localParticipant.identity, sourcesByMessage),
-    [messages, session.room.localParticipant.identity, sourcesByMessage],
+    () =>
+      createDisplayMessages(
+        messages,
+        session.room.localParticipant.identity,
+        sourcesByMessage,
+        8,
+        copy.startIntroduction,
+      ),
+    [copy.startIntroduction, messages, session.room.localParticipant.identity, sourcesByMessage],
   );
   const exploreConversation = useMemo(
     () =>
@@ -2663,8 +2747,9 @@ const AssistantView = ({
         session.room.localParticipant.identity,
         sourcesByMessage,
         16,
+        copy.startIntroduction,
       ).map(({ id, role, text }) => ({ id, role, text })),
-    [messages, session.room.localParticipant.identity, sourcesByMessage],
+    [copy.startIntroduction, messages, session.room.localParticipant.identity, sourcesByMessage],
   );
 
   useEffect(() => {
@@ -2800,6 +2885,42 @@ const AssistantView = ({
   const userState = isGuideUserState(userStateValue) ? userStateValue : undefined;
   const toolActivityValue = agent.attributes[guideVoiceAttributes.toolActivity];
   const toolActivity = isGuideToolActivity(toolActivityValue) ? toolActivityValue : undefined;
+  const exploreNarrationInProgress =
+    exploreNarrationPhase === 'preparing' ||
+    exploreNarrationPhase === 'thinking' ||
+    exploreNarrationPhase === 'speaking';
+
+  useEffect(() => {
+    const pending = exploreNarrationPendingRef.current;
+    if (!pending) return;
+    if (agent.state === 'speaking' || userState === 'speaking') {
+      setExploreNarrationPhase('speaking');
+      return;
+    }
+    if (agent.state === 'thinking') {
+      setExploreNarrationPhase('thinking');
+      return;
+    }
+    const hasNewAssistantMessage = displayMessages.some(
+      (message) => message.role === 'assistant' && !pending.assistantMessageIds.has(message.id),
+    );
+    if (hasNewAssistantMessage) {
+      exploreNarrationPendingRef.current = null;
+      setExploreNarrationPhase('completed');
+    }
+  }, [agent.state, displayMessages, userState]);
+
+  useEffect(() => {
+    if (!exploreNarrationInProgress) return;
+    const requestVersion = exploreNarrationRequestVersionRef.current;
+    const timeout = window.setTimeout(() => {
+      if (requestVersion !== exploreNarrationRequestVersionRef.current) return;
+      exploreNarrationPendingRef.current = null;
+      setExploreNarrationPhase('error');
+      setExploreNarrationError(copy.introductionUnavailable);
+    }, 90_000);
+    return () => window.clearTimeout(timeout);
+  }, [copy.introductionUnavailable, exploreNarrationInProgress]);
 
   useEffect(() => {
     if (userState === 'speaking') setUsedToolsInTurn(false);
@@ -2946,6 +3067,93 @@ const AssistantView = ({
     exploreConversation,
     exploring,
     preferences,
+  ]);
+
+  const stopExploreNarration = useCallback(async () => {
+    exploreNarrationRequestVersionRef.current += 1;
+    exploreNarrationPendingRef.current = null;
+    setExploreNarrationPhase('idle');
+    setExploreNarrationError('');
+    await Promise.all([
+      window.desktop?.cancelExploreNarration() ?? Promise.resolve(false),
+      agent.identity
+        ? performGuideRpc(guideVoiceRpc.cancelNarration).catch(() => undefined)
+        : Promise.resolve(),
+    ]);
+  }, [agent.identity, performGuideRpc]);
+
+  const requestExploreNarration = useCallback(async () => {
+    if (
+      !window.desktop ||
+      exploring ||
+      isSendingText ||
+      exploreNarrationInProgress ||
+      microphone.enabled ||
+      continuousActive
+    ) {
+      if (!exploring && !exploreNarrationInProgress) {
+        setExploreNarrationPhase('error');
+        setExploreNarrationError(copy.introductionBusy);
+      }
+      return;
+    }
+    if (!agent.isConnected) {
+      setExploreNarrationPhase('error');
+      setExploreNarrationError(copy.guideNotInSession);
+      return;
+    }
+
+    const requestVersion = ++exploreNarrationRequestVersionRef.current;
+    setExploreMenuOpen(false);
+    setExploreNarrationPhase('preparing');
+    setExploreNarrationError('');
+    try {
+      const request: ExploreNarrationRequest = {
+        recentConversation: exploreConversation,
+        scope: 'current_context',
+        locale: preferences.locale,
+      };
+      const result = await window.desktop.requestExploreNarration(request);
+      if (requestVersion !== exploreNarrationRequestVersionRef.current) return;
+      if (!result.ok) {
+        if (result.code === 'cancelled') {
+          setExploreNarrationPhase('idle');
+          return;
+        }
+        setExploreNarrationPhase('error');
+        setExploreNarrationError(result.message || copy.introductionUnavailable);
+        return;
+      }
+
+      const assistantMessageIds = new Set(
+        displayMessages
+          .filter((message) => message.role === 'assistant')
+          .map((message) => message.id),
+      );
+      await sendText(result.prompt);
+      if (requestVersion !== exploreNarrationRequestVersionRef.current) return;
+      exploreNarrationPendingRef.current = { requestVersion, assistantMessageIds };
+      setExploreNarrationPhase('thinking');
+    } catch {
+      if (requestVersion !== exploreNarrationRequestVersionRef.current) return;
+      exploreNarrationPendingRef.current = null;
+      setExploreNarrationPhase('error');
+      setExploreNarrationError(copy.introductionUnavailable);
+    }
+  }, [
+    agent.isConnected,
+    continuousActive,
+    copy.guideNotInSession,
+    copy.introductionBusy,
+    copy.introductionUnavailable,
+    displayMessages,
+    exploreConversation,
+    exploreNarrationInProgress,
+    exploring,
+    isSendingText,
+    microphone.enabled,
+    preferences.locale,
+    sendText,
   ]);
 
   useEffect(() => {
@@ -3284,10 +3492,16 @@ const AssistantView = ({
     exploreRequestVersionRef.current += 1;
     setExploring(false);
     setExploreNotice(null);
+    exploreNarrationRequestVersionRef.current += 1;
+    exploreNarrationPendingRef.current = null;
+    setExploreNarrationPhase('idle');
+    setExploreNarrationError('');
     void window.desktop?.cancelExplore();
+    void window.desktop?.cancelExploreNarration();
     try {
       if (preferences.voiceInputMode === 'push_to_talk') await finishPushToTalk(true);
       else await microphone.toggle(false);
+      await performGuideRpc(guideVoiceRpc.cancelNarration).catch(() => undefined);
       await performGuideRpc(guideVoiceRpc.suspendVoice).catch(() => undefined);
       await endSession();
     } catch (error) {
@@ -3300,6 +3514,7 @@ const AssistantView = ({
       setTextDraft('');
       setTextInputError('');
       setUsedToolsInTurn(false);
+      setExploreMenuOpen(false);
       setClosingConversation(false);
     }
     await changeCollapsed(true);
@@ -3315,6 +3530,7 @@ const AssistantView = ({
   const requestCloseConversation = () => {
     const hasActiveTurn =
       exploring ||
+      exploreNarrationInProgress ||
       microphone.enabled ||
       voiceTransitioning ||
       toolActivity === 'calling' ||
@@ -3441,17 +3657,77 @@ const AssistantView = ({
     <main className="assistant-card">
       <header className="drag-bar">
         <span className="header-leading-controls no-drag">
-          <span className="header-explore-control">
+          <span
+            className="header-explore-control"
+            onBlur={(event) => {
+              if (!event.currentTarget.contains(event.relatedTarget)) setExploreMenuOpen(false);
+            }}
+          >
             <button
               type="button"
-              className={`header-icon-button header-explore-button ${exploring ? 'is-exploring' : ''} ${exploreNotice ? `has-${exploreNotice.kind}-notice` : ''}`}
+              className={`header-icon-button header-explore-button ${exploring ? 'is-exploring' : ''} ${exploreNarrationInProgress ? 'is-introducing' : ''} ${exploreNotice ? `has-${exploreNotice.kind}-notice` : ''}`}
               aria-label={exploring ? copy.exploring : copy.explore}
-              disabled={exploring}
-              onClick={() => void requestExplore()}
+              aria-haspopup="menu"
+              aria-expanded={exploreMenuOpen}
+              disabled={exploring || closingConversation}
+              onClick={() => setExploreMenuOpen((open) => !open)}
               title={exploring ? copy.exploring : copy.explore}
             >
               <CompassIcon className="explore-compass" size={19} aria-hidden="true" />
             </button>
+            {exploreMenuOpen ? (
+              <div
+                className="explore-action-menu"
+                role="menu"
+                aria-label={english ? 'Explore actions' : '探索操作'}
+              >
+                <button
+                  type="button"
+                  role="menuitem"
+                  disabled={exploring}
+                  onClick={() => {
+                    setExploreMenuOpen(false);
+                    void requestExplore();
+                  }}
+                >
+                  <BookOpenIcon size={16} weight="duotone" aria-hidden="true" />
+                  <span>{copy.openEncyclopedia}</span>
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() =>
+                    exploreNarrationInProgress
+                      ? void stopExploreNarration()
+                      : void requestExploreNarration()
+                  }
+                >
+                  {exploreNarrationInProgress ? (
+                    <StopIcon size={16} weight="bold" aria-hidden="true" />
+                  ) : (
+                    <SparkleIcon size={16} weight="duotone" aria-hidden="true" />
+                  )}
+                  <span>
+                    {exploreNarrationPhase === 'preparing'
+                      ? copy.introductionPreparing
+                      : exploreNarrationPhase === 'thinking'
+                        ? copy.introductionThinking
+                        : exploreNarrationPhase === 'speaking'
+                          ? copy.introductionSpeaking
+                          : exploreNarrationInProgress
+                            ? copy.stopIntroduction
+                            : exploreNarrationPhase === 'completed'
+                              ? copy.introductionCompleted
+                              : copy.startIntroduction}
+                  </span>
+                </button>
+                {exploreNarrationError ? (
+                  <small className="explore-action-menu-error" role="status">
+                    {exploreNarrationError}
+                  </small>
+                ) : null}
+              </div>
+            ) : null}
             {exploreNotice ? (
               <span
                 className={`explore-notice explore-notice--${exploreNotice.kind}`}
@@ -3833,11 +4109,13 @@ const AssistantView = ({
                 aria-hidden="true"
               />
               <span className="voice-level" aria-hidden="true">
-                {[0.72, 1, 0.84, 0.62, 0.46].map((weight, index) => (
+                {[0.42, 0.64, 0.82, 1, 0.82, 0.64, 0.42].map((weight, index) => (
                   <span
                     key={index}
                     className="voice-level-bar"
-                    style={{ transform: `scaleY(${0.16 + microphoneLevel * weight * 0.84})` }}
+                    style={{
+                      transform: `scaleY(${0.08 + microphoneVisualLevel * weight * 0.82})`,
+                    }}
                   />
                 ))}
               </span>

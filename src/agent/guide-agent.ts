@@ -11,6 +11,7 @@ import {
   guideTurnDetection,
   type VoiceInputMode,
 } from '../../shared/voice-control.js';
+import { isExploreNarrationPrompt } from '../../shared/explore-contracts.js';
 import { loadConfig } from '../config/schema.js';
 import { createGuideInstructions, type GuideLocale } from '../conversation/guide-instructions.js';
 import { MsfsCliClient } from '../msfs/cli-client.js';
@@ -36,6 +37,20 @@ export function composeGuideTools(
   searchTool?: llm.ToolContextEntry,
 ): readonly llm.ToolContextEntry[] {
   return [...msfsTools, ...(searchTool ? [searchTool] : [])];
+}
+
+/**
+ * Keeps the ordinary text path intact while making the hidden narration turn
+ * an explicit no-tool generation at the LiveKit AgentSession boundary.
+ */
+export function createGuideTextInputCallback(): voice.TextInputCallback {
+  return (session, event) => {
+    session.interrupt();
+    session.generateReply({
+      userInput: event.text,
+      ...(isExploreNarrationPrompt(event.text) ? { toolChoice: 'none' as const } : {}),
+    });
+  };
 }
 
 type ToolActivityObserver = {
@@ -182,6 +197,10 @@ export default defineAgent({
       setInputMode('push_to_talk');
       return 'ok';
     });
+    participant?.registerRpcMethod(guideVoiceRpc.cancelNarration, async () => {
+      await session.interrupt({ force: true }).await;
+      return 'ok';
+    });
     participant?.registerRpcMethod(guideVoiceRpc.suspendVoice, async () => {
       session.input.setAudioEnabled(false);
       session.output.setAudioEnabled(false);
@@ -249,6 +268,7 @@ export default defineAgent({
     await session.start({
       room: ctx.room,
       agent: createGuideAgent(tools, locale),
+      inputOptions: { textInputCallback: createGuideTextInputCallback() },
     });
     session.input.setAudioEnabled(false);
     publishVoiceAttributes({

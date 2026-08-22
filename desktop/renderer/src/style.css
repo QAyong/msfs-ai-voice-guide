@@ -134,6 +134,57 @@ button {
 .header-explore-button.is-exploring .explore-compass {
   animation: explore-compass-spin 2.2s linear infinite;
 }
+.header-explore-button.is-introducing {
+  background: #fff7e8;
+  color: #9a651b;
+}
+.explore-action-menu {
+  position: absolute;
+  top: calc(100% + 7px);
+  left: 0;
+  z-index: 13;
+  display: grid;
+  width: max-content;
+  min-width: 0;
+  gap: 2px;
+  padding: 5px;
+  border: 1px solid rgba(33, 58, 96, 0.13);
+  border-radius: 10px;
+  background: rgba(253, 254, 255, 0.99);
+  box-shadow: 0 10px 28px rgba(38, 58, 88, 0.18);
+}
+.explore-action-menu button {
+  display: grid;
+  min-height: 34px;
+  grid-template-columns: 20px minmax(0, 1fr);
+  align-items: center;
+  gap: 7px;
+  border: 0;
+  border-radius: 7px;
+  padding: 0 8px;
+  background: transparent;
+  color: #46556a;
+  cursor: pointer;
+  font-size: 11px;
+  text-align: left;
+  white-space: nowrap;
+}
+.explore-action-menu button:hover:not(:disabled) {
+  background: #eef4ff;
+  color: #2454a4;
+}
+.explore-action-menu button:disabled {
+  cursor: wait;
+  opacity: 0.52;
+}
+.explore-action-menu-error {
+  display: block;
+  border-top: 1px solid #edf1f7;
+  padding: 6px 7px 3px;
+  color: #a63d36;
+  font-size: 10px;
+  line-height: 1.35;
+}
 .explore-progress {
   position: absolute;
   right: 0;
@@ -692,7 +743,7 @@ button {
   width: 100%;
   height: 38px;
   grid-template-columns: minmax(0, 1fr) 34px;
-  align-items: stretch;
+  align-items: center;
   overflow: hidden;
   border: 1px solid #c6d9ff;
   border-radius: 10px;
@@ -852,8 +903,8 @@ button {
 .voice-level {
   display: flex;
   width: 0;
-  height: 18px;
-  align-items: stretch;
+  height: 22px;
+  align-items: center;
   gap: 2px;
   overflow: hidden;
   opacity: 0;
@@ -864,18 +915,22 @@ button {
 .voice-level-bar {
   width: 3px;
   flex: 0 0 3px;
+  height: 100%;
   border-radius: 999px;
   background: currentColor;
   transform-origin: center;
-  transition: transform 70ms linear;
+  transition: transform 80ms linear;
 }
 .voice-button--listening .voice-level {
-  width: 23px;
-  opacity: 0.92;
+  width: 33px;
+  opacity: 1;
+}
+.voice-button--listening .voice-level-bar {
+  box-shadow: 0 0 4px currentColor;
 }
 .voice-button--requesting .voice-level {
-  width: 23px;
-  opacity: 0.72;
+  width: 33px;
+  opacity: 0.82;
   animation: voice-level-pulse 900ms ease-in-out infinite alternate;
 }
 .voice-label {
@@ -1544,26 +1599,38 @@ button {
   border-radius: 7px;
   background: #e9eef5;
 }
-.push-to-talk-keyboard__blank,
 .push-to-talk-keyboard__key,
 .push-to-talk-keyboard__custom {
   display: grid;
   min-width: 0;
   min-height: 27px;
   place-items: center;
+  padding: 0;
   border: 1px solid #c6d0dc;
   border-bottom-width: 2px;
   border-radius: 4px;
   background: #fff;
-  color: #758398;
+  color: #42546c;
   font-family: 'Cascadia Mono', Consolas, monospace;
   font-size: 9px;
   font-weight: 700;
 }
 .push-to-talk-keyboard__key,
 .push-to-talk-keyboard__custom {
-  color: #42546c;
   cursor: pointer;
+  transition:
+    border-color 120ms ease,
+    background-color 120ms ease,
+    transform 120ms ease;
+}
+.push-to-talk-keyboard__key:hover,
+.push-to-talk-keyboard__custom:hover {
+  border-color: #8da2bf;
+  background: #f7faff;
+}
+.push-to-talk-keyboard__key:active,
+.push-to-talk-keyboard__custom:active {
+  transform: translateY(1px);
 }
 .push-to-talk-keyboard__key.is-active,
 .push-to-talk-mouse__side.is-active {
@@ -1575,7 +1642,8 @@ button {
 .push-to-talk-keyboard__key--alt {
   grid-column: span 2;
 }
-.push-to-talk-keyboard__blank--space {
+.push-to-talk-keyboard__key--space,
+.push-to-talk-keyboard__key--wide {
   grid-column: span 2;
 }
 .push-to-talk-keyboard__custom {
