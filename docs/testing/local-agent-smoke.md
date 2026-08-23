@@ -83,10 +83,11 @@ MSFS_AUTO_START_LIVEKIT=true
 2. 检查 `release-v2/runtime-validation-report.json`，确认安装态依赖、`utilityProcess`、CLI 和 daemon 校验成功。
 3. 完全退出旧应用，运行 Setup；若出现“应用无法关闭”，先确认系统托盘或后台没有主应用进程，而不只是关闭聊天窗口。
 4. 全新用户数据目录首次启动时，确认 App ID、API Key 和 Access Token 输入框为空，不出现开发者密钥、示例值、`your_deepseek_api_key` 或“已配置”。
-5. 保存服务配置并重启应用，确认所有凭据字段默认显示密码圆点；点击每个字段的小眼睛能够显示本机真实值，再次点击恢复遮罩。App ID 与 API Key、Access Token 使用相同规则。
-6. 打开探索页：只有 DeepSeek 未配置时才显示探索规划配置提示；STT/TTS 或 MSFS 不可用不应被误报为探索规划未配置。
-7. 启动 MSFS 后检测 CLI 与 Bridge，退出应用后确认 `msfsd.exe`、Agent 和本地 LiveKit 都已停止。
-8. 覆盖安装更高版本并重复第 4～7 步；随后按“开发版本与应用版本切换回归”验证 Bridge。
+5. 在服务未配置的聊天面板中，确认显示“未配置服务，请配置服务”；点击“打开设置”后确认打开应用内设置面板，不调用系统默认程序打开 `.env`。
+6. 保存服务配置并重启应用，确认所有凭据字段默认显示密码圆点；点击每个字段的小眼睛能够显示本机真实值，再次点击恢复遮罩。App ID 与 API Key、Access Token 使用相同规则。
+7. 打开探索页：只有 DeepSeek 未配置时才显示探索规划配置提示；STT/TTS 或 MSFS 不可用不应被误报为探索规划未配置。
+8. 启动 MSFS 后检测 CLI 与 Bridge，退出应用后确认 `msfsd.exe`、Agent 和本地 LiveKit 都已停止。
+9. 覆盖安装更高版本并重复第 4～8 步；随后按“开发版本与应用版本切换回归”验证 Bridge。
 
 通过标准：安装目录没有完整外置 `node_modules`；设置保存、Agent 启动、探索降级、CLI 状态、Bridge 更新和进程退出均正常；安装耗时需单独记录，超过 2 分钟不得作为候选发布版。
 

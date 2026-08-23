@@ -2618,7 +2618,7 @@ const AssistantView = ({
         messageInput: 'Text input',
         micUnavailable: 'Microphone unavailable',
         newMessages: 'New messages',
-        openConfiguration: 'Open configuration file',
+        openSettings: 'Open settings',
         pressToTalk: 'Hold to talk',
         recentConversation: 'Recent conversation',
         reconnect: 'Retry',
@@ -2674,7 +2674,7 @@ const AssistantView = ({
         messageInput: '文字输入',
         micUnavailable: '麦克风不可用',
         newMessages: '新消息',
-        openConfiguration: '打开配置文件',
+        openSettings: '打开设置',
         pressToTalk: '按住说话',
         recentConversation: '最近对话',
         reconnect: '重新检测',
@@ -3831,8 +3831,8 @@ const AssistantView = ({
               ))}
               <div className="readiness-actions">
                 {readiness?.status === 'setup_required' ? (
-                  <button type="button" onClick={() => void window.desktop?.openConfiguration()}>
-                    {copy.openConfiguration}
+                  <button type="button" onClick={() => void window.desktop?.openSettings()}>
+                    {copy.openSettings}
                   </button>
                 ) : null}
                 <button type="button" onClick={() => void retry()}>
