@@ -86,7 +86,7 @@ pnpm desktop:package
 
 V2 不复制开发目录的 `node_modules`，也不在 `win-unpacked` 生成后追加依赖。构建先用独立的 `@xiaoxiao/desktop-runtime` 生成最小生产锁文件，再在 `release-v2/app` 中建立物理依赖树，最后一次性写入 `app.asar`。只有 RTC、Sharp 等原生二进制按需进入 `app.asar.unpacked`。打包过程会按指纹复用未变化的 global-ptt、MSFS CLI 快照、LiveKit、TTS 和生产依赖；PTT 复用前会校验二进制哈希，生产依赖缓存会校验 Node/平台环境；主进程、Preload、Renderer、Agent JavaScript 及最终安装器仍会重新生成。CLI/WASM 源码修改后必须先生成新的发布快照再打包。打包后会实际验证 LiveKit Agent、OpenAI 插件、RTC、Zod、WebSocket、Sharp、Electron `utilityProcess`、MSFS CLI status/daemon stop 和 Bridge 哈希，任何一步失败都不会生成候选安装包。
 
-如果只是修改了 CLI 或 Agent 代码，也需要重新执行 `pnpm desktop:package` 生成新版本；不要向 `release-v2` 手动复制依赖。安装包固定包含打包当时的 CLI、daemon、SimConnect DLL 和 Bridge 快照，并用 `component-manifest.json` 记录 SHA-256 与协议主版本。
+如果修改了 CLI C++，先执行 `pnpm msfs:native:build` 生成带源码提交、源码指纹和二进制哈希的 `build-metadata.json`，再执行 `pnpm msfs:release:snapshot release-inputs/<build-id>` 自动生成新的完整发布快照；只执行 `pnpm desktop:package` 不会编译或更新发布态 CLI。发布脚本会拒绝旧快照、缺少构建清单的快照和与当前 native 源码不匹配的快照。不要向 `release-v2` 手动复制依赖。安装包固定包含打包当时的 CLI、daemon、SimConnect DLL 和 Bridge 快照，并用 `component-manifest.json` 记录 SHA-256 与协议主版本。
 
 当前候选包还会在打包时生成 `out/msfs/geo-config.json`，安装后由主进程和 Agent Worker 自动加载 Geo Cloud 配置，测试者不需要手动填写。该测试方案会把 Geo Cloud API Key 放入安装资源，拿到安装包的人理论上可以提取；其他模型、语音、搜索和 LiveKit 凭据不随包分发。
 

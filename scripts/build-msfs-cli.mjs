@@ -1,7 +1,12 @@
 import { existsSync } from 'node:fs';
 import { spawn, spawnSync } from 'node:child_process';
+import { writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import process from 'node:process';
+import {
+  MSFS_CLI_BUILD_METADATA_FILE,
+  createMsfsCliBuildMetadata,
+} from './msfs-cli-build-metadata.mjs';
 
 const projectRoot = resolve(import.meta.dirname, '..');
 const sourceDirectory = resolve(projectRoot, 'native', 'msfs-cli');
@@ -124,4 +129,12 @@ if (!existsSync(resolve(buildDirectory, 'CMakeCache.txt'))) {
 }
 
 await run(['--build', buildDirectory, '--config', 'Release']);
-process.stdout.write(`MSFS CLI native build completed: ${buildDirectory}\n`);
+const metadata = await createMsfsCliBuildMetadata({ projectRoot, buildDirectory });
+await writeFile(
+  resolve(buildDirectory, MSFS_CLI_BUILD_METADATA_FILE),
+  `${JSON.stringify(metadata, null, 2)}\n`,
+  'utf8',
+);
+process.stdout.write(
+  `MSFS CLI native build completed: ${buildDirectory} (${metadata.source.commit.slice(0, 12)})\n`,
+);

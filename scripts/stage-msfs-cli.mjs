@@ -2,6 +2,10 @@ import { createHash } from 'node:crypto';
 import { access, copyFile, mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { dirname, isAbsolute, relative, resolve } from 'node:path';
 import process from 'node:process';
+import {
+  MSFS_CLI_BUILD_METADATA_FILE,
+  validateMsfsCliBuildMetadata,
+} from './msfs-cli-build-metadata.mjs';
 
 const projectRoot = resolve(import.meta.dirname, '..');
 try {
@@ -94,6 +98,8 @@ const optionalFiles = ['SimConnect.dll'];
 const communityFiles = ['manifest.json', 'layout.json', 'modules/msfs-route-bridge.wasm'];
 const comparePaths = (left, right) => left.localeCompare(right);
 
+if (releaseBuild) requiredFiles.push(MSFS_CLI_BUILD_METADATA_FILE);
+
 const isWithin = (child, parent) => {
   const relativePath = relative(parent, child);
   return relativePath === '' || (!relativePath.startsWith('..') && !isAbsolute(relativePath));
@@ -132,6 +138,18 @@ if (strict) {
   }
 }
 
+if (releaseBuild) {
+  const metadata = await validateMsfsCliBuildMetadata({
+    projectRoot,
+    metadataPath: resolve(sourceDirectory, MSFS_CLI_BUILD_METADATA_FILE),
+    buildDirectory: sourceDirectory,
+    requireSimConnect: true,
+  });
+  process.stdout.write(
+    `Validated MSFS CLI release snapshot ${metadata.source.commit.slice(0, 12)} from ${sourceDirectory}\n`,
+  );
+}
+
 let communityPackageReady = true;
 for (const file of communityFiles) {
   try {
@@ -161,6 +179,12 @@ for (const file of optionalFiles) {
       .catch(() => false)
   ) {
     sourceFiles.push({ source: resolve(sourceDirectory, file), path: file });
+  }
+}
+if (!releaseBuild) {
+  const metadataPath = resolve(sourceDirectory, MSFS_CLI_BUILD_METADATA_FILE);
+  if (await access(metadataPath).then(() => true).catch(() => false)) {
+    sourceFiles.push({ source: metadataPath, path: MSFS_CLI_BUILD_METADATA_FILE });
   }
 }
 if (communityPackageReady) {
@@ -235,6 +259,13 @@ for (const target of targets) {
     } catch {
       // Development builds may rely on an SDK-local SimConnect installation.
     }
+  }
+  if (!releaseBuild && sourceFiles.some((file) => file.path === MSFS_CLI_BUILD_METADATA_FILE)) {
+    await copyFile(
+      resolve(sourceDirectory, MSFS_CLI_BUILD_METADATA_FILE),
+      resolve(target, MSFS_CLI_BUILD_METADATA_FILE),
+    );
+    copiedFiles.push(MSFS_CLI_BUILD_METADATA_FILE);
   }
 
   if (communityPackageReady) {

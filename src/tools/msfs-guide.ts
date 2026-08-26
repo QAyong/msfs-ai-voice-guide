@@ -57,7 +57,7 @@ export function createMsfsGuideTools(
     llm.tool({
       name: 'setAutopilot',
       description:
-        '执行受控的 MSFS 自动驾驶操作，包括 AP、FD、HDG、NAV、ALT、VS、FLC 和目标参数。只有用户已经明确要求执行时才调用；如果用户只是询问能否设置、想了解方案或缺少关键参数，不要调用。工具会在内部检查当前飞机能力，只使用白名单事件，执行后读取实际状态；能力未知或不支持时不会写入模拟器。',
+        '执行受控的 MSFS 自动驾驶操作，包括 AP、FD、HDG、NAV、ALT、VS、FLC 和目标参数。只有用户已经明确要求执行时才调用；如果用户只是询问能否设置、想了解方案或缺少关键参数，不要调用。工具会在内部检查当前飞机能力，只使用白名单事件，执行后读取实际状态；能力未知或不支持时不会写入模拟器。如果结果说明当前飞机未提供或未确认某项能力，必须向用户解释为“当前飞机不支持或尚未确认该功能”，不要笼统说成自动驾驶操作失败，也不要继续尝试同一功能。',
       parameters: setAutopilotInputSchema,
       execute: async (args, { abortSignal }) => service.setAutopilot(args, abortSignal),
     }),

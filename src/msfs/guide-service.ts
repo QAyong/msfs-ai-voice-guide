@@ -310,6 +310,31 @@ export const autopilotStateSchema = z.object({
 export const autopilotStateResultSchema = z.union([autopilotStateSchema, msfsUnavailableSchema]);
 export type AutopilotStateResult = z.infer<typeof autopilotStateResultSchema>;
 export type AutopilotState = z.infer<typeof autopilotStateSchema>;
+type AutopilotCapability = keyof AutopilotState['capabilities'];
+
+const autopilotCapabilityLabels: Record<AutopilotCapability, string> = {
+  autopilot: '自动驾驶',
+  flightDirector: '飞行指引',
+  heading: 'HDG 航向模式',
+  navigation: 'NAV 导航模式',
+  altitude: 'ALT 高度保持',
+  verticalSpeed: 'VS 垂直速度模式',
+  flightLevelChange: 'FLC 高度层改变',
+};
+
+const stateWithUnsupportedCapabilities = (
+  state: AutopilotState,
+  capabilities: Iterable<AutopilotCapability>,
+): AutopilotState =>
+  autopilotStateSchema.parse({
+    ...state,
+    capabilities: {
+      ...state.capabilities,
+      ...Object.fromEntries(
+        [...new Set(capabilities)].map((capability) => [capability, 'unsupported']),
+      ),
+    },
+  });
 
 const autopilotActionStepSchema = z.object({
   operation: z.string().min(1),
@@ -713,6 +738,7 @@ export class MsfsGuideService {
 
     type Action = {
       operation: string;
+      capability?: AutopilotCapability;
       event?: string;
       data?: readonly number[];
       inputEventName?: string;
@@ -725,6 +751,7 @@ export class MsfsGuideService {
     if (request.ap !== undefined) {
       actions.push({
         operation: request.ap ? '打开自动驾驶' : '关闭自动驾驶',
+        capability: 'autopilot',
         event: 'AP_MASTER',
         inputEventName: 'AUTOPILOT_AP_MASTER',
         inputEventValue: 1,
@@ -734,6 +761,7 @@ export class MsfsGuideService {
     if (request.fd !== undefined) {
       actions.push({
         operation: request.fd ? '打开飞行指引' : '关闭飞行指引',
+        capability: 'flightDirector',
         event: 'TOGGLE_FLIGHT_DIRECTOR',
         inputEventName: 'AUTOPILOT_FLIGHT_DIRECTOR',
         inputEventValue: 1,
@@ -743,12 +771,14 @@ export class MsfsGuideService {
     if (request.lateralMode === 'HDG') {
       actions.push({
         operation: '切换到 HDG 航向模式',
+        capability: 'heading',
         event: 'AP_PANEL_HEADING_ON',
         shouldSend: (state) => !state.active.heading,
       });
     } else if (request.lateralMode === 'NAV') {
       actions.push({
         operation: '切换到 NAV 导航模式',
+        capability: 'navigation',
         event: 'AP_NAV1_HOLD_ON',
         shouldSend: (state) => !state.active.navigation,
       });
@@ -756,18 +786,21 @@ export class MsfsGuideService {
     if (request.verticalMode === 'ALT') {
       actions.push({
         operation: '切换到 ALT 高度保持模式',
+        capability: 'altitude',
         event: 'AP_PANEL_ALTITUDE_ON',
         shouldSend: (state) => !state.active.altitude,
       });
     } else if (request.verticalMode === 'VS') {
       actions.push({
         operation: '切换到 VS 垂直速度模式',
+        capability: 'verticalSpeed',
         event: 'AP_VS_ON',
         shouldSend: (state) => !state.active.verticalSpeed,
       });
     } else if (request.verticalMode === 'FLC') {
       actions.push({
         operation: '切换到 FLC 高度层改变模式',
+        capability: 'flightLevelChange',
         event: 'FLIGHT_LEVEL_CHANGE_ON',
         shouldSend: (state) => !state.active.flightLevelChange,
       });
@@ -847,10 +880,17 @@ export class MsfsGuideService {
         this.rememberFailure(eventResult);
         steps.push({ operation: action.operation, status: 'failed' });
         const afterFailure = await this.getAutopilotStatus(signal);
-        const state = afterFailure.status === 'ok' ? afterFailure : undefined;
+        const state =
+          afterFailure.status === 'ok' && action.capability
+            ? stateWithUnsupportedCapabilities(afterFailure, [action.capability])
+            : afterFailure.status === 'ok'
+              ? afterFailure
+              : undefined;
         return response(
           sentCount > 0 ? 'partial' : 'rejected',
-          `自动驾驶操作在“${action.operation}”处失败，未继续执行后续设置。`,
+          action.capability
+            ? `当前飞机未提供或未确认支持${autopilotCapabilityLabels[action.capability]}，未执行“${action.operation}”后的后续设置。`
+            : `自动驾驶操作在“${action.operation}”处失败，未继续执行后续设置。`,
           state,
         );
       }
@@ -869,26 +909,31 @@ export class MsfsGuideService {
     const after = current;
 
     const verificationFailures: string[] = [];
+    const verificationCapabilityFailures = new Set<AutopilotCapability>();
+    const addVerificationFailure = (label: string, capability?: AutopilotCapability) => {
+      verificationFailures.push(label);
+      if (capability) verificationCapabilityFailures.add(capability);
+    };
     if (request.ap !== undefined && after.active.autopilot !== request.ap) {
-      verificationFailures.push('自动驾驶总开关');
+      addVerificationFailure('自动驾驶总开关', 'autopilot');
     }
     if (request.fd !== undefined && after.active.flightDirector !== request.fd) {
-      verificationFailures.push('飞行指引');
+      addVerificationFailure('飞行指引', 'flightDirector');
     }
     if (request.lateralMode === 'HDG' && !after.active.heading) {
-      verificationFailures.push('HDG 航向模式');
+      addVerificationFailure('HDG 航向模式', 'heading');
     }
     if (request.lateralMode === 'NAV' && !after.active.navigation) {
-      verificationFailures.push('NAV 导航模式');
+      addVerificationFailure('NAV 导航模式', 'navigation');
     }
     if (request.verticalMode === 'ALT' && !after.active.altitude) {
-      verificationFailures.push('ALT 高度保持模式');
+      addVerificationFailure('ALT 高度保持模式', 'altitude');
     }
     if (request.verticalMode === 'VS' && !after.active.verticalSpeed) {
-      verificationFailures.push('VS 垂直速度模式');
+      addVerificationFailure('VS 垂直速度模式', 'verticalSpeed');
     }
     if (request.verticalMode === 'FLC' && !after.active.flightLevelChange) {
-      verificationFailures.push('FLC 高度层改变模式');
+      addVerificationFailure('FLC 高度层改变模式', 'flightLevelChange');
     }
     if (
       request.targetHeadingDegrees !== undefined &&
@@ -916,10 +961,19 @@ export class MsfsGuideService {
     }
 
     if (verificationFailures.length > 0) {
+      const state =
+        verificationCapabilityFailures.size > 0
+          ? stateWithUnsupportedCapabilities(after, verificationCapabilityFailures)
+          : after;
+      const unsupportedLabels = [...verificationCapabilityFailures].map(
+        (capability) => autopilotCapabilityLabels[capability],
+      );
       return response(
         'partial',
-        `事件已发送，但模拟器没有确认以下设置生效：${verificationFailures.join('、')}。`,
-        after,
+        unsupportedLabels.length > 0
+          ? `当前飞机未提供或未确认支持${unsupportedLabels.join('、')}，相关设置没有生效；已停止后续设置。`
+          : `事件已发送，但模拟器没有确认以下设置生效：${verificationFailures.join('、')}。`,
+        state,
       );
     }
     return response(

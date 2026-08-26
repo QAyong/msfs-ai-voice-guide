@@ -89,13 +89,16 @@ release-inputs/<build-id>/
   msfs.exe
   msfsd.exe
   SimConnect.dll
+  build-metadata.json
   community/msfs-native-cli-route-bridge/
     manifest.json
     layout.json
     modules/msfs-route-bridge.wasm
 ```
 
-快照必须记录构建提交、SDK 版本、VS2022 `MSFS2024` Toolset、Package Tool 版本及每个文件的 SHA-256。桌面安装器只允许从这个快照暂存；若 CLI、daemon 和 Community Package 不是同一批输入，或任何哈希不匹配，候选包必须失败而不能静默回退到开发构建。
+快照必须包含由当前仓库 `pnpm msfs:native:build` 自动生成的 `build-metadata.json`，其中记录原生源码提交、源码指纹、构建时间和 CLI/daemon 文件哈希；发布记录还必须记录 SDK 版本、VS2022 `MSFS2024` Toolset、Package Tool 版本。桌面安装器只允许从这个快照暂存；若 CLI、daemon 和 Community Package 不是同一批输入，源码提交或指纹不匹配，或任何哈希不匹配，候选包必须失败而不能静默回退到开发构建。
+
+`pnpm desktop:package` 不会替代 MSFS CLI 编译，也不会把当前 `native/msfs-cli/build/` 自动变成发布快照。发布前必须先完成原生 CLI/WASM 构建和测试，再执行 `pnpm msfs:release:snapshot release-inputs/<build-id>`，由脚本把同一批产物（包括 `build-metadata.json`）一次性复制到新的快照目录；目标目录已存在或旧快照缺少该清单时会被拒绝。
 
 构建机同时装有 VS2026 时，Node 原生附加模块的构建应固定到已验证的 VS2022；但 bridge 仍必须由 `wasm-route-bridge/build.ps1` 调用 VS2022 `MSFS2024` Toolset，不能使用 Node 的工具链替代。
 

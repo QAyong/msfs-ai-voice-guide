@@ -55,13 +55,16 @@ class AutopilotRunner implements MsfsProcessRunner {
   readonly calls: Array<readonly string[]> = [];
   readonly state: MockAutopilotState;
   readonly inputEventNames: readonly string[];
+  readonly ignoredKeyEvents: readonly string[];
 
   constructor(
     overrides: Partial<MockAutopilotState> = {},
     inputEventNames: readonly string[] = ['AUTOPILOT_FLIGHT_DIRECTOR'],
+    ignoredKeyEvents: readonly string[] = [],
   ) {
     this.state = { ...defaultState(), ...overrides };
     this.inputEventNames = inputEventNames;
+    this.ignoredKeyEvents = ignoredKeyEvents;
   }
 
   async run(...[, args]: Parameters<MsfsProcessRunner['run']>): Promise<ProcessRunResult> {
@@ -112,6 +115,9 @@ class AutopilotRunner implements MsfsProcessRunner {
     const dataText = args.includes('--data') ? (args[args.indexOf('--data') + 1] ?? '') : '';
     const data = dataText.split(',').filter(Boolean).map(Number);
     if (!args.includes('--unsafe')) throw new Error('write command was not marked unsafe');
+    if (this.ignoredKeyEvents.includes(name ?? '')) {
+      return success({ name, sent: true });
+    }
 
     switch (name) {
       case 'AP_MASTER':
@@ -337,5 +343,33 @@ describe('MSFS autopilot actions', () => {
     expect(runner.calls.some((args) => args[0] === 'input' && args[1] === 'list')).toBe(true);
     expect(runner.calls.some((args) => args[0] === 'input' && args[1] === 'set')).toBe(true);
     expect(keyEventNames(runner)).toEqual([]);
+  });
+
+  it('reports an unavailable flight director when the event is accepted but state stays off', async () => {
+    const runner = new AutopilotRunner({}, [], ['TOGGLE_FLIGHT_DIRECTOR']);
+    const service = createService(runner);
+
+    await expect(service.setAutopilot({ fd: true })).resolves.toMatchObject({
+      status: 'partial',
+      message: '当前飞机未提供或未确认支持飞行指引，相关设置没有生效；已停止后续设置。',
+      state: {
+        capabilities: { flightDirector: 'unsupported' },
+        active: { flightDirector: false },
+      },
+    });
+  });
+
+  it('reports an unavailable FLC mode instead of a generic write failure', async () => {
+    const runner = new AutopilotRunner({}, [], ['FLIGHT_LEVEL_CHANGE_ON']);
+    const service = createService(runner);
+
+    await expect(service.setAutopilot({ verticalMode: 'FLC' })).resolves.toMatchObject({
+      status: 'partial',
+      message: '当前飞机未提供或未确认支持FLC 高度层改变，相关设置没有生效；已停止后续设置。',
+      state: {
+        capabilities: { flightLevelChange: 'unsupported' },
+        active: { flightLevelChange: false },
+      },
+    });
   });
 });

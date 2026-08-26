@@ -12,6 +12,7 @@ const requiredFiles = [
   { component: 'msfs', relativePath: 'out/msfs/msfs.exe' },
   { component: 'msfs', relativePath: 'out/msfs/msfsd.exe' },
   { component: 'msfs', relativePath: 'out/msfs/SimConnect.dll' },
+  { component: 'msfs', relativePath: 'out/msfs/build-metadata.json' },
   { component: 'msfs', relativePath: 'out/msfs/component-manifest.json' },
   {
     component: 'msfs-community',

@@ -2,7 +2,7 @@
 
 **最后更新：** 2026-08-22
 
-**状态：** 已实现；`1.0.1-rc.6` 安装包已生成，安装态自动校验通过
+**状态：** 已实现；`1.0.1-rc.7` 安装包已生成，安装态自动校验通过
 
 **目标平台：** Windows x64，无代码签名
 
@@ -77,7 +77,8 @@ $env:https_proxy = $env:HTTPS_PROXY
 
 ```powershell
 $env:CI = 'true'
-$releaseSnapshot = (Resolve-Path '.\release-inputs\msfs-cli-official-20260809').Path
+# <build-id> 必须替换为本次新建、已生成 build-metadata.json 的发布快照目录。
+$releaseSnapshot = (Resolve-Path '.\release-inputs\<build-id>').Path
 $env:MSFS_CLI_DISTRIBUTION_DIR = $releaseSnapshot
 $env:MSFS_CLI_COMMUNITY_PACKAGE_DIR = (Resolve-Path (Join-Path $releaseSnapshot 'community\msfs-native-cli-route-bridge')).Path
 
@@ -101,7 +102,7 @@ Release 构建现在使用增量复用，但不会牺牲安装包完整性：
 
 - `global-ptt` 根据源码、`binding.gyp`、Node ABI、依赖锁文件和当前平台生成指纹；指纹未变化且 `.node` 产物存在时跳过 `node-gyp rebuild`。
 - `global-ptt` 复用前还会校验 `.node` 产物 SHA-256；缓存文件缺失或二进制被替换时会重新构建。
-- MSFS CLI 和 WASM 不在 `desktop:package` 中重新编译。CLI/WASM 源码发生变化时，必须先重新构建并生成新的已验证发布快照，再更新 `MSFS_CLI_DISTRIBUTION_DIR`；暂存脚本会比较快照文件记录，未变化时复用现有 `out/msfs`。正式打包会拒绝 `native/msfs-cli`、`dev-runtime` 等开发构建目录，也会拒绝不在同一快照目录中的 Community Package。
+- MSFS CLI 和 WASM 不在 `desktop:package` 中重新编译。CLI/WASM 源码发生变化时，必须先重新构建并生成包含 `build-metadata.json` 的新的已验证发布快照，再更新 `MSFS_CLI_DISTRIBUTION_DIR`；暂存脚本会比较快照文件记录，未变化时复用现有 `out/msfs`。正式打包会拒绝 `native/msfs-cli`、`dev-runtime` 等开发构建目录，也会拒绝缺少当前源码提交/指纹或不在同一快照目录中的 Community Package。
 - LiveKit Server 和 TTS 样例按源文件指纹复用；源文件未变化时不重复复制。
 - `release-v2/app/node_modules` 按根 `package.json`、运行包 `package.json`、workspace 配置、`pnpm-lock.yaml` 以及 Node ABI、平台、架构、pnpm 和 linker 环境指纹复用；依赖或构建环境变化时不复用旧生产依赖。
 - 主进程、Preload、Renderer 和 Agent JavaScript 仍会重新构建；只要应用代码变化，`app.asar` 和 NSIS 安装器仍必须重新生成。

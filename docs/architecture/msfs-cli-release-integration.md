@@ -53,6 +53,7 @@ release-inputs/<build-id>/
   msfs.exe
   msfsd.exe
   SimConnect.dll
+  build-metadata.json
   community/msfs-native-cli-route-bridge/
     manifest.json
     layout.json
@@ -63,7 +64,11 @@ release-inputs/<build-id>/
 
 1. 使用 MSFS SDK 的 SimConnect 配置构建出的原生 Release 输出；
 2. VS2022 `MSFS2024` Platform Toolset 编译、再由 SDK `fspackagetool.exe` 生成的 Community Package；
-3. 同一次构建后记录的 SHA-256。`manifest.json` 或目录名不能替代 WASM 哈希和构建来源记录。
+3. 同一次构建后记录的 `build-metadata.json` 和 SHA-256。`manifest.json` 或目录名不能替代源码提交、源码指纹、WASM 哈希和构建来源记录。
+
+构建完成后使用 `pnpm msfs:release:snapshot release-inputs/<build-id>` 创建快照。该命令要求 `native/msfs-cli` 工作区干净、构建清单与当前源码一致、CLI 文件齐全，并拒绝覆盖已有目录；不要手动拼装快照。
+
+本次“开发版正常、安装版使用旧 CLI”问题的根因和防复发规则记录在 [Bug-20260826：发布快照陈旧与自动驾驶能力提示失真](../bugs/bug-20260826-msfs-release-snapshot-and-autopilot-capability-reporting.md)。发布流程或构建脚本变更后，必须同步检查这份复盘中的门禁要求。
 
 候选打包前设置明确输入；不得依赖脚本的开发回退路径：
 
@@ -75,7 +80,7 @@ $env:GYP_MSVS_VERSION = '2022'
 pnpm desktop:package:dir
 ```
 
-打包完成后，`out/msfs/component-manifest.json`、安装态 `resources/msfs/component-manifest.json` 和输入快照必须逐文件校验大小与 SHA-256。缺少构建来源、未使用官方 Toolset，或三个位置任一哈希不一致，候选包不得发布。
+打包完成后，`build-metadata.json`、`out/msfs/component-manifest.json`、安装态 `resources/msfs/component-manifest.json` 和输入快照必须逐文件校验大小与 SHA-256。缺少构建来源、源码提交/指纹不匹配、未使用官方 Toolset，或三个位置任一哈希不一致，候选包不得发布。
 
 ### 桌面端连接状态与配置检测
 
@@ -102,7 +107,7 @@ Geo Cloud 配置由 `scripts/stage-geo-config.mjs` 在打包时生成到 `out/ms
 
 在开发机的 `Community2024` 下，应用会维护 `_晓晓飞行导游版本库\开发版本` 和 `_晓晓飞行导游版本库\应用版本` 两份 bridge；MSFS 根目录只保留当前启用的 `msfs-native-cli-route-bridge`。可使用 `pnpm msfs:use:dev` 与 `pnpm msfs:use:app` 切换，避免两个同身份 package 同时被加载。
 
-`pnpm desktop:package` 会先刷新开发快照，再以严格模式复制到 `out/msfs/` 并校验组件清单，因此安装包只固定包含打包当时的 CLI 版本。开发机安装候选包时，应用更新“应用版本”并启用它；普通用户没有版本库时，应用直接更新其标准 `Community2024\msfs-native-cli-route-bridge`。之后继续修改 CLI 不会改变已经发给其他用户的安装包；只有重新打包并发布新版本才会更新用户侧文件。
+`pnpm desktop:package` 不会刷新或编译发布态 MSFS CLI；它只会在严格模式下复制 `MSFS_CLI_DISTRIBUTION_DIR` 指定的快照。快照缺少 `build-metadata.json`、不是当前 native 源码构建、或文件哈希不一致时，打包必须失败。开发机安装候选包时，应用更新“应用版本”并启用它；普通用户没有版本库时，应用直接更新其标准 `Community2024\msfs-native-cli-route-bridge`。之后继续修改 CLI 不会改变已经发给其他用户的安装包；只有重新打包并发布新版本才会更新用户侧文件。
 
 ### 安装、应用测试与回退操作
 

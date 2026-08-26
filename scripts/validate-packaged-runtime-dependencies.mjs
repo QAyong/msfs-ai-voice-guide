@@ -26,6 +26,7 @@ const requiredLooseFiles = [
   join(resourcesRoot, 'msfs', 'msfs.exe'),
   join(resourcesRoot, 'msfs', 'msfsd.exe'),
   join(resourcesRoot, 'msfs', 'SimConnect.dll'),
+  join(resourcesRoot, 'msfs', 'build-metadata.json'),
   join(resourcesRoot, 'msfs', 'component-manifest.json'),
   join(
     resourcesRoot,
