@@ -56,6 +56,8 @@ class AutopilotRunner implements MsfsProcessRunner {
   readonly state: MockAutopilotState;
   readonly inputEventNames: readonly string[];
   readonly ignoredKeyEvents: readonly string[];
+  aircraftTitle = 'Test Aircraft';
+  tailNumber = 'TEST';
 
   constructor(
     overrides: Partial<MockAutopilotState> = {},
@@ -70,6 +72,13 @@ class AutopilotRunner implements MsfsProcessRunner {
   async run(...[, args]: Parameters<MsfsProcessRunner['run']>): Promise<ProcessRunResult> {
     this.calls.push(args);
     if (args[0] === 'simvar' && args[1] === 'batch') return this.batchResult(args);
+    if (args[0] === 'simvar' && args[1] === 'get') {
+      const name = args[args.indexOf('--name') + 1];
+      const value =
+        name === 'TITLE' ? this.aircraftTitle : name === 'ATC ID' ? this.tailNumber : undefined;
+      if (value === undefined) throw new Error(`Unexpected fake string SimVar: ${name ?? ''}`);
+      return success({ name, unit: 'string', datatype: 'STRING256', value });
+    }
     if (args[0] === 'key-event' && args[1] === 'send') return this.keyEventResult(args);
     if (args[0] === 'input' && args[1] === 'list') {
       return success({
@@ -221,11 +230,12 @@ describe('MSFS autopilot actions', () => {
       status: 'ok',
       capabilities: {
         autopilot: 'supported',
+        flightDirector: 'unknown',
         heading: 'supported',
         navigation: 'supported',
         altitude: 'supported',
         verticalSpeed: 'unknown',
-        flightLevelChange: 'supported',
+        flightLevelChange: 'unknown',
       },
       active: { autopilot: false, heading: false },
     });
@@ -254,9 +264,11 @@ describe('MSFS autopilot actions', () => {
       'AP_ALT_VAR_SET_ENGLISH',
     ]);
     expect(runner.calls.filter((args) => args[0] === 'simvar')).toHaveLength(6);
-    expect(runner.calls.filter((args) => args[0] === 'key-event').every((args) => args.includes('--unsafe'))).toBe(
-      true,
-    );
+    expect(
+      runner.calls
+        .filter((args) => args[0] === 'key-event')
+        .every((args) => args.includes('--unsafe')),
+    ).toBe(true);
   });
 
   it('encodes a negative vertical speed for the unsigned CLI event parameter', async () => {
@@ -271,16 +283,17 @@ describe('MSFS autopilot actions', () => {
 
     expect(result).toMatchObject({ status: 'ok' });
     const eventCall = runner.calls.find(
-      (args) => args[0] === 'key-event' && args[args.indexOf('--name') + 1] === 'AP_VS_VAR_SET_ENGLISH',
+      (args) =>
+        args[0] === 'key-event' && args[args.indexOf('--name') + 1] === 'AP_VS_VAR_SET_ENGLISH',
     );
     expect(eventCall).toContain('4294966796,0');
   });
 
   it('does not treat a mode-named Input Event as proof that VS is supported', async () => {
-    const runner = new AutopilotRunner(
-      {},
-      ['AUTOPILOT_FLIGHT_DIRECTOR', 'AUTOPILOT_VS_MODE'],
-    );
+    const runner = new AutopilotRunner({ flightDirector: 1 }, [
+      'AUTOPILOT_FLIGHT_DIRECTOR',
+      'AUTOPILOT_VS_MODE',
+    ]);
     const service = createService(runner);
 
     await expect(
@@ -294,17 +307,17 @@ describe('MSFS autopilot actions', () => {
   });
 
   it('uses the official VS Key Event even when the aircraft exposes a VS Input Event', async () => {
-    const runner = new AutopilotRunner(
-      { defaultPitchMode: 3 },
-      ['AUTOPILOT_FLIGHT_DIRECTOR', 'AUTOPILOT_VS_MODE'],
-    );
+    const runner = new AutopilotRunner({ defaultPitchMode: 3 }, [
+      'AUTOPILOT_FLIGHT_DIRECTOR',
+      'AUTOPILOT_VS_MODE',
+    ]);
     const service = createService(runner);
 
     await expect(
-      service.setAutopilot({ fd: true, verticalMode: 'VS', targetVerticalSpeedFpm: 300 }),
+      service.setAutopilot({ verticalMode: 'VS', targetVerticalSpeedFpm: 300 }),
     ).resolves.toMatchObject({ status: 'ok' });
     expect(keyEventNames(runner)).toEqual(['AP_VS_ON', 'AP_VS_VAR_SET_ENGLISH']);
-    expect(runner.calls.filter((args) => args[0] === 'input' && args[1] === 'set')).toHaveLength(1);
+    expect(runner.calls.filter((args) => args[0] === 'input' && args[1] === 'set')).toHaveLength(0);
   });
 
   it('refuses an HDG request when the mode cannot be confirmed and sends nothing', async () => {
@@ -345,31 +358,50 @@ describe('MSFS autopilot actions', () => {
     expect(keyEventNames(runner)).toEqual([]);
   });
 
-  it('reports an unavailable flight director when the event is accepted but state stays off', async () => {
-    const runner = new AutopilotRunner({}, [], ['TOGGLE_FLIGHT_DIRECTOR']);
+  it('downgrades a previously confirmed flight director when the event stops changing state', async () => {
+    const runner = new AutopilotRunner({ flightDirector: 1 }, [], ['TOGGLE_FLIGHT_DIRECTOR']);
     const service = createService(runner);
 
-    await expect(service.setAutopilot({ fd: true })).resolves.toMatchObject({
+    await expect(service.setAutopilot({ fd: false })).resolves.toMatchObject({
       status: 'partial',
-      message: '当前飞机未提供或未确认支持飞行指引，相关设置没有生效；已停止后续设置。',
+      message: '当前无法确认飞行指引是否支持，相关设置没有生效；已停止后续设置。',
       state: {
-        capabilities: { flightDirector: 'unsupported' },
-        active: { flightDirector: false },
+        capabilities: { flightDirector: 'unknown' },
+        active: { flightDirector: true },
       },
     });
   });
 
-  it('reports an unavailable FLC mode instead of a generic write failure', async () => {
-    const runner = new AutopilotRunner({}, [], ['FLIGHT_LEVEL_CHANGE_ON']);
+  it('does not write FLC when the aircraft has not exposed evidence for it', async () => {
+    const runner = new AutopilotRunner();
     const service = createService(runner);
 
     await expect(service.setAutopilot({ verticalMode: 'FLC' })).resolves.toMatchObject({
-      status: 'partial',
-      message: '当前飞机未提供或未确认支持FLC 高度层改变，相关设置没有生效；已停止后续设置。',
+      status: 'rejected',
+      message: '当前无法确认FLC 高度层改变是否可用，没有执行任何自动驾驶设置。',
       state: {
-        capabilities: { flightLevelChange: 'unsupported' },
+        capabilities: { flightLevelChange: 'unknown' },
         active: { flightLevelChange: false },
       },
+    });
+    expect(keyEventNames(runner)).toEqual([]);
+  });
+
+  it('keeps confirmed capability only for the aircraft that was verified', async () => {
+    const runner = new AutopilotRunner({ flightDirector: 1 });
+    const service = createService(runner);
+
+    await expect(service.setAutopilot({ fd: false })).resolves.toMatchObject({ status: 'ok' });
+    await expect(service.getAutopilotStatus()).resolves.toMatchObject({
+      capabilities: { flightDirector: 'supported' },
+      active: { flightDirector: false },
+    });
+
+    runner.aircraftTitle = 'Different Aircraft';
+    runner.tailNumber = 'OTHER';
+    await expect(service.getAutopilotStatus()).resolves.toMatchObject({
+      capabilities: { flightDirector: 'unknown' },
+      active: { flightDirector: false },
     });
   });
 });

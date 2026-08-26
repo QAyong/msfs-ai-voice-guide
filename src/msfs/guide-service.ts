@@ -311,6 +311,11 @@ export const autopilotStateResultSchema = z.union([autopilotStateSchema, msfsUna
 export type AutopilotStateResult = z.infer<typeof autopilotStateResultSchema>;
 export type AutopilotState = z.infer<typeof autopilotStateSchema>;
 type AutopilotCapability = keyof AutopilotState['capabilities'];
+type AutopilotCapabilityStatus = z.infer<typeof autopilotCapabilityStatusSchema>;
+type AutopilotCapabilityMemory = {
+  aircraftKey: string;
+  statuses: Partial<Record<AutopilotCapability, AutopilotCapabilityStatus>>;
+};
 
 const autopilotCapabilityLabels: Record<AutopilotCapability, string> = {
   autopilot: '自动驾驶',
@@ -322,17 +327,15 @@ const autopilotCapabilityLabels: Record<AutopilotCapability, string> = {
   flightLevelChange: 'FLC 高度层改变',
 };
 
-const stateWithUnsupportedCapabilities = (
+const stateWithCapabilityStatuses = (
   state: AutopilotState,
-  capabilities: Iterable<AutopilotCapability>,
+  statuses: Partial<Record<AutopilotCapability, AutopilotCapabilityStatus>>,
 ): AutopilotState =>
   autopilotStateSchema.parse({
     ...state,
     capabilities: {
       ...state.capabilities,
-      ...Object.fromEntries(
-        [...new Set(capabilities)].map((capability) => [capability, 'unsupported']),
-      ),
+      ...statuses,
     },
   });
 
@@ -484,8 +487,8 @@ const createAutopilotState = (values: Map<string, number>) => {
     capabilities: {
       autopilot: autopilotAvailable ? 'supported' : 'unsupported',
       // MSFS exposes the active FD state, but no generic runtime FD capability SimVar.
-      // AP availability is the conservative baseline used until real-aircraft testing.
-      flightDirector: autopilotAvailable ? 'supported' : 'unsupported',
+      // An inactive FD is therefore unknown, not proof that the aircraft supports it.
+      flightDirector: capabilityFromEvidence(autopilotAvailable, active.flightDirector),
       heading: capabilityFromEvidence(autopilotAvailable, headingEvidence),
       navigation: autopilotAvailable
         ? navigationAvailable
@@ -495,7 +498,7 @@ const createAutopilotState = (values: Map<string, number>) => {
       altitude: capabilityFromEvidence(autopilotAvailable, altitudeEvidence),
       verticalSpeed: capabilityFromEvidence(autopilotAvailable, verticalSpeedEvidence),
       // The official FLC event exists, but MSFS has no separate generic FLC capability flag.
-      flightLevelChange: autopilotAvailable ? 'supported' : 'unsupported',
+      flightLevelChange: capabilityFromEvidence(autopilotAvailable, active.flightLevelChange),
     },
     active,
     armed: {
@@ -518,6 +521,7 @@ export type MsfsGuideServiceOptions = {
 export class MsfsGuideService {
   private readonly trackCache: MsfsTrackCache;
   private trackHandles: ProcessWatchHandle[] = [];
+  private autopilotCapabilityMemory: AutopilotCapabilityMemory | null = null;
   private trackStarting: Promise<void> | null = null;
   private latestTrack: { latitude?: number; longitude?: number; altitudeFeet?: number } = {};
   private lastTrackPointAt = 0;
@@ -535,6 +539,58 @@ export class MsfsGuideService {
     private readonly options: MsfsGuideServiceOptions,
   ) {
     this.trackCache = new MsfsTrackCache(options.trackMaximumPoints);
+  }
+
+  private async readAircraftIdentityKey(signal?: AbortSignal): Promise<string | undefined> {
+    const title = await this.client.execute(
+      ['simvar', 'get', '--name', 'TITLE', '--unit', 'string', '--datatype', 'string'],
+      stringSimvarDataSchema,
+      signal,
+    );
+    const tailNumber = await this.client.execute(
+      ['simvar', 'get', '--name', 'ATC ID', '--unit', 'string', '--datatype', 'string'],
+      stringSimvarDataSchema,
+      signal,
+    );
+    const titleValue = title.status === 'ok' ? title.data.value.trim().toLocaleUpperCase() : '';
+    const tailValue =
+      tailNumber.status === 'ok' ? tailNumber.data.value.trim().toLocaleUpperCase() : '';
+    if (!titleValue && !tailValue) return undefined;
+    return `${titleValue}\u001f${tailValue}`;
+  }
+
+  private async mergeAutopilotCapabilityMemory(
+    state: AutopilotState,
+    signal?: AbortSignal,
+  ): Promise<AutopilotState> {
+    const memory = this.autopilotCapabilityMemory;
+    if (!memory) return state;
+    const aircraftKey = await this.readAircraftIdentityKey(signal);
+    if (!aircraftKey) return state;
+    if (aircraftKey !== memory.aircraftKey) {
+      this.autopilotCapabilityMemory = null;
+      return state;
+    }
+    return stateWithCapabilityStatuses(state, memory.statuses);
+  }
+
+  private async rememberAutopilotCapabilityStatuses(
+    statuses: Partial<Record<AutopilotCapability, AutopilotCapabilityStatus>>,
+    signal?: AbortSignal,
+  ): Promise<void> {
+    if (Object.keys(statuses).length === 0) return;
+    const aircraftKey = await this.readAircraftIdentityKey(signal);
+    if (!aircraftKey) return;
+    if (
+      !this.autopilotCapabilityMemory ||
+      this.autopilotCapabilityMemory.aircraftKey !== aircraftKey
+    ) {
+      this.autopilotCapabilityMemory = { aircraftKey, statuses: {} };
+    }
+    this.autopilotCapabilityMemory.statuses = {
+      ...this.autopilotCapabilityMemory.statuses,
+      ...statuses,
+    };
   }
 
   async warmup(signal?: AbortSignal): Promise<MsfsReadiness> {
@@ -669,7 +725,10 @@ export class MsfsGuideService {
     if (result.status !== 'ok') return this.rememberFailure(result);
 
     try {
-      return createAutopilotState(byName(result.data.items));
+      return this.mergeAutopilotCapabilityMemory(
+        createAutopilotState(byName(result.data.items)),
+        signal,
+      );
     } catch {
       return this.protocolFailure();
     }
@@ -880,16 +939,19 @@ export class MsfsGuideService {
         this.rememberFailure(eventResult);
         steps.push({ operation: action.operation, status: 'failed' });
         const afterFailure = await this.getAutopilotStatus(signal);
+        const capabilityStatuses: Partial<Record<AutopilotCapability, AutopilotCapabilityStatus>> =
+          action.capability ? { [action.capability]: 'unknown' } : {};
+        await this.rememberAutopilotCapabilityStatuses(capabilityStatuses, signal);
         const state =
           afterFailure.status === 'ok' && action.capability
-            ? stateWithUnsupportedCapabilities(afterFailure, [action.capability])
+            ? stateWithCapabilityStatuses(afterFailure, capabilityStatuses)
             : afterFailure.status === 'ok'
               ? afterFailure
               : undefined;
         return response(
           sentCount > 0 ? 'partial' : 'rejected',
           action.capability
-            ? `当前飞机未提供或未确认支持${autopilotCapabilityLabels[action.capability]}，未执行“${action.operation}”后的后续设置。`
+            ? `当前无法确认${autopilotCapabilityLabels[action.capability]}是否支持：发送“${action.operation}”后状态没有生效，未继续执行后续设置。`
             : `自动驾驶操作在“${action.operation}”处失败，未继续执行后续设置。`,
           state,
         );
@@ -909,10 +971,12 @@ export class MsfsGuideService {
     const after = current;
 
     const verificationFailures: string[] = [];
-    const verificationCapabilityFailures = new Set<AutopilotCapability>();
+    const verificationCapabilityStatuses: Partial<
+      Record<AutopilotCapability, AutopilotCapabilityStatus>
+    > = {};
     const addVerificationFailure = (label: string, capability?: AutopilotCapability) => {
       verificationFailures.push(label);
-      if (capability) verificationCapabilityFailures.add(capability);
+      if (capability) verificationCapabilityStatuses[capability] = 'unknown';
     };
     if (request.ap !== undefined && after.active.autopilot !== request.ap) {
       addVerificationFailure('自动驾驶总开关', 'autopilot');
@@ -961,25 +1025,38 @@ export class MsfsGuideService {
     }
 
     if (verificationFailures.length > 0) {
+      await this.rememberAutopilotCapabilityStatuses(verificationCapabilityStatuses, signal);
       const state =
-        verificationCapabilityFailures.size > 0
-          ? stateWithUnsupportedCapabilities(after, verificationCapabilityFailures)
+        Object.keys(verificationCapabilityStatuses).length > 0
+          ? stateWithCapabilityStatuses(after, verificationCapabilityStatuses)
           : after;
-      const unsupportedLabels = [...verificationCapabilityFailures].map(
-        (capability) => autopilotCapabilityLabels[capability],
+      const uncertainLabels = Object.keys(verificationCapabilityStatuses).map(
+        (capability) => autopilotCapabilityLabels[capability as AutopilotCapability],
       );
       return response(
         'partial',
-        unsupportedLabels.length > 0
-          ? `当前飞机未提供或未确认支持${unsupportedLabels.join('、')}，相关设置没有生效；已停止后续设置。`
+        uncertainLabels.length > 0
+          ? `当前无法确认${uncertainLabels.join('、')}是否支持，相关设置没有生效；已停止后续设置。`
           : `事件已发送，但模拟器没有确认以下设置生效：${verificationFailures.join('、')}。`,
         state,
       );
     }
+
+    const confirmedCapabilityStatuses: Partial<
+      Record<AutopilotCapability, AutopilotCapabilityStatus>
+    > = {};
+    if (request.fd !== undefined && after.active.flightDirector === request.fd) {
+      confirmedCapabilityStatuses.flightDirector = 'supported';
+    }
+    if (request.verticalMode === 'FLC' && after.active.flightLevelChange) {
+      confirmedCapabilityStatuses.flightLevelChange = 'supported';
+    }
+    await this.rememberAutopilotCapabilityStatuses(confirmedCapabilityStatuses, signal);
+    const finalState = await this.mergeAutopilotCapabilityMemory(after, signal);
     return response(
       'ok',
       sentCount > 0 ? '自动驾驶设置已执行并确认生效。' : '自动驾驶已经处于请求状态。',
-      after,
+      finalState,
     );
   }
 
