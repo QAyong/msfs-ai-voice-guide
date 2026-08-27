@@ -7,6 +7,7 @@ import {
   createAsrAudioRequest,
   createAsrFullRequest,
   parseVolcengineMessage,
+  VolcengineMessageFlag,
   VolcengineMessageType,
 } from '../volcengine/protocol.js';
 import { closeWebSocket, connectWebSocket } from '../volcengine/websocket.js';
@@ -262,7 +263,10 @@ class VolcengineSpeechStream extends stt.SpeechStream {
           if (message.payload.length > 0) {
             this.#emitTranscripts(message.payload, session);
           }
-          if (message.sequence !== undefined && message.sequence < 0) {
+          if (
+            message.flag === VolcengineMessageFlag.NegativeSequence ||
+            (message.sequence !== undefined && message.sequence < 0)
+          ) {
             resolve();
           }
         } catch (error) {

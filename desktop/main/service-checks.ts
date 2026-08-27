@@ -1,16 +1,20 @@
 import { randomUUID } from 'node:crypto';
+import { readFile } from 'node:fs/promises';
+import { join } from 'node:path';
 import type WebSocket from 'ws';
+import type { RawData } from 'ws';
 import { type ServiceCheckResult, type ServiceCheckTarget } from '../../shared/desktop-settings.js';
 import {
-  createEventMessage,
+  createAsrAudioRequest,
+  createAsrFullRequest,
   parseVolcengineMessage,
-  VolcengineEvent,
+  VolcengineMessageFlag,
   VolcengineMessageType,
 } from '../../src/providers/volcengine/protocol.js';
+import { runVolcengineTtsSession } from '../../src/providers/volcengine/tts-session.js';
 import {
   closeWebSocket,
   connectWebSocket,
-  readBinaryMessage,
 } from '../../src/providers/volcengine/websocket.js';
 import {
   defaultSearchEndpointByProvider,
@@ -23,6 +27,15 @@ import { localizeDesktopText, type DesktopLocale } from '../../shared/desktop-lo
 
 const checkTimeoutMs = 10_000;
 const minimumCheckIntervalMs = 2_500;
+const sttProbeSampleRate = 16_000;
+const sttProbeDurationMs = 2_000;
+const sttProbeChunkDurationMs = 200;
+const sttProbeChunkBytes =
+  (sttProbeSampleRate * 2 * sttProbeChunkDurationMs) / 1_000;
+const sttProbeAudioFileByLocale: Record<DesktopLocale, string> = {
+  'en-US': 'Dacey_en_female_dacey_uranus_bigtts.wav',
+  'zh-CN': 'Vivi-2.0_zh_female_vv_uranus_bigtts.wav',
+};
 
 class ServiceCheckError extends Error {
   constructor(message: string) {
@@ -53,9 +66,272 @@ function hasValues(environment: NodeJS.ProcessEnv, keys: readonly string[]): boo
   return keys.every((key) => Boolean(environment[key]?.trim()));
 }
 
-function modelListUrl(baseUrl: string): string {
+function chatCompletionsUrl(baseUrl: string): string {
   const normalizedBaseUrl = baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`;
-  return new URL('models', normalizedBaseUrl).toString();
+  return new URL('chat/completions', normalizedBaseUrl).toString();
+}
+
+function defaultSttProbeAudioPath(locale: DesktopLocale): string {
+  return join(
+    process.cwd(),
+    'resources',
+    'tts',
+    'confirmed-voices',
+    sttProbeAudioFileByLocale[locale],
+  );
+}
+
+type PcmWav = {
+  data: Buffer;
+  sampleRate: number;
+};
+
+function parsePcmWav(input: Buffer): PcmWav {
+  if (
+    input.length < 12 ||
+    input.toString('ascii', 0, 4) !== 'RIFF' ||
+    input.toString('ascii', 8, 12) !== 'WAVE'
+  ) {
+    throw new Error('语音样本不是有效的 WAV 文件');
+  }
+
+  let audioFormat: number | undefined;
+  let channels: number | undefined;
+  let sampleRate: number | undefined;
+  let bitsPerSample: number | undefined;
+  let data: Buffer | undefined;
+  let offset = 12;
+
+  while (offset + 8 <= input.length) {
+    const chunkSize = input.readUInt32LE(offset + 4);
+    const chunkStart = offset + 8;
+    const chunkEnd = chunkStart + chunkSize;
+    if (chunkEnd > input.length) throw new Error('WAV 数据块不完整');
+
+    switch (input.toString('ascii', offset, offset + 4)) {
+      case 'fmt ':
+        if (chunkSize < 16) throw new Error('WAV 格式块不完整');
+        audioFormat = input.readUInt16LE(chunkStart);
+        channels = input.readUInt16LE(chunkStart + 2);
+        sampleRate = input.readUInt32LE(chunkStart + 4);
+        bitsPerSample = input.readUInt16LE(chunkStart + 14);
+        break;
+      case 'data':
+        data = input.subarray(chunkStart, chunkEnd);
+        break;
+      default:
+        break;
+    }
+
+    offset = chunkEnd + (chunkSize % 2);
+  }
+
+  if (
+    audioFormat !== 1 ||
+    channels !== 1 ||
+    bitsPerSample !== 16 ||
+    !sampleRate ||
+    !data ||
+    data.length === 0
+  ) {
+    throw new Error('WAV 样本必须是单声道 16-bit PCM 音频');
+  }
+  return { data, sampleRate };
+}
+
+function prepareSttProbeAudio(wav: PcmWav): Buffer {
+  const sourceSampleCount = Math.min(
+    Math.floor(wav.data.length / 2),
+    Math.floor((wav.sampleRate * sttProbeDurationMs) / 1_000),
+  );
+  if (sourceSampleCount <= 0) throw new Error('WAV 样本没有可用音频');
+
+  const source = wav.data.subarray(0, sourceSampleCount * 2);
+  if (wav.sampleRate === sttProbeSampleRate) return source;
+
+  const targetSampleCount = Math.max(
+    1,
+    Math.ceil((sourceSampleCount * sttProbeSampleRate) / wav.sampleRate),
+  );
+  const output = Buffer.alloc(targetSampleCount * 2);
+  for (let index = 0; index < targetSampleCount; index += 1) {
+    const sourcePosition = (index * wav.sampleRate) / sttProbeSampleRate;
+    const leftIndex = Math.min(Math.floor(sourcePosition), sourceSampleCount - 1);
+    const rightIndex = Math.min(leftIndex + 1, sourceSampleCount - 1);
+    const ratio = sourcePosition - leftIndex;
+    const left = source.readInt16LE(leftIndex * 2);
+    const right = source.readInt16LE(rightIndex * 2);
+    const value = Math.round(left + (right - left) * ratio);
+    output.writeInt16LE(Math.max(-32_768, Math.min(32_767, value)), index * 2);
+  }
+  return output;
+}
+
+async function loadSttProbeAudio(
+  filePath: string,
+  locale: DesktopLocale,
+): Promise<Buffer> {
+  try {
+    return prepareSttProbeAudio(parsePcmWav(await readFile(filePath)));
+  } catch {
+    throw new ServiceCheckError(
+      localizeDesktopText(
+        locale,
+        'The built-in speech test sample is unavailable. Restore the application resources and try again.',
+        '内置语音检测样本不可用，请恢复应用资源后重试。',
+      ),
+    );
+  }
+}
+
+function rawDataToBuffer(data: RawData): Buffer {
+  return Array.isArray(data)
+    ? Buffer.concat(data)
+    : Buffer.isBuffer(data)
+      ? data
+      : Buffer.from(data);
+}
+
+function parseSttProbeText(payload: Buffer): string {
+  let body: unknown;
+  try {
+    body = JSON.parse(payload.toString('utf8'));
+  } catch {
+    return '';
+  }
+  if (!body || typeof body !== 'object') return '';
+
+  const root = body as Record<string, unknown>;
+  const result = root.result;
+  const firstResult = Array.isArray(result) ? result[0] : result;
+  if (firstResult && typeof firstResult === 'object') {
+    const value = firstResult as Record<string, unknown>;
+    if (Array.isArray(value.utterances)) {
+      const utteranceText = value.utterances
+        .flatMap((utterance) => {
+          if (!utterance || typeof utterance !== 'object') return [];
+          const text = (utterance as Record<string, unknown>).text;
+          return typeof text === 'string' && text.trim() ? [text.trim()] : [];
+        })
+        .join(' ');
+      if (utteranceText) return utteranceText;
+    }
+    if (typeof value.text === 'string' && value.text.trim()) return value.text.trim();
+  }
+  return typeof root.text === 'string' ? root.text.trim() : '';
+}
+
+function readSttProbeTranscript(socket: WebSocket, signal: AbortSignal): Promise<string> {
+  return new Promise<string>((resolve, reject) => {
+    let latestText = '';
+    let settled = false;
+    const cleanup = () => {
+      socket.off('message', onMessage);
+      socket.off('error', onError);
+      socket.off('close', onClose);
+      signal.removeEventListener('abort', onAbort);
+    };
+    const resolveOnce = (value: string) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      resolve(value);
+    };
+    const rejectOnce = (error: Error) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      reject(error);
+    };
+    const onMessage = (data: RawData) => {
+      try {
+        const message = parseVolcengineMessage(rawDataToBuffer(data));
+        if (message.type === VolcengineMessageType.ServerError) {
+          rejectOnce(new Error(`火山 ASR 错误：${message.errorCode ?? 'unknown'}`));
+          return;
+        }
+        if (message.payload.length > 0) {
+          const text = parseSttProbeText(message.payload);
+          if (text) latestText = text;
+        }
+        if (
+          message.flag === VolcengineMessageFlag.NegativeSequence ||
+          (message.sequence !== undefined && message.sequence < 0)
+        ) {
+          resolveOnce(latestText);
+        }
+      } catch (error) {
+        rejectOnce(error instanceof Error ? error : new Error(String(error)));
+      }
+    };
+    const onError = (error: Error) => rejectOnce(error);
+    const onClose = () => rejectOnce(new Error('WebSocket 在收到识别结果前关闭'));
+    const onAbort = () => {
+      rejectOnce(new Error('WebSocket 请求已取消'));
+      closeWebSocket(socket);
+    };
+
+    socket.on('message', onMessage);
+    socket.once('error', onError);
+    socket.once('close', onClose);
+    if (signal.aborted) onAbort();
+    else signal.addEventListener('abort', onAbort, { once: true });
+  });
+}
+
+function sendSttProbeRequest(
+  socket: WebSocket,
+  audio: Buffer,
+  requestId: string,
+  model: string,
+  language: string,
+): void {
+  socket.send(
+    createAsrFullRequest({
+      user: { uid: requestId },
+      audio: {
+        format: 'pcm',
+        codec: 'raw',
+        rate: sttProbeSampleRate,
+        bits: 16,
+        channel: 1,
+        language,
+      },
+      request: {
+        reqid: requestId,
+        model_name: model,
+        show_utterances: true,
+        result_type: 'single',
+        enable_itn: true,
+      },
+    }),
+  );
+
+  let sequence = 1;
+  for (let offset = 0; offset < audio.length; offset += sttProbeChunkBytes) {
+    const chunk = audio.subarray(offset, offset + sttProbeChunkBytes);
+    const isFinal = offset + chunk.length >= audio.length;
+    sequence += 1;
+    socket.send(createAsrAudioRequest(chunk, sequence, isFinal));
+  }
+}
+
+function hasChatCompletionText(body: unknown): boolean {
+  if (!body || typeof body !== 'object' || !('choices' in body) || !Array.isArray(body.choices)) {
+    return false;
+  }
+  const firstChoice = body.choices[0];
+  if (!firstChoice || typeof firstChoice !== 'object' || !('message' in firstChoice)) {
+    return false;
+  }
+  const message = firstChoice.message;
+  return (
+    !!message &&
+    typeof message === 'object' &&
+    'content' in message &&
+    typeof message.content === 'string' &&
+    message.content.trim().length > 0
+  );
 }
 
 function toSafeFailure(
@@ -100,6 +376,11 @@ async function withTimeout<T>(work: (signal: AbortSignal) => Promise<T>): Promis
 
 export class ServiceAvailabilityChecker {
   readonly #lastCheckAt = new Map<ServiceCheckTarget, number>();
+  readonly #getSttProbeAudioPath: (locale: DesktopLocale) => string;
+
+  constructor(options: { getSttProbeAudioPath?: (locale: DesktopLocale) => string } = {}) {
+    this.#getSttProbeAudioPath = options.getSttProbeAudioPath ?? defaultSttProbeAudioPath;
+  }
 
   async check(
     target: ServiceCheckTarget,
@@ -156,8 +437,30 @@ export class ServiceAvailabilityChecker {
       throw new ServiceCheckError(missingConfiguration('llm', locale).message);
     }
     const response = await withTimeout((signal) =>
-      fetch(modelListUrl(environment.DEEPSEEK_BASE_URL!), {
-        headers: { Authorization: `Bearer ${environment.DEEPSEEK_API_KEY}` },
+      fetch(chatCompletionsUrl(environment.DEEPSEEK_BASE_URL!), {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${environment.DEEPSEEK_API_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: environment.DEEPSEEK_LLM_MODEL,
+          messages: [
+            {
+              role: 'user',
+              content: localizeDesktopText(
+                locale,
+                'Reply with only: check passed.',
+                '请只回复：检测成功。',
+              ),
+            },
+          ],
+          stream: false,
+          max_tokens: 16,
+          ...(environment.DEEPSEEK_LLM_MODEL?.startsWith('deepseek-v4-')
+            ? { thinking: { type: 'disabled' } }
+            : {}),
+        }),
         signal,
       }),
     );
@@ -170,11 +473,7 @@ export class ServiceAvailabilityChecker {
         ),
       );
     const body: unknown = await response.json().catch(() => null);
-    const models =
-      body && typeof body === 'object' && 'data' in body && Array.isArray(body.data)
-        ? body.data
-        : null;
-    if (!models)
+    if (!hasChatCompletionText(body))
       throw new ServiceCheckError(
         localizeDesktopText(
           locale,
@@ -182,48 +481,59 @@ export class ServiceAvailabilityChecker {
           '服务返回格式异常，请检查服务地址。',
         ),
       );
-    const configuredModel = environment.DEEPSEEK_LLM_MODEL!;
-    const modelAvailable = models.some(
-      (model) =>
-        model && typeof model === 'object' && 'id' in model && model.id === configuredModel,
-    );
-    if (!modelAvailable)
-      throw new ServiceCheckError(
-        localizeDesktopText(
-          locale,
-          'The configured model is not available for this API key.',
-          '当前模型不在此 API Key 的可用模型列表中。',
-        ),
-      );
   }
 
   async #checkStt(environment: NodeJS.ProcessEnv, locale: DesktopLocale): Promise<void> {
+    const apiKey = environment.VOLCENGINE_SPEECH_API_KEY?.trim();
+    const hasLegacyCredentials = hasValues(environment, [
+      'VOLCENGINE_SPEECH_APP_ID',
+      'VOLCENGINE_SPEECH_ACCESS_TOKEN',
+    ]);
     if (
-      !hasValues(environment, [
-        'VOLCENGINE_STT_ENDPOINT',
-        'VOLCENGINE_STT_RESOURCE_ID',
-        'VOLCENGINE_SPEECH_APP_ID',
-        'VOLCENGINE_SPEECH_ACCESS_TOKEN',
-      ])
+      !hasValues(environment, ['VOLCENGINE_STT_ENDPOINT', 'VOLCENGINE_STT_RESOURCE_ID']) ||
+      (!apiKey && !hasLegacyCredentials)
     ) {
       throw new ServiceCheckError(missingConfiguration('stt', locale).message);
     }
+
+    const audio = await loadSttProbeAudio(this.#getSttProbeAudioPath(locale), locale);
     let socket: WebSocket | undefined;
     try {
-      socket = await withTimeout((signal) =>
-        connectWebSocket(
-          environment.VOLCENGINE_STT_ENDPOINT!,
-          {
-            'X-Api-App-Key': environment.VOLCENGINE_SPEECH_APP_ID!,
-            'X-Api-Access-Key': environment.VOLCENGINE_SPEECH_ACCESS_TOKEN!,
-            'X-Api-Resource-Id': environment.VOLCENGINE_STT_RESOURCE_ID!,
-            'X-Api-Request-Id': randomUUID(),
-            'X-Api-Connect-Id': randomUUID(),
-            'X-Api-Sequence': '-1',
-          },
-          signal,
-        ),
-      );
+      await withTimeout(async (signal) => {
+        const requestId = randomUUID();
+        const headers: Record<string, string> = {
+          'X-Api-Resource-Id': environment.VOLCENGINE_STT_RESOURCE_ID!,
+          'X-Api-Request-Id': requestId,
+          'X-Api-Connect-Id': requestId,
+          'X-Api-Sequence': '-1',
+        };
+        if (apiKey) {
+          headers['X-Api-Key'] = apiKey;
+        } else {
+          headers['X-Api-App-Key'] = environment.VOLCENGINE_SPEECH_APP_ID!;
+          headers['X-Api-Access-Key'] = environment.VOLCENGINE_SPEECH_ACCESS_TOKEN!;
+        }
+
+        socket = await connectWebSocket(environment.VOLCENGINE_STT_ENDPOINT!, headers, signal);
+        const transcriptPromise = readSttProbeTranscript(socket, signal);
+        sendSttProbeRequest(
+          socket,
+          audio,
+          requestId,
+          environment.VOLCENGINE_STT_MODEL?.trim() || 'bigmodel',
+          environment.VOLCENGINE_STT_LANGUAGE?.trim() || (locale === 'en-US' ? 'en' : 'zh'),
+        );
+        const transcript = await transcriptPromise;
+        if (!transcript) {
+          throw new ServiceCheckError(
+            localizeDesktopText(
+              locale,
+              'The speech recognition service returned no usable transcript.',
+              '语音识别服务未返回有效识别结果。',
+            ),
+          );
+        }
+      });
     } finally {
       closeWebSocket(socket);
     }
@@ -234,45 +544,46 @@ export class ServiceAvailabilityChecker {
       !hasValues(environment, [
         'VOLCENGINE_TTS_ENDPOINT',
         'VOLCENGINE_TTS_RESOURCE_ID',
+        'VOLCENGINE_TTS_SPEAKER',
         'VOLCENGINE_SPEECH_APP_ID',
         'VOLCENGINE_SPEECH_ACCESS_TOKEN',
       ])
     ) {
       throw new ServiceCheckError(missingConfiguration('tts', locale).message);
     }
-    let socket: WebSocket | undefined;
-    try {
-      socket = await withTimeout((signal) =>
-        connectWebSocket(
-          environment.VOLCENGINE_TTS_ENDPOINT!,
-          {
-            'X-Api-App-Key': environment.VOLCENGINE_SPEECH_APP_ID!,
-            'X-Api-Access-Key': environment.VOLCENGINE_SPEECH_ACCESS_TOKEN!,
-            'X-Api-Resource-Id': environment.VOLCENGINE_TTS_RESOURCE_ID!,
-            'X-Api-Connect-Id': randomUUID(),
-          },
-          signal,
+    const sampleRate = Number(environment.VOLCENGINE_TTS_SAMPLE_RATE ?? 24_000);
+    if (!Number.isInteger(sampleRate) || sampleRate < 8_000 || sampleRate > 48_000) {
+      throw new ServiceCheckError(
+        localizeDesktopText(
+          locale,
+          'The speech synthesis sample rate is invalid.',
+          '语音合成采样率无效。',
         ),
       );
-      socket.send(createEventMessage(VolcengineEvent.StartConnection, undefined, {}));
-      const response = parseVolcengineMessage(
-        await withTimeout((signal) => readBinaryMessage(socket!, signal)),
+    }
+
+    const result = await withTimeout((signal) =>
+      runVolcengineTtsSession(
+        {
+          appId: environment.VOLCENGINE_SPEECH_APP_ID!,
+          accessToken: environment.VOLCENGINE_SPEECH_ACCESS_TOKEN!,
+          endpoint: environment.VOLCENGINE_TTS_ENDPOINT!,
+          resourceId: environment.VOLCENGINE_TTS_RESOURCE_ID!,
+          speaker: environment.VOLCENGINE_TTS_SPEAKER!,
+          sampleRate,
+        },
+        locale === 'en-US' ? 'Service check passed.' : '服务检测成功。',
+        { signal },
+      ),
+    );
+    if (result.audioBytes <= 0) {
+      throw new ServiceCheckError(
+        localizeDesktopText(
+          locale,
+          'The speech synthesis service returned no audio.',
+          '语音合成服务未返回音频。',
+        ),
       );
-      if (
-        response.type !== VolcengineMessageType.FullServerResponse ||
-        response.event !== VolcengineEvent.ConnectionStarted
-      ) {
-        throw new ServiceCheckError(
-          localizeDesktopText(
-            locale,
-            'The speech synthesis service did not accept the connection. Check the resource ID and credentials.',
-            '服务未接受语音合成连接，请检查资源标识和凭据。',
-          ),
-        );
-      }
-      socket.send(createEventMessage(VolcengineEvent.FinishConnection, undefined, {}));
-    } finally {
-      closeWebSocket(socket);
     }
   }
 

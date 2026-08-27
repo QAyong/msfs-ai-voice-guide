@@ -265,7 +265,6 @@ const agentRuntime = createAgentRuntime();
 const localLiveKitRuntime = new LocalLiveKitRuntime();
 const agentStartQueue = new SerialTaskQueue();
 const settingsSaveQueue = new SerialTaskQueue();
-const serviceAvailabilityChecker = new ServiceAvailabilityChecker();
 let guideLocale: GuideLocale = 'zh-CN';
 let exploreController: ExploreController | null = null;
 let exploreNarrationController: ExploreNarrationController | null = null;
@@ -369,6 +368,15 @@ const getTtsVoiceSamplesPath = () =>
     'tts',
     'confirmed-voices',
   );
+const serviceAvailabilityChecker = new ServiceAvailabilityChecker({
+  getSttProbeAudioPath: (locale) =>
+    join(
+      getTtsVoiceSamplesPath(),
+      locale === 'en-US'
+        ? 'Dacey_en_female_dacey_uranus_bigtts.wav'
+        : 'Vivi-2.0_zh_female_vv_uranus_bigtts.wav',
+    ),
+});
 const getLocalLiveKitRuntimeDirectory = () => join(app.getPath('userData'), 'livekit-runtime');
 const getLocalLiveKitExecutablePath = () =>
   getLocalLiveKitServerPath({

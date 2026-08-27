@@ -1,13 +1,6 @@
 import { AudioByteStream, tts, type APIConnectOptions } from '@livekit/agents';
-import { randomUUID } from 'node:crypto';
 import type { AppConfig } from '../../config/schema.js';
-import {
-  createEventMessage,
-  parseVolcengineMessage,
-  VolcengineEvent,
-  VolcengineMessageType,
-} from '../volcengine/protocol.js';
-import { closeWebSocket, connectWebSocket, readBinaryMessage } from '../volcengine/websocket.js';
+import { runVolcengineTtsSession } from '../volcengine/tts-session.js';
 
 type TtsConfig = AppConfig['volcengine']['tts'];
 
@@ -61,100 +54,38 @@ class VolcengineChunkedStream extends tts.ChunkedStream {
   }
 
   protected override async run(): Promise<void> {
-    const connectId = randomUUID();
-    const sessionId = randomUUID();
-    let socket;
     let lastFrame: Awaited<ReturnType<AudioByteStream['write']>>[number] | undefined;
+    let requestId = 'volcengine-tts';
 
     try {
-      socket = await connectWebSocket(
-        this.#config.endpoint,
-        {
-          'X-Api-App-Key': this.#config.appId,
-          'X-Api-Access-Key': this.#config.accessToken,
-          'X-Api-Resource-Id': this.#config.resourceId,
-          'X-Api-Connect-Id': connectId,
-        },
-        this.abortSignal,
-      );
-
-      socket.send(createEventMessage(VolcengineEvent.StartConnection, undefined, {}));
-      await this.#waitForEvent(socket, VolcengineEvent.ConnectionStarted);
-
-      const baseRequest = {
-        user: { uid: connectId },
-        namespace: 'BidirectionalTTS',
-        req_params: {
-          speaker: this.#config.speaker,
-          audio_params: {
-            format: 'pcm',
-            sample_rate: this.#config.sampleRate,
-            enable_timestamp: true,
-          },
-          additions: JSON.stringify({ disable_markdown_filter: false }),
-        },
-      };
-      socket.send(
-        createEventMessage(VolcengineEvent.StartSession, sessionId, {
-          ...baseRequest,
-          event: VolcengineEvent.StartSession,
-        }),
-      );
-      await this.#waitForEvent(socket, VolcengineEvent.SessionStarted);
-
-      socket.send(
-        createEventMessage(VolcengineEvent.TaskRequest, sessionId, {
-          ...baseRequest,
-          event: VolcengineEvent.TaskRequest,
-          req_params: { ...baseRequest.req_params, text: this.inputText },
-        }),
-      );
-      socket.send(createEventMessage(VolcengineEvent.FinishSession, sessionId, {}));
-
       const audio = new AudioByteStream(this.#config.sampleRate, 1);
-      while (true) {
-        const message = parseVolcengineMessage(await readBinaryMessage(socket, this.abortSignal));
-        if (message.type === VolcengineMessageType.ServerError) {
-          throw new Error(`火山 TTS 错误：${message.errorCode ?? 'unknown'}`);
-        }
-        if (message.type === VolcengineMessageType.FullServerResponse) {
-          if (message.event === VolcengineEvent.SessionFailed) {
-            throw new Error(`火山 TTS 会话失败：${message.payload.toString('utf8') || 'unknown'}`);
+      await runVolcengineTtsSession(this.#config, this.inputText, {
+        signal: this.abortSignal,
+        onAudio: (payload, sessionId) => {
+          requestId = sessionId;
+          const data = payload.buffer.slice(
+            payload.byteOffset,
+            payload.byteOffset + payload.byteLength,
+          ) as ArrayBuffer;
+          for (const frame of audio.write(data)) {
+            if (lastFrame) {
+              this.queue.put({
+                requestId: sessionId,
+                segmentId: sessionId,
+                frame: lastFrame,
+                final: false,
+              });
+            }
+            lastFrame = frame;
           }
-          if (message.event === VolcengineEvent.SessionFinished) {
-            break;
-          }
-          continue;
-        }
-        if (
-          message.type !== VolcengineMessageType.AudioOnlyServer ||
-          message.payload.length === 0
-        ) {
-          continue;
-        }
-
-        const data = message.payload.buffer.slice(
-          message.payload.byteOffset,
-          message.payload.byteOffset + message.payload.byteLength,
-        ) as ArrayBuffer;
-        for (const frame of audio.write(data)) {
-          if (lastFrame) {
-            this.queue.put({
-              requestId: sessionId,
-              segmentId: sessionId,
-              frame: lastFrame,
-              final: false,
-            });
-          }
-          lastFrame = frame;
-        }
-      }
+        },
+      });
 
       for (const frame of audio.flush()) {
         if (lastFrame) {
           this.queue.put({
-            requestId: sessionId,
-            segmentId: sessionId,
+            requestId,
+            segmentId: requestId,
             frame: lastFrame,
             final: false,
           });
@@ -163,40 +94,14 @@ class VolcengineChunkedStream extends tts.ChunkedStream {
       }
       if (lastFrame) {
         this.queue.put({
-          requestId: sessionId,
-          segmentId: sessionId,
+          requestId,
+          segmentId: requestId,
           frame: lastFrame,
           final: true,
         });
       }
-      socket.send(createEventMessage(VolcengineEvent.FinishConnection, undefined, {}));
     } finally {
-      closeWebSocket(socket);
       this.queue.close();
-    }
-  }
-
-  async #waitForEvent(
-    socket: Awaited<ReturnType<typeof connectWebSocket>>,
-    expectedEvent: number,
-  ): Promise<void> {
-    while (true) {
-      const message = parseVolcengineMessage(await readBinaryMessage(socket, this.abortSignal));
-      if (message.type === VolcengineMessageType.ServerError) {
-        throw new Error(`火山 TTS 错误：${message.errorCode ?? 'unknown'}`);
-      }
-      if (
-        message.type === VolcengineMessageType.FullServerResponse &&
-        message.event === expectedEvent
-      ) {
-        return;
-      }
-      if (
-        message.type === VolcengineMessageType.FullServerResponse &&
-        message.event === VolcengineEvent.SessionFailed
-      ) {
-        throw new Error(`火山 TTS 会话失败：${message.payload.toString('utf8') || 'unknown'}`);
-      }
     }
   }
 }

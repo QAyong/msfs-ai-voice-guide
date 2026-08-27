@@ -1,4 +1,20 @@
+import { EventEmitter } from 'node:events';
+import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { parseVolcengineMessage } from '../../src/providers/volcengine/protocol.js';
+
+const websocketMock = vi.hoisted(() => ({
+  closeWebSocket: vi.fn(),
+  connectWebSocket: vi.fn(),
+  readBinaryMessage: vi.fn(),
+}));
+const ttsSessionMock = vi.hoisted(() => ({
+  runVolcengineTtsSession: vi.fn(),
+}));
+
+vi.mock('../../src/providers/volcengine/websocket.js', () => websocketMock);
+vi.mock('../../src/providers/volcengine/tts-session.js', () => ttsSessionMock);
+
 import {
   alignTtsSpeakerToLocale,
   defaultDesktopServiceSettings,
@@ -13,7 +29,34 @@ import {
 } from '../../desktop/main/service-settings.js';
 import { ServiceAvailabilityChecker } from '../../desktop/main/service-checks.js';
 
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => {
+  vi.unstubAllGlobals();
+  vi.resetAllMocks();
+});
+
+class FakeWebSocket extends EventEmitter {
+  readonly readyState = 1;
+  readonly sent: Buffer[] = [];
+
+  send(data: Buffer): void {
+    this.sent.push(data);
+    if (data[1] !== 0x23) return;
+
+    const payload = Buffer.from(
+      JSON.stringify({ result: [{ utterances: [{ text: '检测成功', definite: true }] }] }),
+      'utf8',
+    );
+    const response = Buffer.alloc(12 + payload.length);
+    response[0] = 0x11;
+    response[1] = 0xb3;
+    response[2] = 0x00;
+    response[3] = 0x00;
+    response.writeInt32BE(-2, 4);
+    response.writeUInt32BE(payload.length, 8);
+    payload.copy(response, 12);
+    queueMicrotask(() => this.emit('message', response));
+  }
+}
 
 describe('desktop service settings', () => {
   it('accepts the fixed Provider configuration and keeps credentials out of its public DTO', () => {
@@ -122,6 +165,99 @@ describe('desktop service settings', () => {
     expect(first.status).toBe('unavailable');
     expect(first.message).not.toContain('private-api-key-should-not-leak');
     expect(second.status).toBe('rate_limited');
+  });
+
+  it('uses a real chat completion request for LLM checks', async () => {
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(Response.json({ choices: [{ message: { content: '检测成功。' } }] }));
+    vi.stubGlobal('fetch', fetchMock);
+    const checker = new ServiceAvailabilityChecker();
+
+    const result = await checker.check('llm', {
+      DEEPSEEK_API_KEY: 'deepseek-key',
+      DEEPSEEK_BASE_URL: 'https://api.deepseek.com',
+      DEEPSEEK_LLM_MODEL: 'deepseek-v4-flash',
+    });
+
+    expect(result.status).toBe('available');
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://api.deepseek.com/chat/completions',
+      expect.objectContaining({
+        method: 'POST',
+        headers: {
+          Authorization: 'Bearer deepseek-key',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: 'deepseek-v4-flash',
+          messages: [{ role: 'user', content: '请只回复：检测成功。' }],
+          stream: false,
+          max_tokens: 16,
+          thinking: { type: 'disabled' },
+        }),
+      }),
+    );
+  });
+
+  it('sends audio and waits for a transcript for STT checks', async () => {
+    const socket = new FakeWebSocket();
+    websocketMock.connectWebSocket.mockResolvedValue(socket);
+    const checker = new ServiceAvailabilityChecker({
+      getSttProbeAudioPath: () =>
+        join(
+          process.cwd(),
+          'resources',
+          'tts',
+          'confirmed-voices',
+          'Vivi-2.0_zh_female_vv_uranus_bigtts.wav',
+        ),
+    });
+
+    const result = await checker.check('stt', {
+      VOLCENGINE_SPEECH_APP_ID: 'app-id',
+      VOLCENGINE_SPEECH_ACCESS_TOKEN: 'access-token',
+      VOLCENGINE_STT_ENDPOINT: 'wss://speech.example.test/asr',
+      VOLCENGINE_STT_RESOURCE_ID: 'asr-resource',
+      VOLCENGINE_STT_MODEL: 'bigmodel',
+    });
+
+    expect(result.status).toBe('available');
+    expect(socket.sent.length).toBeGreaterThan(1);
+    const request = parseVolcengineMessage(socket.sent[0]!);
+    expect(JSON.parse(request.payload.toString('utf8'))).toMatchObject({
+      audio: { rate: 16_000, bits: 16, channel: 1 },
+      request: { model_name: 'bigmodel' },
+    });
+    expect(socket.sent.at(-1)?.[1]).toBe(0x23);
+  });
+
+  it('runs a full synthesis session for TTS checks', async () => {
+    ttsSessionMock.runVolcengineTtsSession.mockResolvedValue({ audioBytes: 128 });
+    const checker = new ServiceAvailabilityChecker();
+
+    const result = await checker.check('tts', {
+      VOLCENGINE_SPEECH_APP_ID: 'app-id',
+      VOLCENGINE_SPEECH_ACCESS_TOKEN: 'access-token',
+      VOLCENGINE_TTS_ENDPOINT: 'wss://speech.example.test/tts',
+      VOLCENGINE_TTS_RESOURCE_ID: 'tts-resource',
+      VOLCENGINE_TTS_SPEAKER: 'zh_female_vv_uranus_bigtts',
+      VOLCENGINE_TTS_SAMPLE_RATE: '24000',
+    });
+
+    expect(result.status).toBe('available');
+    expect(ttsSessionMock.runVolcengineTtsSession).toHaveBeenCalledWith(
+      {
+        appId: 'app-id',
+        accessToken: 'access-token',
+        endpoint: 'wss://speech.example.test/tts',
+        resourceId: 'tts-resource',
+        speaker: 'zh_female_vv_uranus_bigtts',
+        sampleRate: 24_000,
+      },
+      '服务检测成功。',
+      { signal: expect.any(AbortSignal) },
+    );
   });
 
   it('localizes service-check failures for the English locale', async () => {

@@ -1,8 +1,8 @@
 # DeepSeek LLM 与火山语音 Provider 集成设计
 
-**最后更新：** 2026-08-04
+**最后更新：** 2026-08-27
 
-**状态：** 语音 Provider 与搜索 API 均已实现；`searchWeb` 已完成真实接口和语音端到端验证
+**状态：** 语音 Provider、搜索 API 与桌面真实服务检测均已实现；`searchWeb` 已完成真实接口和语音端到端验证
 
 ## 目标与来源
 
@@ -24,6 +24,21 @@
 
 详细范围与验收条件见 [Spec-003：网络搜索与可扩展能力模块](../specs/spec-003-web-search-and-capability-modules.md) 和 [ADR-006：搜索访问边界](../adr/adr-006-search-access-boundary.md)。
 
+## 桌面设置服务检测
+
+设置页的 `settings:test-service`（服务检测 IPC）验证的是当前服务的真实功能，不再把模型列表、WebSocket 建连或 HTTP 状态码当作最终成功条件。检测使用当前表单中的非敏感配置和本次输入的凭据更新，不保存草稿、不修改 Agent 会话，也不会把凭据返回 Renderer。
+
+| 服务 | 真实检测请求 | 成功条件 |
+| ---- | ------------ | -------- |
+| DeepSeek LLM | 向 `DEEPSEEK_BASE_URL/chat/completions` 发送固定的最小对话请求；V4 模型关闭 thinking，限制 `max_tokens` 为 16 | HTTP 成功且返回非空 `choices[0].message.content` |
+| 豆包 STT | 连接 `sauc/bigmodel` WebSocket，读取按项目语言选择的内置 WAV 样本，截取 2 秒并转换为 16 kHz、单声道、16-bit PCM；发送完整 ASR 请求、音频包和最终包 | 收到服务端最终识别包并得到非空转写 |
+| 豆包 TTS | 使用 V3 双向流式 WebSocket 完成连接、会话、固定短文本合成、结束会话和结束连接 | 收到至少一个音频包 |
+| 网页搜索 | 通过当前选中的豆包 Custom API 或博查 Provider 发起真实搜索 | Provider 返回符合搜索响应契约的结果 |
+
+STT 当前运行时使用的是流式资源，因此设置检测也必须走同一条流式链路；火山另有一次请求直接返回结果的录音文件极速版，但它要求独立的 `volc.bigasr.auc_turbo` 资源，不能代替当前流式资源的验证。[大模型流式识别文档](https://www.volcengine.com/docs/6561/1354871?lang=zh)、[录音文件极速版识别文档](https://www.volcengine.com/docs/6561/1631584?lang=zh)
+
+所有远程检测共用 10 秒超时和同一目标 2.5 秒重复检测限流。由于检测是真实服务请求，服务商的调用次数、字符数、语音时长和配额规则仍然适用；单元测试继续使用 mock，不读取真实密钥。[DeepSeek Chat Completions](https://api-docs.deepseek.com/api/create-chat-completion/)、[豆包双向流式 TTS](https://www.volcengine.com/docs/6561/2228192?lang=zh)
+
 ## Provider 目录与注册方式
 
 ```text
@@ -33,6 +48,7 @@ src/providers/
   stt/volcengine.ts       # 豆包流式 ASR 适配器/工厂
   tts/volcengine.ts       # 豆包双向流式 TTS 适配器/工厂
   health.ts               # Provider 无副作用配置检查与可选连通性检查
+desktop/main/service-checks.ts # 设置页真实服务检测
 ```
 
 `registry.ts`（Provider 工厂注册表）按能力类型创建 DeepSeek LLM、豆包 STT 和豆包 TTS。Agent 入口只能调用这些工厂，不得直接初始化 DeepSeek 客户端、火山 SDK 或 WebSocket。新增供应商时新增同类适配器并在注册表登记，调用方不变。
@@ -84,7 +100,7 @@ TTS 采用火山文档推荐的 V3 双向流式 WebSocket，适合实时文本�
 2. 完成 Zod 配置 Schema，并为“STT 两种凭据模式”“TTS 必填配置”“错误脱敏”编写 Vitest 单元测试。
 3. 实现 `registry.ts` 与 DeepSeek LLM 工厂，复用 LiveKit OpenAI 插件的 `withDeepSeek()`。
 4. 核对 LiveKit 是否已有火山 STT/TTS 官方插件；若无，分别实现最小 WebSocket 适配器，协议代码不得泄漏到 `agent` 或 `conversation`。
-5. 实现 `health.ts`：默认仅校验本地配置；使用显式命令或开关才进行远程连通性检查，且脱敏记录 request/log ID。
+5. 实现 `health.ts` 的 Provider 配置检查，以及桌面 `service-checks.ts` 的真实功能检测；所有错误脱敏，不记录凭据或响应正文。
 6. 将三个工厂产物传入 LiveKit 会话，进行本地独立房间人工语音冒烟测试。
 7. 实现 `src/search/` 共享搜索服务，完成结果标准化、相关性和来源保护；再分别接入 LiveKit Tool 与 CLI。
 8. 使用 8 组真实查询验证有效召回与低置信度保护，并在 LiveKit 房间确认“STT → DeepSeek → `searchWeb` → DeepSeek → TTS”链路。
@@ -93,6 +109,8 @@ TTS 采用火山文档推荐的 V3 双向流式 WebSocket，适合实时文本�
 
 - 单元测试必须覆盖配置优先级、注册表映射、非法参数拒绝和脱敏错误；使用 mock，不用真实密钥。
 - 适配器测试使用录制的脱敏协议帧或本地 mock WebSocket，不复刻整套火山服务。
-- 远程 STT/TTS/LLM 自检单独运行，显式读取本地 `.env`，不作为 `pnpm test` 的默认前提。
+- 远程 STT/TTS/LLM 自检单独运行，显式读取本地 `.env`，不作为 `pnpm test` 的默认前提；桌面设置检测走同一套真实请求逻辑。
 - `pnpm search:smoke` 运行经过项目保护层的 8 组真实查询；`pnpm search:test` 评测原始 API 候选结果。两者均不作为默认 `pnpm test` 的前提。
 - 所有测试仍只放在本项目的 `tests/`（唯一测试目录）下，按 `unit`、`integration`、`e2e` 分类；不要在业务模块旁重复创建测试根目录。
+
+2026-08-27 使用本机凭据完成一次真实服务检测：DeepSeek LLM、豆包 STT、豆包 TTS 和当前网页搜索 Provider 均返回可用；STT 使用 2 秒内置样本，最终检测耗时约 1.3 秒。凭据值未写入仓库、日志或文档。

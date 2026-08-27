@@ -121,6 +121,7 @@ pnpm msfs:use:app
 - AI 回答中的真实搜索来源卡片和搜索结果入口。
 - 自动启动/检查 Agent Worker、首次配置引导、脱敏故障提示、重试、音量/置顶/窗口状态保存。
 - 设置中心支持中英文项目语言、DeepSeek/STT/TTS/搜索服务配置、按项目语言过滤的本地豆包 TTS 音色、音色试听和自定义 speaker ID；未配置的 App ID、API Key 和 Access Token 输入框保持空白，保存后默认显示密码圆点，点击眼睛才显示本机真实值。保存服务配置后会重启 Agent 并重新连接 LiveKit。
+- 设置中心的服务检测会对当前配置的 LLM、STT、TTS 和网页搜索分别发起一次真实功能请求：LLM 执行最小对话，STT 使用 2 秒内置语音样本并等待最终转写，TTS 实际合成短文本并校验音频返回，搜索执行真实查询。
 - 设置中心的 MSFS 页面可以检测 CLI 运行文件、SimConnect、`UserCfg.opt`、`Community2024\msfs-native-cli-route-bridge` 和 EFB Route Bridge；检测只读，不会安装或修改游戏文件。MSFS 7 个工具与 `searchWeb` 可分别关闭，关闭后对应工具不会注册到 Agent。
 - 聊天标题栏在探索按钮右侧显示“游戏已连接/未连接”两种状态；MSFS 工具全部关闭时隐藏该标识，游戏启停后自动刷新。
 - 关于页提供 QQ 群、使用教程和版本信息，并支持中英文文案；应用图标资源位于 `resources/app-icon.png` 与 `resources/app-icon.ico`，ICO 包含 Windows 常用多尺寸且为圆形透明边缘。
