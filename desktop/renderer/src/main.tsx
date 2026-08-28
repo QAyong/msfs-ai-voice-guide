@@ -2735,7 +2735,7 @@ const AssistantView = ({
         messages,
         session.room.localParticipant.identity,
         sourcesByMessage,
-        8,
+        undefined,
         copy.startIntroduction,
       ),
     [copy.startIntroduction, messages, session.room.localParticipant.identity, sourcesByMessage],

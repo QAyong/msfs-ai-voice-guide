@@ -30,10 +30,10 @@ export function createDisplayMessages(
   messages: readonly ReceivedMessage[],
   localParticipantIdentity: string,
   sourcesByMessage: Readonly<Record<string, GuideSourcesMessage>>,
-  limit = 8,
+  limit?: number,
   narrationLabel = '开启介绍',
 ): DisplayMessage[] {
-  return messages
+  const displayMessages = messages
     .map<DisplayMessage | null>((message) => {
       const rawText = message.message.trim();
       if (!rawText) return null;
@@ -51,6 +51,7 @@ export function createDisplayMessages(
         text: isExploreNarrationPrompt(rawText) ? narrationLabel : rawText,
       };
     })
-    .filter((message): message is DisplayMessage => message !== null)
-    .slice(-limit);
+    .filter((message): message is DisplayMessage => message !== null);
+
+  return limit === undefined ? displayMessages : displayMessages.slice(-limit);
 }

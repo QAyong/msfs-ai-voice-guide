@@ -18,6 +18,7 @@ LiveKit Agents 与前端 Session 已原生支持 `lk.chat` 文本流。该功能
 - 空消息不可发送；单条消息最多 4000 个字符；连接或 Agent 尚未就绪时禁用输入。
 - 发送失败时保留草稿并显示错误；成功后清空输入框。
 - `chatMessage`、用户语音转写和 Agent 回答转写按同一列表显示；本地 `chatMessage` 显示为用户气泡。
+- 聊天面板显示当前 LiveKit Session 内已收到的全部有效消息；滚动只改变视口位置，不移除早期消息。需要受限上下文时，必须由调用方显式指定消息数量。
 - 文字提问继续使用现有 DeepSeek、`searchWeb`、TTS、回答转写和来源卡片。
 - 文字提问遵循 LiveKit 默认 interruption 行为，可打断正在生成或播放的回答。
 - Agent 回答使用成熟 Markdown 渲染器显示标题、强调、列表、引用、代码和 GFM 表格；用户消息保持纯文本。
@@ -35,7 +36,7 @@ LiveKit Agents 与前端 Session 已原生支持 `lk.chat` 文本流。该功能
 ## 验收标准
 
 - [x] Renderer 通过 `useSessionMessages().send()` 发送文字，不直接维护 `lk.chat` 文本流。
-- [x] 发送后的用户文字只显示一个气泡，并与语音转写、Agent 回答共享最近消息列表。
+- [x] 发送后的用户文字只显示一个气泡，并与语音转写、Agent 回答共享当前 Session 的完整有效消息列表；滚动不会使早期消息从列表中消失。
 - [x] 空白内容不可发送，超过 4000 字不能继续输入。
 - [x] Enter 发送，Shift+Enter 换行；输入法正在组词时 Enter 不会误发送。
 - [x] 发送失败不会清空草稿，并显示可读错误。
@@ -64,7 +65,7 @@ LiveKit Agents 与前端 Session 已原生支持 `lk.chat` 文本流。该功能
 
 ## 相关测试
 
-- `tests/unit/session-messages.test.ts`：文字消息角色、语音转写合并、空消息过滤、最近消息窗口和来源归属。
+- `tests/unit/session-messages.test.ts`：文字消息角色、语音转写合并、空消息过滤、完整会话历史、显式消息窗口和来源归属。
 - `tests/unit/message-markdown.test.ts`：只允许 HTTPS Markdown 链接，拒绝 HTTP、JavaScript、Data URL 与相对地址。
 - `pnpm desktop:typecheck`：`useSessionMessages` 当前安装版本的 `send()` 与消息联合类型契约。
 - 桌面人工冒烟：文字发送、回答音频、搜索来源、回答中打断和中英文输入法。
@@ -77,6 +78,11 @@ LiveKit Agents 与前端 Session 已原生支持 `lk.chat` 文本流。该功能
 - 已验证 Agent 回答过程中发送新文字可以沿用 LiveKit 默认 interruption 行为完成打断和新一轮回答。
 - 已验证 Markdown 紧凑渲染、底部自动跟随、上翻后新消息提示与返回底部交互；用户确认没有问题。
 - 本次桌面验收由用户确认没有问题。
+
+## 本次修复说明
+
+- 2026-08-28 修复聊天面板的展示截断：`createDisplayMessages()` 只有在调用方显式传入 `limit` 时才截取消息；聊天面板不再限制为最近 8 条，探索上下文仍由调用方显式限制为最近 16 条。
+- 本次修复不引入跨 Session 持久化；刷新或断线重连后的历史恢复仍不在范围内。
 
 ## 相关依据
 

@@ -65,14 +65,14 @@
 
 ### 3.1 现有能力的复用
 
-| 现有能力                                                                | 探索模式的使用方式                                                                                                      | 不得改变的边界                                                                                |
-| ----------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
-| `desktop/renderer/src/session-messages.ts`                              | 从 LiveKit `ReceivedMessage` 派生最近已提交的用户/导游消息；探索需使用独立的最多 8 回合截取，不受聊天气泡显示条数限制。 | 不采集空消息、临时转写、来源全文或未提交草稿。                                                |
-| `desktop/renderer/src/main.tsx` 的 `textDraft` 与 `submitTextMessage()` | 接续问题只调用 `setTextComposerOpen(true)` 与 `setTextDraft(prompt)`，并聚焦输入框。                                    | 不调用 `sendText()`，不绕过用户确认。                                                         |
-| `src/msfs/MsfsCliClient` 与 `MsfsGuideService`                          | 新的探索上下文 Provider 只组合 `getFlightSnapshot()`、`getLocationContext()`、`getRouteBrief()` 等现有高层结果。        | 只有 `src/msfs/` 可启动 CLI、解析 JSON/NDJSON 或接触 SimConnect；不新增直接 SimConnect 链路。 |
-| `Source BrowserWindow`、`sourceWindowState` 与 `WebContentsView`        | 同一个窗口实例在“回答来源预览”与“探索预览”之间切换；卡片仍进入现有的受控远程页面加载流程。                              | 不复制窗口尺寸、伴随定位、多显示器、手动移动、缩放、阅读模式、预热、失败恢复或安全策略。      |
-| `desktop/preload/index.ts`                                              | 以最小白名单新增探索请求、状态和建议回填桥接。                                                                          | Renderer 不获得 CLI、模型密钥、任意网页加载或任意 IPC 能力。                                  |
-| `src/providers/llm/` 与 `src/config/`                                   | Explore Planner 的具体 DeepSeek 实现位于 Provider 层，凭据和模型配置仍由受校验配置提供。                                | 不在 Renderer 读取 `process.env`，不让 `src/agent/` 承载新业务编排。                          |
+| 现有能力                                                                | 探索模式的使用方式                                                                                                         | 不得改变的边界                                                                                |
+| ----------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| `desktop/renderer/src/session-messages.ts`                              | 从 LiveKit `ReceivedMessage` 派生最近已提交的用户/导游消息；探索需使用独立的最多 16 条消息截取，不受聊天气泡显示条数限制。 | 不采集空消息、临时转写、来源全文或未提交草稿。                                                |
+| `desktop/renderer/src/main.tsx` 的 `textDraft` 与 `submitTextMessage()` | 接续问题只调用 `setTextComposerOpen(true)` 与 `setTextDraft(prompt)`，并聚焦输入框。                                       | 不调用 `sendText()`，不绕过用户确认。                                                         |
+| `src/msfs/MsfsCliClient` 与 `MsfsGuideService`                          | 新的探索上下文 Provider 只组合 `getFlightSnapshot()`、`getLocationContext()`、`getRouteBrief()` 等现有高层结果。           | 只有 `src/msfs/` 可启动 CLI、解析 JSON/NDJSON 或接触 SimConnect；不新增直接 SimConnect 链路。 |
+| `Source BrowserWindow`、`sourceWindowState` 与 `WebContentsView`        | 同一个窗口实例在“回答来源预览”与“探索预览”之间切换；卡片仍进入现有的受控远程页面加载流程。                                 | 不复制窗口尺寸、伴随定位、多显示器、手动移动、缩放、阅读模式、预热、失败恢复或安全策略。      |
+| `desktop/preload/index.ts`                                              | 以最小白名单新增探索请求、状态和建议回填桥接。                                                                             | Renderer 不获得 CLI、模型密钥、任意网页加载或任意 IPC 能力。                                  |
+| `src/providers/llm/` 与 `src/config/`                                   | Explore Planner 的具体 DeepSeek 实现位于 Provider 层，凭据和模型配置仍由受校验配置提供。                                   | 不在 Renderer 读取 `process.env`，不让 `src/agent/` 承载新业务编排。                          |
 
 ### 3.2 `guide.sources` 与探索协议分离
 
@@ -212,7 +212,7 @@ desktop/main/
 
 ```mermaid
 flowchart TD
-  U["用户点击探索"] --> R["Assistant Renderer\n最近 8 回合 + 偏好快照"]
+  U["用户点击探索"] --> R["Assistant Renderer\n最近 16 条消息 + 偏好快照"]
   R --> I["受限 explore:request IPC"]
   I --> C["Electron Main / ExploreController"]
   C --> M["src/msfs/explore-context\n现有 CLI 适配层"]

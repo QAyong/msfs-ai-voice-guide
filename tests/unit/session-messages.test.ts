@@ -148,6 +148,20 @@ describe('official session message display', () => {
     ).toEqual(['message-7', 'message-8', 'message-9']);
   });
 
+  it('retains the complete current-session history when no limit is provided', () => {
+    const messages: ReceivedMessage[] = Array.from({ length: 9 }, (_, index) => ({
+      id: `message-${index}`,
+      message: `消息 ${index}`,
+      timestamp: index,
+      type: 'chatMessage' as const,
+      from: participant('desktop-user'),
+    }));
+
+    expect(
+      createDisplayMessages(messages, 'desktop-user', {}).map((message) => message.id),
+    ).toEqual(Array.from({ length: 9 }, (_, index) => `message-${index}`));
+  });
+
   it('attaches a preview only to the answer created or continued after the tool call', () => {
     const pending = {
       anchorMessageId: 'acknowledgement',
