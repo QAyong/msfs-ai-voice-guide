@@ -48,3 +48,24 @@
 - `pnpm test`：47 passed，8 skipped。
 - `pnpm typecheck`、`pnpm desktop:typecheck`、`pnpm lint`、`pnpm desktop:build` 全部通过。
 - 内置 Agent Worker 健康检查返回 HTTP 200。
+
+## 2026-08-28 复核：火山 ASR 过早分句与相邻用户气泡
+
+### 新发现
+
+之前的修复解决了“同一个 final utterance 被适配器重复发布”的问题，但没有覆盖另一种情况：火山 ASR 会在同一段连续讲话中把多个分句分别标记为 `definite=true`。这里的 `definite` 表示分句已经定稿，不表示用户这一整轮讲话已经结束。流式 ASR 按句返回结果也是服务本身的正常行为，详见[火山引擎流式语音识别文档](https://docs.volcengine.com/docs/6561/1354871?lang=zh)。
+
+LiveKit 收到每个 final transcript 后会继续累计用户输入，但桌面端的 `useSessionMessages` 会把不同的转写消息 ID 直接显示成不同气泡。因此，相邻分句可能被误认为重复气泡。不能把所有 final transcript 一直缓存到 `FLUSH_SENTINEL` 才发送，因为按住说话结束和连续模式的轮次提交并不依赖这个 ASR 流刷新信号；这样会把完整用户输入提交给模型的时机推迟甚至丢失。
+
+### 本次处理
+
+- 在 `src/agent/guide-agent.ts` 显式设置 endpointing（轮次结束等待）为 `minDelay: 900ms`、`maxDelay: 4000ms`，给火山分句和短暂停顿留出更宽的收敛时间。
+- 在 `desktop/renderer/src/session-messages.ts` 增加相邻用户转写合并：只有同一本地用户、连续 `userTranscript`、时间差不超过 2 秒且没有其他消息插入时才合并；保留第一条消息 ID，避免气泡跳动和重复滚动。
+- 合并文本时处理完全重复、前缀重复和中英文连接；不同轮次、其他参与者、Assistant 消息或较长间隔不会合并。
+- 保留火山适配器现有的“同一请求内 final key 去重”，并明确继续把不同的 final 分句交给 LiveKit 累计，避免为了修复展示问题而破坏模型输入。
+
+### 本次验证结果
+
+- `pnpm test`：63 个测试文件通过（1 个跳过），244 个测试通过（8 个跳过）。
+- `pnpm typecheck`、`pnpm desktop:typecheck`、`pnpm lint`、改动文件 Prettier 检查全部通过。
+- `git diff --check` 通过；本次未执行真实火山账号下的现场语音回归。

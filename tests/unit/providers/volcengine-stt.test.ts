@@ -48,6 +48,19 @@ describe('Volcengine STT utterances', () => {
     expect(shouldEmitVolcengineUtterance(utterance, finalTranscriptKeys)).toBe(false);
   });
 
+  it('keeps distinct final utterances in the same ASR request', () => {
+    const finalTranscriptKeys = new Set<string>();
+    const first = parseVolcengineUtterances(
+      payload([{ definite: true, end_time: 500, start_time: 0, text: '我想往西飞。' }]),
+    )[0]!;
+    const second = parseVolcengineUtterances(
+      payload([{ definite: true, end_time: 1_200, start_time: 600, text: '现在高度多少？' }]),
+    )[0]!;
+
+    expect(shouldEmitVolcengineUtterance(first, finalTranscriptKeys)).toBe(true);
+    expect(shouldEmitVolcengineUtterance(second, finalTranscriptKeys)).toBe(true);
+  });
+
   it('ignores malformed payloads and empty utterances', () => {
     expect(parseVolcengineUtterances(Buffer.from('invalid'))).toEqual([]);
     expect(parseVolcengineUtterances(payload([{ definite: true, text: ' ' }]))).toEqual([]);

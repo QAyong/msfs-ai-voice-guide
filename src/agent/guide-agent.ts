@@ -26,6 +26,10 @@ import { extractGuideSources } from './search-source-events.js';
 import { parseDesktopToolSettingsEnvironment } from '../../shared/desktop-settings.js';
 
 const TTS_OUTPUT_QUEUE_SIZE_MS = 5_000;
+const GUIDE_ENDPOINTING = {
+  minDelay: 900,
+  maxDelay: 4_000,
+} as const;
 
 export function createGuideAgent(
   tools: readonly llm.ToolContextEntry[] = [],
@@ -138,6 +142,7 @@ export default defineAgent({
       llm: providers.llm,
       tts: providers.tts,
       turnHandling: {
+        endpointing: GUIDE_ENDPOINTING,
         interruption: { enabled: true, mode: 'vad' },
         preemptiveGeneration: { enabled: false },
       },

@@ -286,6 +286,8 @@ class VolcengineSpeechStream extends stt.SpeechStream {
   #emitTranscripts(payload: Buffer, session: AsrSession): void {
     for (const utterance of parseVolcengineUtterances(payload)) {
       if (!shouldEmitVolcengineUtterance(utterance, session.finalTranscriptKeys)) continue;
+      // 火山的 definite 表示一个分句已经定稿，不代表用户这一轮已经结束。
+      // 继续把每个定稿分句交给 LiveKit，由它在同一轮中累计完整文本。
       this.queue.put({
         type: utterance.final
           ? stt.SpeechEventType.FINAL_TRANSCRIPT
