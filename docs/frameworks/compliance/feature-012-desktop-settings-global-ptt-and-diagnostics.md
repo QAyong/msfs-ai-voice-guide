@@ -55,9 +55,9 @@
 ## 已完成诊断实现
 
 1. 使用固定版本 `archiver` 7.0.1（MIT）流式创建标准 ZIP，并在框架登记表记录版本和官方文档。
-2. 主进程按日写入 main、Worker、conversation、tool-events JSON Lines，统一执行对象字段、Bearer Header 和 URL 敏感查询参数脱敏；日志保留 3 天且总量不超过 5 MiB。
+2. 主进程按日写入 main、Worker、conversation、tool-events JSON Lines，统一执行对象字段、Bearer Header 和 URL 敏感查询参数脱敏；日志保留 3 天且总量不超过 5 MiB。日志层从 Electron `app.getVersion()`（根目录 `package.json` 的 `version`）向每条新记录注入 `applicationVersion`，关于页使用同一版本来源，避免不同版本日志混在按日文件中无法区分。
 3. 通过 Electron `dialog.showSaveDialog` 选择目标；归档先写同目录临时文件，完成后以 `rename` 原子移动，失败时清理临时文件。
-4. 单元测试覆盖脱敏、保留上限和 ZIP 固定清单；Electron-Vite 主/Preload/Renderer 构建通过。
+4. 单元测试覆盖脱敏、保留上限、每条日志的 `applicationVersion` 和 ZIP 固定清单；Electron-Vite 主/Preload/Renderer 构建通过。
 
 ## 明确不采用
 

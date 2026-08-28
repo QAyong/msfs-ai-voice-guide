@@ -47,6 +47,7 @@ describe('desktop diagnostics', () => {
     const directory = await createTemporaryDirectory();
     const logger = new DiagnosticLogger({
       directory,
+      applicationVersion: '1.0.1-rc.7',
       maximumBytes: 160,
       maximumAgeMs: 3 * 24 * 60 * 60 * 1_000,
     });
@@ -68,6 +69,7 @@ describe('desktop diagnostics', () => {
     const now = new Date('2026-08-11T00:00:00.000Z');
     const logger = new DiagnosticLogger({
       directory,
+      applicationVersion: '1.0.1-rc.7',
       maximumAgeMs: 3 * 24 * 60 * 60 * 1_000,
       now: () => now,
     });
@@ -81,6 +83,25 @@ describe('desktop diagnostics', () => {
 
     expect(snapshot.files.main).toBe('');
     expect(await readdir(directory)).not.toContain('main-2026-08-11.ndjson');
+  });
+
+  it('adds the application version to every diagnostic record', async () => {
+    const directory = await createTemporaryDirectory();
+    const logger = new DiagnosticLogger({
+      directory,
+      applicationVersion: '1.0.1-rc.7',
+    });
+
+    await logger.append('main', { event: 'started' });
+    await logger.append('conversation', { id: 'message-1', role: 'user', text: 'hello' });
+
+    const snapshot = await logger.snapshot();
+    const records = Object.values(snapshot.files)
+      .flatMap((content) => content.trim().split('\n').filter(Boolean))
+      .map((line) => JSON.parse(line) as { applicationVersion?: string });
+
+    expect(records).toHaveLength(2);
+    expect(records.every((record) => record.applicationVersion === '1.0.1-rc.7')).toBe(true);
   });
 
   it('writes a standard ZIP with the required diagnostic entries', async () => {

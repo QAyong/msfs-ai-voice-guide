@@ -26,6 +26,7 @@ export type DiagnosticsSnapshot = {
 
 export type DiagnosticLoggerOptions = {
   directory: string;
+  applicationVersion: string;
   maximumAgeMs?: number;
   maximumBytes?: number;
   now?: () => Date;
@@ -111,6 +112,7 @@ function isDiagnosticLogFile(name: string): boolean {
 
 export class DiagnosticLogger {
   readonly #directory: string;
+  readonly #applicationVersion: string;
   readonly #maximumAgeMs: number;
   readonly #maximumBytes: number;
   readonly #now: () => Date;
@@ -119,6 +121,7 @@ export class DiagnosticLogger {
 
   constructor(options: DiagnosticLoggerOptions) {
     this.#directory = options.directory;
+    this.#applicationVersion = options.applicationVersion;
     this.#maximumAgeMs = options.maximumAgeMs ?? 3 * 24 * 60 * 60 * 1_000;
     this.#maximumBytes = options.maximumBytes ?? 5 * 1024 * 1024;
     this.#now = options.now ?? (() => new Date());
@@ -127,7 +130,11 @@ export class DiagnosticLogger {
   append(stream: DiagnosticStream, record: DiagnosticRecord): Promise<void> {
     this.#writeQueue = this.#writeQueue.then(async () => {
       const now = this.#now();
-      const sanitized = redactDiagnosticValue({ timestamp: now.toISOString(), ...record });
+      const sanitized = redactDiagnosticValue({
+        ...record,
+        timestamp: now.toISOString(),
+        applicationVersion: this.#applicationVersion,
+      });
       this.#redactionCount += sanitized.count;
       await mkdir(this.#directory, { recursive: true });
       await appendFile(

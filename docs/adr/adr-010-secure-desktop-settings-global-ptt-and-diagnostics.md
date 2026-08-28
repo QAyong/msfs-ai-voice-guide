@@ -51,11 +51,11 @@
 
 ### 日志与 ZIP 导出
 
-主进程写入结构化 JSON Lines 日志，并捕获 Agent Utility Process 的 stdout/stderr。日志及导出包可以保留对话记录：用户文字、用户转写、Agent 回复、工具调用摘要、搜索查询与来源、MSFS 就绪状态、服务调用时间线、错误码和堆栈摘要，以便开发人员复现问题。
+主进程写入结构化 JSON Lines 日志，并捕获 Agent Utility Process 的 stdout/stderr。日志及导出包可以保留对话记录：用户文字、用户转写、Agent 回复、工具调用摘要、搜索查询与来源、MSFS 就绪状态、服务调用时间线、错误码和堆栈摘要，以便开发人员复现问题。应用版本统一以 Electron `app.getVersion()` 为准，其来源是根目录 `package.json` 的 `version`；主进程日志层必须将 `applicationVersion` 自动注入每条新写入记录，关于页使用同一来源。
 
 唯一强制排除和脱敏的类别是密钥与认证材料：API Key、Access Token、API Secret、LiveKit JWT、Bearer/Authorization Header、Cookie、`.env` 原文、加密凭据 blob，以及任何 URL 查询参数中的上述值。写入、就绪诊断和导出前均须使用同一个脱敏器。
 
-日志最多保留 3 天且总量不超过 5 MiB。导出动作由主进程打开系统保存对话框并流式创建 ZIP；Renderer 不提供路径、不读取日志目录和 ZIP 内容。ZIP 至少包含 `manifest.json`、脱敏后的主/Worker 日志、`readiness.json`、`configuration-summary.json` 和对话/工具事件记录。归档完成前写入临时文件，成功后原子替换目标；失败或取消不保留部分文件。
+日志最多保留 3 天且总量不超过 5 MiB。日志文件仍按流和日期组织，不以版本拆分文件；通过每条记录的 `applicationVersion` 区分跨版本内容。导出动作由主进程打开系统保存对话框并流式创建 ZIP；Renderer 不提供路径、不读取日志目录和 ZIP 内容。ZIP 至少包含 `manifest.json`、脱敏后的主/Worker 日志、`readiness.json`、`configuration-summary.json` 和对话/工具事件记录。归档完成前写入临时文件，成功后原子替换目标；失败或取消不保留部分文件。
 
 ## 原因
 

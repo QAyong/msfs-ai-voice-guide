@@ -254,6 +254,7 @@ let diagnosticsLogger: DiagnosticLogger | null = null;
 const getDiagnosticsLogger = () => {
   diagnosticsLogger ??= new DiagnosticLogger({
     directory: join(app.getPath('userData'), 'diagnostics'),
+    applicationVersion: app.getVersion(),
   });
   return diagnosticsLogger;
 };
@@ -307,7 +308,7 @@ const getAboutInfo = (): AboutInfo =>
     schemaVersion: 1,
     productName: '晓晓飞行导游',
     productNameEn: 'Xiaoxiao Flight Guide',
-    version: '1.0',
+    version: app.getVersion(),
     supportChannels: [
       { id: 'wechat', label: '微信', labelEn: 'WeChat', qrAsset: 'wechat-qr' },
       { id: 'alipay', label: '支付宝', labelEn: 'Alipay', qrAsset: 'alipay-qr' },

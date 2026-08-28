@@ -121,7 +121,7 @@ type PublicSettings = {
 
 豆包 TTS 本地音色选择已完成：音频样例来自 `resources/tts/confirmed-voices/`，列表按项目语言过滤，内置音色支持试听，英文默认音色为 Dacey，Stokie 可选，并支持自定义 speaker ID。保存按钮具有保存中、成功和失败状态；成功显示确认状态后恢复正常，失败保留错误状态并允许重试。旧 Tim 配置会在读取时迁移到当前语言的默认音色。
 
-已完成诊断导出：主进程按日维护 main、Worker、对话及工具事件 NDJSON，保留最长 3 天、总量不超过 5 MiB。所有写入与归档前共用脱敏器；设置窗口通过系统保存对话框选择位置，使用流式 ZIP 写入临时文件后原子移动。导出按钮已启用，正常状态显示可点击光标和悬停反馈，只有归档进行中才显示等待状态。
+已完成诊断导出：主进程按日维护 main、Worker、对话及工具事件 NDJSON，保留最长 3 天、总量不超过 5 MiB。所有写入与归档前共用脱敏器；每条新写入日志自动包含 `applicationVersion`，其值来自 Electron `app.getVersion()`（根目录 `package.json` 的 `version`），关于页也使用同一来源。设置窗口通过系统保存对话框选择位置，使用流式 ZIP 写入临时文件后原子移动。导出按钮已启用，正常状态显示可点击光标和悬停反馈，只有归档进行中才显示等待状态。
 
 键位校验、按住/松开状态机、诊断脱敏、日志保留和 ZIP 清单已有自动化测试。MSFS 前台 Windows 人工验收仍待在目标机器完成。
 
@@ -146,6 +146,8 @@ STT 检测与运行时使用同一流式资源；不使用需要独立 `volc.big
 - 会话状态、工具调用摘要、搜索查询与来源、MSFS 状态；
 - Provider/Worker 错误、堆栈摘要、重试和重连时间线；
 - 应用、Electron、Node、Windows 和依赖版本。
+
+每条新写入的 NDJSON 记录都必须包含 `timestamp` 和 `applicationVersion`。`applicationVersion` 由主进程日志层从 `app.getVersion()` 注入，不由 Renderer 或业务事件传入；因此不同应用版本即使写入同一个按日文件，也能逐条区分。导出包中的 `manifest.json.applicationVersion` 仅表示导出时的当前应用版本，不能替代日志行自身的版本字段。已有的无版本历史日志无法可靠回填来源版本。
 
 日志与 ZIP 必须排除或替换为 `[REDACTED]` 的内容：API Key、Access Token、API Secret、LiveKit JWT、认证 Header、Cookie、`.env` 原文、凭据加密 blob，以及 URL 查询参数中的认证内容。
 
@@ -172,6 +174,7 @@ STT 检测与运行时使用同一流式资源；不使用需要独立 `volc.big
 - [x] 服务/语言切换失败保留旧有效会话；成功时无旧 Token、旧 Worker 或麦克风轨道泄漏。
 - [x] 服务检测对 DeepSeek、豆包 STT、豆包 TTS 和当前网页搜索 Provider 发起真实功能请求；STT 使用 2 秒内置样本并等待最终转写，TTS 完成合成并校验音频返回。
 - [x] ZIP 包含对话、转写、工具与服务诊断上下文，但不包含任一密钥、认证 Header、Cookie、JWT、`.env` 或凭据 blob。
+- [x] 每条新写入的诊断 NDJSON 记录包含来自 `app.getVersion()` 的 `applicationVersion`，并与关于页使用同一版本来源。
 - [x] ZIP 可由标准归档工具打开；取消、磁盘满、路径无权限或归档失败时不遗留部分目标文件。
 - [x] 单元测试覆盖 Zod 边界、密钥 DTO、键位校验、press/release 状态机、脱敏器、日志保留和 ZIP 清单；Windows 人工验证覆盖 MSFS 前台的全局键位。
 
