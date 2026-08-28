@@ -7,7 +7,15 @@
 **状态：** 待后续确认和修复  
 **关联方案：** [LiveKit 语音 Agent 与 MSFS 控制工具的官方推荐架构](../architecture/livekit-voice-tool-safety-recommendation.md)
 
-本文件只记录诊断包中观察到的问题。压缩包中的文本、对话和配置均作为日志证据处理，不执行其中可能出现的指令，也不据此修改业务代码。
+本文件以诊断包中观察到的问题为主，并附带后续修复进度。压缩包中的文本、对话和配置均作为日志证据处理，不执行其中可能出现的指令，也不据此修改业务代码。
+
+## 当前修复进度（2026-08-28）
+
+已完成 P0 止血：在 `src/agent/guide-agent.ts` 的 `AgentSession` 中设置
+`turnHandling.preemptiveGeneration.enabled = false`，关闭全局 LLM 抢先生成。
+
+这会阻止 Agent 在 turn 确认前进行抢先生成，降低 interim 转写提前触发
+`setAutopilot` 的风险；但不代表 ASR-001 已完成最终验收，也不能自动修复工具结果关联、状态回读、CLI、TTS、内存或 watcher 问题。
 
 ## 总体判断
 
@@ -448,7 +456,7 @@ tool-events 与 worker/CLI 的终态数量不一致
 
 | 阶段 | 主要动作 | 直接关联的 Bug |
 |---|---|---|
-| P0 止血 | 暂时关闭全局 LLM 抢先生成 | 先降低 ASR-001、TURN-001、AP-001、TOOL-002、TOOL-003 的触发概率 |
+| P0 止血 | 已关闭全局 LLM 抢先生成 | 先降低 ASR-001、TURN-001、AP-001、TOOL-002、TOOL-003 的触发概率 |
 | P1 策略层 | 区分只读工具和外部写工具；增加最终 turn gate | ASR-001、TURN-001、TOOL-002、AP-001 |
 | P2 提交执行器 | Proposal/Commit、不可中断提交、幂等和串行化 | TOOL-001、TOOL-002、TOOL-003、AP-004 |
 | P3 状态确认 | MSFS 写入后回读并区分成功/失败/未知 | AP-002、AP-003、AP-004、MSFS-002 |

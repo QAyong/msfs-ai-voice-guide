@@ -56,7 +56,7 @@ flowchart LR
 | TTS | 通过 `AgentSession` 接入 |
 | 中断 | 开启 VAD 中断处理 |
 | 工具注册 | 只读工具与 `setAutopilot` 放在同一个工具列表 |
-| 抢先生成 | 没有显式关闭；当前版本默认开启 LLM 抢先生成，TTS 抢先生成默认关闭 |
+| 抢先生成 | 已在 `src/agent/guide-agent.ts` 中显式关闭全局 LLM 抢先生成；TTS 抢先生成默认关闭 |
 | 外部写工具 | `setAutopilot` 会实际修改模拟器的自动驾驶状态 |
 | 应用层安全闸门 | 当前未看到针对抢先生成的写工具隔离或最终回合门禁 |
 
@@ -413,7 +413,7 @@ READY_TO_COMMIT
 
 ### P0：先止血，降低线上风险
 
-在 `src/agent/guide-agent.ts` 显式关闭 preemptive generation：
+已完成：在 `src/agent/guide-agent.ts` 的 `AgentSession` 中显式关闭全局 preemptive generation：
 
 ```ts
 preemptiveGeneration: {
@@ -421,9 +421,9 @@ preemptiveGeneration: {
 }
 ```
 
-这一步会增加一小段等待时间，但能先避免 `setAutopilot` 在最终语音确认前被抢先执行。它是当前版本的安全兜底，不是最终架构目标。
+这一步会增加一小段等待时间，先避免 LLM 在最终语音确认前抢先生成，从而降低 `setAutopilot` 提前执行的风险。它是当前版本的安全兜底，不是最终架构目标。
 
-同时补充：
+以下配套工作仍未完成，不会因为本次配置变更自动解决：
 
 - tool call 生命周期日志；
 - `operationId`；
@@ -489,7 +489,7 @@ TTS：保持流式输出
 setAutopilot：最终 turn 后执行，提交阶段不可中断
 ```
 
-也就是说，先关闭全局抢先生成，避免当前统一工具列表中的 `setAutopilot` 被提前触发。
+当前代码已经关闭全局抢先生成，避免当前统一工具列表中的 `setAutopilot` 被提前触发；在工具策略隔离完成前，继续保持该配置。
 
 ### 长期目标配置
 

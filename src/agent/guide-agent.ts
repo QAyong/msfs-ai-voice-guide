@@ -123,7 +123,10 @@ export default defineAgent({
       stt: providers.stt,
       llm: providers.llm,
       tts: providers.tts,
-      turnHandling: { interruption: { enabled: true, mode: 'vad' } },
+      turnHandling: {
+        interruption: { enabled: true, mode: 'vad' },
+        preemptiveGeneration: { enabled: false },
+      },
     });
     await ctx.connect();
     const participant = ctx.room.localParticipant;
