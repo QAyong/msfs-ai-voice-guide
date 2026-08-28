@@ -1,8 +1,8 @@
 # DeepSeek LLM 与火山语音 Provider 集成设计
 
-**最后更新：** 2026-08-27
+**最后更新：** 2026-08-28
 
-**状态：** 语音 Provider、搜索 API 与桌面真实服务检测均已实现；`searchWeb` 已完成真实接口和语音端到端验证
+**状态：** 语音 Provider、搜索 API 与桌面真实服务检测均已实现；TTS 第一阶段流式播放修复已落地，`searchWeb` 已完成真实接口和语音端到端验证
 
 ## 目标与来源
 
@@ -54,6 +54,27 @@ desktop/main/service-checks.ts # 设置页真实服务检测
 `registry.ts`（Provider 工厂注册表）按能力类型创建 DeepSeek LLM、豆包 STT 和豆包 TTS。Agent 入口只能调用这些工厂，不得直接初始化 DeepSeek 客户端、火山 SDK 或 WebSocket。新增供应商时新增同类适配器并在注册表登记，调用方不变。
 
 这不是通用插件框架：不实现动态加载、远程注册或 Provider 自动故障切换。注册表仅解决已存在的三类 Provider 创建职责。
+
+### TTS 运行时实现（2026-08-28）
+
+`src/providers/tts/volcengine.ts` 已实现 LiveKit `SynthesizeStream`，并声明
+`streaming: true`。一条回答流只建立一个火山 WebSocket/会话，LLM 文本片段通过多个
+`TaskRequest` 持续发送；provider 音频接收与文本发送并行，音频帧在 `SessionFinished`
+之前即可进入 LiveKit 输出。原有 `synthesize()` 一次性路径保留用于兼容调用。
+
+音频输出经过 `AudioByteStream` 和实时节奏控制，避免 provider 突发数据一次性填满
+本地播放队列；Agent 侧 TTS 输出队列上限暂设为 5,000 ms。WebSocket 建连、握手事件和
+音频消息读取均有 10 秒超时，首帧和帧间停顿分别记录为
+`TTS_FIRST_AUDIO_TIMEOUT`、`TTS_FRAME_IDLE_TIMEOUT`。
+
+TTS 日志会记录 `metrics`、`error`、`completed`/`stream_completed` 事件，以及
+`requestId`、`streamId`、文本块数量、音频包/帧数、音频字节数、首帧延迟、provider
+最大帧间隔和总耗时。这里的 `maxInterAudioGapMs` 是 provider 收包间隔，不等同于远端
+扬声器的实际播放间隔。
+
+本次只处理 TTS 流式链路、超时、节奏和观测；VAD/用户打断判定、播放回调归属、空播放
+和 `SegmentSynchronizer` 竞态仍由 [TTS 播放修复记录](../bugs/bug-20260827-tts-streaming-and-audio-repair-plan.md)
+单独跟踪。
 
 ## 组件映射
 

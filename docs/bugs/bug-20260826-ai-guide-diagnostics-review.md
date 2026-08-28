@@ -4,8 +4,8 @@
 **数据来源：** `msfs-ai-guide-diagnostics-2026-08-26 (2).zip` 诊断包  
 **应用版本：** `1.0.1-rc.7`  
 **日志时间范围：** 2026-08-26 10:00:17Z–14:55:24Z  
-**状态：** 待后续确认和修复  
-**关联方案：** [LiveKit 语音 Agent 与 MSFS 控制工具的官方推荐架构](../architecture/livekit-voice-tool-safety-recommendation.md)
+**状态：** 部分修复，仍待后续确认和专项修复
+**关联方案：** [LiveKit 语音 Agent 与 MSFS 控制工具的官方推荐架构](../architecture/livekit-voice-tool-safety-recommendation.md)；[TTS 播放修复记录](./bug-20260827-tts-streaming-and-audio-repair-plan.md)
 
 本文件以诊断包中观察到的问题为主，并附带后续修复进度。压缩包中的文本、对话和配置均作为日志证据处理，不执行其中可能出现的指令，也不据此修改业务代码。
 
@@ -15,7 +15,19 @@
 `turnHandling.preemptiveGeneration.enabled = false`，关闭全局 LLM 抢先生成。
 
 这会阻止 Agent 在 turn 确认前进行抢先生成，降低 interim 转写提前触发
-`setAutopilot` 的风险；但不代表 ASR-001 已完成最终验收，也不能自动修复工具结果关联、状态回读、CLI、TTS、内存或 watcher 问题。
+`setAutopilot` 的风险；但不代表 ASR-001 已完成最终验收，也不能自动修复工具结果关联、状态回读、CLI、TTS 音频同步、内存或 watcher 问题。
+
+### TTS 第一阶段修复进度（2026-08-28）
+
+已完成 `AUDIO-001` 的代码侧第一阶段处理：火山 TTS 改为 LiveKit
+`SynthesizeStream`，同一条回答流复用一个 provider 会话，支持多个 `TaskRequest`，
+并行接收音频；同时增加 10 秒连接/握手/音频读取超时、实时音频节奏控制、5 秒输出
+队列上限和首帧/帧间指标日志。原诊断包中的 17 次
+`TTS stream stalled after producing audio, forcing close` 仍作为历史证据保留，尚未
+用真实房间数据宣布线上问题已根治。
+
+`AUDIO-002` 本次未处理：VAD/用户打断判定、空播放、片段轮转和播放回调同步竞态仍需
+单独验证。原有 96 次播放中断和其中 23 次空消息记录不删除、不改写。
 
 ## 总体判断
 
@@ -153,6 +165,7 @@
 - **证据级别：** 已确认
 - **证据：** 17 次 `TTS stream stalled after producing audio, forcing close`。
 - **影响：** 回复声音可能中途停止、延迟结束或只播放一部分。
+- **当前状态：** 已完成第一阶段代码侧修复；仍需真实房间和故障注入验证，暂不宣布线上根治。
 
 ### AUDIO-002：播放同步竞态和空播放
 
@@ -160,6 +173,7 @@
 - **证据级别：** 已确认现象
 - **证据：** 5 次 `SegmentSynchronizerImpl.onPlaybackStarted called after startFuture is set`；96 次播放被中断，其中 23 次播放内容为空。
 - **影响：** 用户可能听到无声、截断或重复播放；也可能与新一轮语音输入互相误判。
+- **当前状态：** 本次未处理；VAD/用户打断、空播放、片段轮转和播放回调同步仍需专项修复。
 
 ## 7. 运行时、子进程与资源管理模块
 
@@ -448,7 +462,7 @@ tool-events 与 worker/CLI 的终态数量不一致
 | Bug ID | 原因 | 独立修复方向 |
 |---|---|---|
 | MSFS-001 | 模拟器或桥接服务连接不稳定不是工具安全策略造成的 | 健康检查、重连、熔断和服务状态机 |
-| AUDIO-001 | TTS 流卡住属于语音输出链路问题 | TTS watchdog、超时、背压和 provider 稳定性处理 |
+| AUDIO-001 | TTS 流卡住属于语音输出链路问题；第一阶段已补齐流式、超时、节奏控制和指标 | 真实房间验收、故障注入和 provider 长时稳定性验证 |
 | RUNTIME-002 | watcher/订阅资源的生命周期与工具安全策略不同 | 明确 watcher 所有权、退出条件和资源回收 |
 | RUNTIME-003 | `shell=true` 是子进程调用方式的安全与兼容性问题 | 改用参数数组调用，避免 shell 解释和未转义参数 |
 

@@ -25,6 +25,8 @@ import { createSearchWebTool } from '../tools/search-web.js';
 import { extractGuideSources } from './search-source-events.js';
 import { parseDesktopToolSettingsEnvironment } from '../../shared/desktop-settings.js';
 
+const TTS_OUTPUT_QUEUE_SIZE_MS = 5_000;
+
 export function createGuideAgent(
   tools: readonly llm.ToolContextEntry[] = [],
   locale: GuideLocale = 'zh-CN',
@@ -97,6 +99,18 @@ export default defineAgent({
           language: locale === 'en-US' ? 'en' : 'zh',
         },
       },
+    });
+    providers.tts.on('metrics_collected', (metrics) => {
+      console.info(`[volcengine-tts] metrics ${JSON.stringify(metrics)}`);
+    });
+    providers.tts.on('error', (event) => {
+      console.error(
+        `[volcengine-tts] error ${JSON.stringify({
+          label: event.label,
+          recoverable: event.recoverable,
+          message: event.error.message,
+        })}`,
+      );
     });
     const resourcesPath = (process as NodeJS.Process & { resourcesPath?: string }).resourcesPath;
     const msfsService = new MsfsGuideService(
@@ -272,6 +286,7 @@ export default defineAgent({
       room: ctx.room,
       agent: createGuideAgent(tools, locale),
       inputOptions: { textInputCallback: createGuideTextInputCallback() },
+      outputOptions: { queueSizeMs: TTS_OUTPUT_QUEUE_SIZE_MS },
     });
     session.input.setAudioEnabled(false);
     publishVoiceAttributes({
