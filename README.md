@@ -17,6 +17,7 @@
 - [来源预览面板轻量浏览器能力](docs/specs/spec-016-source-preview-lightweight-browser.md)
 - [原生 MSFS CLI 导游工具接入](docs/specs/spec-008-native-msfs-cli-guide-tools.md)
 - [MSFS 桌面连接状态、配置检测与工具开关](docs/specs/spec-017-msfs-desktop-connection-and-tool-settings.md)
+- [Windows 系统托盘常驻方案](docs/specs/spec-027-system-tray-residency.md)
 - [MSFS 运行时稳定性与桌面体验一致性](docs/specs/spec-018-msfs-runtime-stability-and-desktop-consistency.md)
 - [单 SimConnect 会话的 Pipe 等待修复](docs/specs/spec-019-single-simconnect-pipe-wait.md)
 - [双 MSFS daemon 会话隔离方案](docs/specs/spec-020-two-msfs-daemons.md)

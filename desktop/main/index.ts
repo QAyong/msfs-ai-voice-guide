@@ -3,9 +3,11 @@ import {
   BrowserWindow,
   dialog,
   ipcMain,
+  Menu,
   safeStorage,
   screen,
   shell,
+  Tray,
   utilityProcess,
   WebContentsView,
 } from 'electron';
@@ -157,6 +159,7 @@ import {
 import { ServiceAvailabilityChecker } from './service-checks.js';
 import { getGlobalPushToTalkAddonPath, GlobalPushToTalkController } from './global-push-to-talk.js';
 import { DiagnosticLogger, writeDiagnosticArchive } from './diagnostics.js';
+import { buildTrayMenuTemplate } from './tray-menu.js';
 import { withSourceAcceptLanguage } from './source-locale.js';
 import { ExploreController } from './explore-controller.js';
 import {
@@ -238,6 +241,7 @@ let isSourceVideoFullscreen = false;
 let sourceVideoFullscreenRestoreBounds: Electron.Rectangle | null = null;
 let sourceWindowNormalBounds: Electron.Rectangle | null = null;
 let utilityWindow: BrowserWindow | null = null;
+let appTray: Tray | null = null;
 let assistantCollapsed = false;
 let assistantMenuOpen = false;
 let assistantMenuDirection: MenuDirection = 'down';
@@ -363,6 +367,54 @@ const resolveDesktopMsfsCliPath = (configuredPath?: string) => {
   });
 };
 const getAppIconPath = () => join(getPackagedResourcesPath(), 'app-icon.png');
+
+const updateTrayMenu = () => {
+  if (!appTray) return;
+  try {
+    appTray.setToolTip(localizeDesktopText(guideLocale, 'Xiaoxiao Flight Guide', '晓晓飞行导游'));
+    appTray.setContextMenu(
+      Menu.buildFromTemplate(
+        buildTrayMenuTemplate({
+          locale: guideLocale,
+          connected: latestMsfsConnectionStatus.connected,
+          onOpenChat: activateAssistantWindow,
+          onOpenSettings: () => {
+            void openUtilityWindow('settings');
+          },
+          onQuit: () => {
+            void openUtilityWindow('quit');
+          },
+        }),
+      ),
+    );
+  } catch (error) {
+    console.error('Failed to update system tray menu', error);
+  }
+};
+
+const createTray = () => {
+  if (process.platform !== 'win32' || appTray) return;
+  try {
+    const tray = new Tray(getAppIconPath());
+    appTray = tray;
+    tray.on('click', activateAssistantWindow);
+    updateTrayMenu();
+  } catch (error) {
+    console.error('Failed to create system tray icon', error);
+  }
+};
+
+const destroyTray = () => {
+  const tray = appTray;
+  appTray = null;
+  if (!tray) return;
+  try {
+    tray.destroy();
+  } catch (error) {
+    console.error('Failed to destroy system tray icon', error);
+  }
+};
+
 const getTtsVoiceSamplesPath = () =>
   join(
     app.isPackaged ? getPackagedResourcesPath() : join(process.cwd(), 'resources'),
@@ -679,6 +731,7 @@ const getMsfsConnectionStatus = async (): Promise<MsfsConnectionStatus> => {
 
 const publishMsfsConnectionStatus = (status: MsfsConnectionStatus) => {
   latestMsfsConnectionStatus = status;
+  updateTrayMenu();
   if (isLiveWindow(assistantWindow) && !assistantWindow.webContents.isDestroyed()) {
     assistantWindow.webContents.send('msfs:connection-status', status);
   }
@@ -914,6 +967,7 @@ const desktopSettingsFailure = (message: string): DesktopSettingsSaveResult => (
 });
 
 const notifyLocaleSaved = (locale: GuideLocale) => {
+  updateTrayMenu();
   if (isLiveWindow(assistantWindow) && !assistantWindow.webContents.isDestroyed()) {
     assistantWindow.webContents.send('settings:locale-saved', locale);
   }
@@ -3046,6 +3100,7 @@ if (gotSingleInstanceLock) {
     guideLocale = await readStoredGuideLocale();
     msfsToolSettings = await readStoredToolSettings();
     await createAssistantWindow();
+    createTray();
     await installBundledMsfsCommunityPackage();
     await startMsfsDaemons();
     await startMsfsConnectionMonitor();
@@ -3090,6 +3145,9 @@ app.on('before-quit', (event) => {
       shutdownComplete = true;
       app.quit();
     });
+});
+app.on('will-quit', () => {
+  destroyTray();
 });
 app.on('activate', () => {
   if (!isLiveWindow(assistantWindow)) void createAssistantWindow();
