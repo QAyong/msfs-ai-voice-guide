@@ -2299,9 +2299,11 @@ const createSourceWindow = async () => {
     minWidth: 280,
     minHeight: 240,
     frame: false,
+    transparent: true,
     resizable: true,
     alwaysOnTop: true,
     show: false,
+    backgroundColor: '#00000000',
     icon: getAppIconPath(),
     webPreferences: {
       preload: join(mainDir, '../preload/index.cjs'),
@@ -2310,6 +2312,7 @@ const createSourceWindow = async () => {
       sandbox: true,
     },
   });
+  window.contentView.setBorderRadius(10);
   sourceWindow = window;
   resetSourceRendererReady();
   sourceWindowNormalBounds = window.getBounds();
