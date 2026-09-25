@@ -1,10 +1,43 @@
-# Microsoft Flight Simulator AI 导游助手
+# MSFS AI Voice Guide｜微软模拟飞行 AI 导游
 
-这是一个使用 TypeScript 与 LiveKit Agents 构建的实时语音与文字导游助手。第一版目标是尽快在本地跑通“一名用户进入一间房间，与导游 Agent 自然对话”的闭环。
+[简体中文](README.md) · [English](README.en.md)
+**飞着飞着，开始上地理课。**
 
-第一版已在本机完成真实语音对话联调。当前使用 DeepSeek LLM（大语言模型）、豆包 STT（语音转文字）和豆包 TTS（文字转语音），并可选接入豆包搜索 Custom API 或博查 Web Search API。Agent 已通过随应用分发的原生 MSFS CLI 接入只读飞行快照、地理上下文、EFB 航路、下一航点、附近航空设施、游戏内天气/时间和本次会话轨迹；开发态已在运行中的 MSFS 2024 内完成 CLI、SimConnect 和桌面对话冒烟验证，桌面端现已支持游戏连接状态、MSFS 配置检测、工具开关和 x64 候选安装包。
+Microsoft Flight Simulator 2024 不只是驾驶舱，也是一只可以飞去任何地方的“地球仪”。飞越陌生的山脉、海岸或小岛时，你是否也好奇：我现在在哪里？窗外这片地貌叫什么？这里的人文与自然有什么故事？
 
-桌面前端已接通真实 LiveKit Room：应用自动校验配置并启动隔离的 Agent Worker，主进程签发短期 Token；Renderer 使用 LiveKit 官方 React Session 组件管理房间、麦克风、消息和回答音频，同时支持鼠标/空格键按住说话与连续自然对话。开发与安装态均使用官方 Windows `livekit-server.exe` 的本地运行方式，不使用 Docker；x64 候选 `.exe` 安装包已生成，代码签名和自动更新尚未实现，见 [Spec-011](docs/specs/spec-011-packaged-local-livekit-runtime.md)。
+**MSFS AI Voice Guide** 是一个面向休闲飞行的开源 AI 导游助手。它把模拟器中的实时飞行信息与地理上下文交给 AI，让你可以边看风景边用语音或文字提问；无需每次重新描述位置，导游会结合当前飞行状态和最近对话继续交流。它不是飞行教练，也不替你操纵飞机，而是让飞行途中多一些发现与陪伴。
+
+<p align="center">
+  <img src="docs/assets/readme/chat-window.png" alt="AI 导游桌面聊天窗口" width="260" />
+</p>
+<p align="center"><em>在飞行途中，用语音或文字与 AI 导游交流。</em></p>
+
+<table>
+  <tr>
+    <td align="center"><img src="docs/assets/readme/msfs-connection-check.png" alt="MSFS 连接与组件检测" width="360" /></td>
+    <td align="center"><img src="docs/assets/readme/tool-toggles.png" alt="MSFS 导游工具开关" width="360" /></td>
+  </tr>
+  <tr>
+    <td align="center"><em>检查模拟器连接与运行组件</em></td>
+    <td align="center"><em>按需启用飞行上下文与探索工具</em></td>
+  </tr>
+</table>
+
+## 飞行途中可以做什么
+
+- **随时开口提问**：支持按住说话、连续语音对话和文字输入；可以追问当前位置、沿途风景、自然地理或当地人文，也可以打断正在播放的语音回答。
+- **问问“我现在在哪里”**：从 MSFS 读取飞机实时坐标，并结合 Geo API 返回国家、行政区、城市、自然地貌及可用的周边兴趣点，让地图上的位置变成听得懂的讲解。
+- **了解当前飞行情况**：查询只读飞行快照、游戏内天气与时间、EFB 航路、下一航点及附近航空设施；无需手动把驾驶舱信息逐项抄给 AI。
+- **从眼前风景继续探索**：围绕当前地点和对话上下文发起探索，获取主题介绍、延伸问题与网页来源，继续了解眼前景色背后的地理和故事。
+- **在桌面上轻量陪飞**：悬浮式 Windows 应用展示游戏连接状态，提供语音/文字聊天、服务配置、工具开关和来源浏览，尽量不打断飞行体验。
+
+## 它如何工作
+
+桌面应用连接本机 LiveKit 服务与 AI Agent；原生 MSFS CLI 通过 SimConnect 等模拟器接口读取飞行信息。需要解释坐标时，CLI 调用 Geo API 获取外部地理上下文；AI 再结合这些结果和对话生成回答。飞行数据与外部地理信息有明确来源边界：外部地名和地貌不会冒充为模拟器原生数据，Geo API 不可用时也不会编造位置或兴趣点。
+
+项目当前可接入 DeepSeek、火山引擎语音服务以及豆包或博查网页搜索。部分能力需要用户自行配置服务账号与凭据；项目使用要求、运行环境和配置步骤见下方“本地运行”章节。Windows x64 安装包目前为候选版本，尚未实现代码签名和自动更新。
+
+> **非官方声明：** 本项目是独立的第三方社区工具，与 Microsoft Corporation、Asobo Studio 无关联，未获其授权、赞助或背书。Microsoft Flight Simulator 是 Microsoft Corporation 的商标。
 
 ## 文档入口
 
@@ -166,3 +199,7 @@ pnpm guide:preamble:smoke
 `pnpm desktop:build` 也会构建 Windows 全局按住说话原生模块，并暂存 `out/tts`、`out/livekit` 和 `out/msfs` 资源；其中 TTS staging 会先清理 `out/tts`，删除本地 TTS 样例后应重新构建，避免旧音色继续留在输出目录。
 
 Agent Worker 仍依赖可访问的本机 LiveKit Server；服务未启动、凭据错误或麦克风被拒绝时，桌面应用会显示可重试的脱敏提示。完整步骤见[本地冒烟测试](docs/testing/local-agent-smoke.md)。
+
+## 许可证
+
+本项目自有代码按 [Apache License 2.0](LICENSE) 授权。第三方依赖、模拟器 SDK 衍生文件、音频样本及数据集仍受各自许可证或服务条款约束；Apache-2.0 不扩展这些第三方资产的授权范围。
