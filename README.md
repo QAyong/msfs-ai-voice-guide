@@ -1,6 +1,7 @@
 # MSFS AI Voice Guide｜微软模拟飞行 AI 导游
 
 [简体中文](README.md) · [English](README.en.md)
+
 **飞着飞着，开始上地理课。**
 
 Microsoft Flight Simulator 2024 不只是驾驶舱，也是一只可以飞去任何地方的“地球仪”。飞越陌生的山脉、海岸或小岛时，你是否也好奇：我现在在哪里？窗外这片地貌叫什么？这里的人文与自然有什么故事？
