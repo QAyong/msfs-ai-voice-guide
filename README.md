@@ -201,6 +201,14 @@ pnpm guide:preamble:smoke
 
 Agent Worker 仍依赖可访问的本机 LiveKit Server；服务未启动、凭据错误或麦克风被拒绝时，桌面应用会显示可重试的脱敏提示。完整步骤见[本地冒烟测试](docs/testing/local-agent-smoke.md)。
 
+## 加入交流群
+
+欢迎加入 QQ 交流群，交流使用问题、反馈缺陷、分享飞行体验。
+
+<p align="center">
+  <img src="docs/assets/readme/community-qq.png" alt="MSFS AI Voice Guide QQ 交流群海报" width="340" />
+</p>
+
 ## 许可证
 
 本项目自有代码按 [Apache License 2.0](LICENSE) 授权。第三方依赖、模拟器 SDK 衍生文件、音频样本及数据集仍受各自许可证或服务条款约束；Apache-2.0 不扩展这些第三方资产的授权范围。

@@ -40,6 +40,14 @@ The project can connect to DeepSeek, Volcengine speech services, and either Volc
 
 > **Unofficial project:** This is an independent community project and is not affiliated with, authorized, sponsored, or endorsed by Microsoft Corporation or Asobo Studio. Microsoft Flight Simulator is a trademark of Microsoft Corporation.
 
+## Join the community
+
+Join the QQ group to ask questions, report issues, and share your flight experiences.
+
+<p align="center">
+  <img src="docs/assets/readme/community-qq.png" alt="MSFS AI Voice Guide QQ community poster" width="340" />
+</p>
+
 ## License
 
 Original project code is licensed under the [Apache License 2.0](LICENSE). Third-party dependencies, SDK-derived files, audio samples, and datasets remain subject to their respective licenses and terms; the project license does not grant additional rights to those assets.
