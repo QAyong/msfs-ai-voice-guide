@@ -22,3 +22,15 @@ native/global-ptt/build/
 .DS_Store
 Thumbs.db
 .ua/
+
+# 个人草稿、本地调研产物与授权二维码：本来就不该入库
+.blocker-journal/
+blocker-journal-cn-updated/
+blocker-journal-cn-updated.zip
+/feishu-auth-qr*.png
+/feishu-auth-qrcode.png
+/lark-auth-qrcode.png
+/lark-config-qrcode.png
+/english-msfs-guide.xml
+/reddit-msfs-ai-guide.xml
+design-qa.md
