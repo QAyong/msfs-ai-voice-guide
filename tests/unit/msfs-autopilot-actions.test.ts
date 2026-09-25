@@ -22,11 +22,15 @@ type MockAutopilotState = {
   altitudeArm: number;
   altitudeLock: number;
   altitude: number;
+  altitudeSlotIndex: number;
   verticalHold: number;
   verticalSpeed: number;
+  verticalSpeedSlotIndex: number;
   flightLevelChange: number;
   airspeedHold: number;
   airspeed: number;
+  speedSlotIndex: number;
+  headingSlotIndex: number;
 };
 
 const defaultState = (): MockAutopilotState => ({
@@ -44,11 +48,15 @@ const defaultState = (): MockAutopilotState => ({
   altitudeArm: 0,
   altitudeLock: 0,
   altitude: 5_000,
+  altitudeSlotIndex: 1,
   verticalHold: 0,
   verticalSpeed: 0,
+  verticalSpeedSlotIndex: 1,
   flightLevelChange: 0,
   airspeedHold: 0,
   airspeed: 120,
+  speedSlotIndex: 1,
+  headingSlotIndex: 1,
 });
 
 class AutopilotRunner implements MsfsProcessRunner {
@@ -56,6 +64,7 @@ class AutopilotRunner implements MsfsProcessRunner {
   readonly state: MockAutopilotState;
   readonly inputEventNames: readonly string[];
   readonly ignoredKeyEvents: readonly string[];
+  readonly missingSimvars: readonly string[];
   aircraftTitle = 'Test Aircraft';
   tailNumber = 'TEST';
 
@@ -63,10 +72,12 @@ class AutopilotRunner implements MsfsProcessRunner {
     overrides: Partial<MockAutopilotState> = {},
     inputEventNames: readonly string[] = ['AUTOPILOT_FLIGHT_DIRECTOR'],
     ignoredKeyEvents: readonly string[] = [],
+    missingSimvars: readonly string[] = [],
   ) {
     this.state = { ...defaultState(), ...overrides };
     this.inputEventNames = inputEventNames;
     this.ignoredKeyEvents = ignoredKeyEvents;
+    this.missingSimvars = missingSimvars;
   }
 
   async run(...[, args]: Parameters<MsfsProcessRunner['run']>): Promise<ProcessRunResult> {
@@ -107,15 +118,21 @@ class AutopilotRunner implements MsfsProcessRunner {
 
   private batchResult(args: readonly string[]): ProcessRunResult {
     const itemArgument = args[args.indexOf('--items') + 1] ?? '';
-    const items = itemArgument.split(';').map((item) => {
-      const [name = '', unit = ''] = item.split('|');
-      return {
-        name,
-        unit,
-        datatype: 'FLOAT64',
-        value: this.valueFor(name),
-      };
-    });
+    const items = itemArgument
+      .split(';')
+      .filter((item) => {
+        const [name = ''] = item.split('|');
+        return !this.missingSimvars.includes(name);
+      })
+      .map((item) => {
+        const [name = '', unit = ''] = item.split('|');
+        return {
+          name,
+          unit,
+          datatype: 'FLOAT64',
+          value: this.valueFor(name),
+        };
+      });
     return success({ items });
   }
 
@@ -129,22 +146,29 @@ class AutopilotRunner implements MsfsProcessRunner {
     }
 
     switch (name) {
-      case 'AP_MASTER':
-        this.state.master = this.state.master === 1 ? 0 : 1;
+      case 'AUTOPILOT_ON':
+        this.state.master = 1;
+        break;
+      case 'AUTOPILOT_OFF':
+        this.state.master = 0;
         break;
       case 'TOGGLE_FLIGHT_DIRECTOR':
         this.state.flightDirector = this.state.flightDirector === 1 ? 0 : 1;
         break;
       case 'HEADING_BUG_SET':
+        expect(data[1]).toBe(this.state.headingSlotIndex);
         this.state.heading = data[0] ?? this.state.heading;
         break;
       case 'AP_ALT_VAR_SET_ENGLISH':
+        expect(data[1]).toBe(this.state.altitudeSlotIndex);
         this.state.altitude = data[0] ?? this.state.altitude;
         break;
       case 'AP_SPD_VAR_SET':
+        expect(data[1]).toBe(this.state.speedSlotIndex);
         this.state.airspeed = data[0] ?? this.state.airspeed;
         break;
       case 'AP_VS_VAR_SET_ENGLISH': {
+        expect(data[1]).toBe(this.state.verticalSpeedSlotIndex);
         const value = data[0] ?? 0;
         this.state.verticalSpeed = value > 0x7fffffff ? value - 0x1_0000_0000 : value;
         break;
@@ -152,17 +176,32 @@ class AutopilotRunner implements MsfsProcessRunner {
       case 'AP_PANEL_HEADING_ON':
         this.state.headingLock = 1;
         break;
+      case 'AP_PANEL_HEADING_OFF':
+        this.state.headingLock = 0;
+        break;
       case 'AP_NAV1_HOLD_ON':
         this.state.navLock = 1;
+        break;
+      case 'AP_NAV1_HOLD_OFF':
+        this.state.navLock = 0;
         break;
       case 'AP_PANEL_ALTITUDE_ON':
         this.state.altitudeLock = 1;
         break;
+      case 'AP_PANEL_ALTITUDE_OFF':
+        this.state.altitudeLock = 0;
+        break;
       case 'AP_VS_ON':
         this.state.verticalHold = 1;
         break;
+      case 'AP_VS_OFF':
+        this.state.verticalHold = 0;
+        break;
       case 'FLIGHT_LEVEL_CHANGE_ON':
         this.state.flightLevelChange = 1;
+        break;
+      case 'FLIGHT_LEVEL_CHANGE_OFF':
+        this.state.flightLevelChange = 0;
         break;
       default:
         throw new Error(`Unexpected autopilot event: ${name}`);
@@ -186,11 +225,15 @@ class AutopilotRunner implements MsfsProcessRunner {
       'AUTOPILOT ALTITUDE ARM': this.state.altitudeArm,
       'AUTOPILOT ALTITUDE LOCK': this.state.altitudeLock,
       'AUTOPILOT ALTITUDE LOCK VAR': this.state.altitude,
+      'AUTOPILOT ALTITUDE SLOT INDEX': this.state.altitudeSlotIndex,
       'AUTOPILOT VERTICAL HOLD': this.state.verticalHold,
       'AUTOPILOT VERTICAL HOLD VAR': this.state.verticalSpeed,
+      'AUTOPILOT VS SLOT INDEX': this.state.verticalSpeedSlotIndex,
       'AUTOPILOT FLIGHT LEVEL CHANGE': this.state.flightLevelChange,
       'AUTOPILOT AIRSPEED HOLD': this.state.airspeedHold,
       'AUTOPILOT AIRSPEED HOLD VAR': this.state.airspeed,
+      'AUTOPILOT SPEED SLOT INDEX': this.state.speedSlotIndex,
+      'AUTOPILOT HEADING SLOT INDEX': this.state.headingSlotIndex,
     };
     const value = values[name];
     if (value === undefined) throw new Error(`Unexpected fake SimVar: ${name}`);
@@ -257,18 +300,50 @@ describe('MSFS autopilot actions', () => {
 
     expect(result).toMatchObject({ status: 'ok', state: { active: { autopilot: true } } });
     expect(keyEventNames(runner)).toEqual([
-      'AP_MASTER',
+      'AUTOPILOT_ON',
       'AP_PANEL_HEADING_ON',
       'AP_PANEL_ALTITUDE_ON',
       'HEADING_BUG_SET',
       'AP_ALT_VAR_SET_ENGLISH',
     ]);
+    expect(
+      runner.calls.find(
+        (args) => args[0] === 'key-event' && args.includes('HEADING_BUG_SET'),
+      ),
+    ).toContain('90,1');
+    expect(
+      runner.calls.find(
+        (args) => args[0] === 'key-event' && args.includes('AP_ALT_VAR_SET_ENGLISH'),
+      ),
+    ).toContain('6000,1');
     expect(runner.calls.filter((args) => args[0] === 'simvar')).toHaveLength(6);
     expect(
       runner.calls
         .filter((args) => args[0] === 'key-event')
         .every((args) => args.includes('--unsafe')),
     ).toBe(true);
+  });
+
+  it('uses the explicit AP OFF event instead of toggling the current state', async () => {
+    const runner = new AutopilotRunner({ master: 1 });
+    const service = createService(runner);
+
+    await expect(service.setAutopilot({ ap: false })).resolves.toMatchObject({
+      status: 'ok',
+      state: { active: { autopilot: false } },
+    });
+    expect(keyEventNames(runner)).toEqual(['AUTOPILOT_OFF']);
+  });
+
+  it('refuses a target write when the current target slot cannot be read', async () => {
+    const runner = new AutopilotRunner({}, undefined, [], ['AUTOPILOT HEADING SLOT INDEX']);
+    const service = createService(runner);
+
+    await expect(service.setAutopilot({ targetHeadingDegrees: 90 })).resolves.toMatchObject({
+      status: 'rejected',
+      message: '当前无法确认目标航向使用的 slot/index，没有执行任何自动驾驶设置。',
+    });
+    expect(keyEventNames(runner)).toEqual([]);
   });
 
   it('encodes a negative vertical speed for the unsigned CLI event parameter', async () => {
@@ -286,7 +361,7 @@ describe('MSFS autopilot actions', () => {
       (args) =>
         args[0] === 'key-event' && args[args.indexOf('--name') + 1] === 'AP_VS_VAR_SET_ENGLISH',
     );
-    expect(eventCall).toContain('4294966796,0');
+    expect(eventCall).toContain('4294966796,1');
   });
 
   it('does not treat a mode-named Input Event as proof that VS is supported', async () => {
@@ -345,7 +420,7 @@ describe('MSFS autopilot actions', () => {
     expect(keyEventNames(runner)).toEqual([]);
   });
 
-  it('uses the current aircraft FD input event when it is available', async () => {
+  it('does not use an Input Event when a matching FD event is available', async () => {
     const runner = new AutopilotRunner({ flightDirector: 1 });
     const service = createService(runner);
 
@@ -353,9 +428,8 @@ describe('MSFS autopilot actions', () => {
       status: 'ok',
       state: { active: { flightDirector: false } },
     });
-    expect(runner.calls.some((args) => args[0] === 'input' && args[1] === 'list')).toBe(true);
-    expect(runner.calls.some((args) => args[0] === 'input' && args[1] === 'set')).toBe(true);
-    expect(keyEventNames(runner)).toEqual([]);
+    expect(runner.calls.some((args) => args[0] === 'input')).toBe(false);
+    expect(keyEventNames(runner)).toEqual(['TOGGLE_FLIGHT_DIRECTOR']);
   });
 
   it('downgrades a previously confirmed flight director when the event stops changing state', async () => {

@@ -34,7 +34,7 @@ msfs external geo context --from aircraft --detail auto --json
 
 ```powershell
 msfs simvar set --name "AUTOPILOT ALTITUDE LOCK VAR" --unit feet --value 5000 --unsafe --json
-msfs key-event send --name AP_MASTER --data 1 --unsafe --json
+msfs key-event send --name AUTOPILOT_ON --unsafe --json
 msfs input set --hash 123456789 --value 1 --unsafe --json
 msfs flight load --path C:\Flights\test.FLT --unsafe --json
 msfs ai aircraft create-parked --title "Cessna 172 Skyhawk" --tail N123AB --airport RJNS --unsafe --json

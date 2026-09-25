@@ -1,0 +1,59 @@
+{
+  "schemaVersion": 1,
+  "collectedAt": "2026-09-03T11:20:56.691Z",
+  "source": "native_simconnect_temporary_ai",
+  "temporaryAi": true,
+  "userAircraftSwitched": false,
+  "autopilotWriteAttempted": false,
+  "executablePath": "dev-runtime\\msfs-cli\\msfs.exe",
+  "data": {
+    "schema_version": 1,
+    "type": "aircraft",
+    "status": "complete",
+    "temporary_ai": true,
+    "user_aircraft_switched": false,
+    "autopilot_write_attempted": false,
+    "candidate_title_count": 2,
+    "probed_title_count": 2,
+    "supported_count": 2,
+    "unsupported_count": 0,
+    "unknown_count": 0,
+    "cleanup": {
+      "status": "complete",
+      "objects_created": 2,
+      "objects_removed": 2,
+      "unresolved_objects": 0
+    },
+    "error": null,
+    "results": [
+      {
+        "aircraft_title": "Asobo PassiveAircraft C140",
+        "status": "supported",
+        "autopilot_available": 1,
+        "flight_director_active": 0,
+        "heading_lock": 0,
+        "nav1_lock": 0,
+        "altitude_lock": 0,
+        "vertical_hold": 0,
+        "flight_level_change": 0,
+        "temporary_ai": true,
+        "object_removed": true,
+        "error": null
+      },
+      {
+        "aircraft_title": "Asobo PassiveAircraft King Air 360",
+        "status": "supported",
+        "autopilot_available": 1,
+        "flight_director_active": 0,
+        "heading_lock": 0,
+        "nav1_lock": 0,
+        "altitude_lock": 0,
+        "vertical_hold": 0,
+        "flight_level_change": 0,
+        "temporary_ai": true,
+        "object_removed": true,
+        "error": null
+      }
+    ]
+  }
+}

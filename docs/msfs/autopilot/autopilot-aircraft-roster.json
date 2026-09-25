@@ -1,0 +1,1159 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-09-03T14:12:31.256Z",
+  "identityLevels": {
+    "runtime": "SimConnect 可生成的飞机标题（含变体）",
+    "officialPartner": "官方安装包级候选，不与 runtime 标题强行合并"
+  },
+  "sources": {
+    "runtimeProbeArtifact": "docs\\msfs\\autopilot\\runtime-probes\\20260903T141231258Z-aircraft-autopilot-modes-batched.json",
+    "officialAircraftCatalog": "docs\\msfs\\autopilot\\official-aircraft-catalog.json",
+    "officialPartnerCandidates": "docs\\msfs\\autopilot\\official-partner-aircraft-candidates.json",
+    "officialSdkDocuments": [
+      "https://docs.flightsimulator.com/msfs2024/flighting/content-configuration/cfg-files/systems.cfg/",
+      "https://docs.flightsimulator.com/msfs2024/html/6_Programming_APIs/Key_Events/Aircraft_Autopilot_Flight_Assist_Events.htm",
+      "https://docs.flightsimulator.com/msfs2024/retail/programming-apis/simconnect/api-reference/events-and-data/simconnect_transmitclientevent/"
+    ]
+  },
+  "determination": {
+    "officialConfiguration": {
+      "file": "systems.cfg",
+      "section": "[AUTOPILOT]",
+      "autopilotAvailable": "autopilot_available=1 means available; 0 disables the autopilot system",
+      "flightDirectorAvailable": "flight_director_available is an independent flight-director configuration field",
+      "caveat": "Configuration availability does not prove every mode or control path."
+    },
+    "runtimeGate": "AUTOPILOT AVAILABLE=1 on a temporary AI object",
+    "runtimeModeProof": "A standard event changes the corresponding SimVar to the requested state and the OFF operation reads back clear.",
+    "statusPolicy": {
+      "supported": "Included in the execution allowlist only when the AP gate is available.",
+      "unsupported": "Excluded when the AP gate is explicitly unavailable at runtime.",
+      "unknown": "Retained for audit but never executable when the official data or readback is inconclusive."
+    }
+  },
+  "summary": {
+    "runtimeEnumeratedTitleCount": 146,
+    "runtimeActiveTitleCount": 146,
+    "runtimeSupportedTitleCount": 120,
+    "runtimeUnsupportedTitleCount": 26,
+    "runtimeUnknownTitleCount": 0,
+    "officialPartnerCandidatePackageCount": 38,
+    "executionAllowlistPath": "docs\\msfs\\autopilot\\autopilot-supported-aircraft.json"
+  },
+  "executionAllowlist": [
+    {
+      "aircraft_title": "PC-12 NGX Air Ambulance",
+      "status": "supported",
+      "autopilot_available": 1
+    },
+    {
+      "aircraft_title": "A10C Thunderbolt II",
+      "status": "supported",
+      "autopilot_available": 1
+    },
+    {
+      "aircraft_title": "Douglas DC-3 EMERALD HARBOR",
+      "status": "supported",
+      "autopilot_available": 1
+    },
+    {
+      "aircraft_title": "Diamond DA40NG Private Charter",
+      "status": "supported",
+      "autopilot_available": 1
+    },
+    {
+      "aircraft_title": "DHC-6-300 Twin Otter Skis",
+      "status": "supported",
+      "autopilot_available": 1
+    },
+    {
+      "aircraft_title": "DHC-2 Beaver Floats / Passenger Cabin / Radios",
+      "status": "supported",
+      "autopilot_available": 1
+    },
+    {
+      "aircraft_title": "L-39 Albatros",
+      "status": "supported",
+      "autopilot_available": 1
+    },
+    {
+      "aircraft_title": "DHC-2 Beaver Wheels / Passenger Cabin / GPS",
+      "status": "supported",
+      "autopilot_available": 1
+    },
+    {
+      "aircraft_title": "C208B Skydive",
+      "status": "supported",
+      "autopilot_available": 1
+    },
+    {
+      "aircraft_title": "DHC-6-300 Twin Otter Wheels",
+      "status": "supported",
+      "autopilot_available": 1
+    },
+    {
+      "aircraft_title": "Beechcraft Bonanza Private Charter",
+      "status": "supported",
+      "autopilot_available": 1
+    },
+    {
+      "aircraft_title": "Cessna Citation CJ4",
+      "status": "supported",
+      "autopilot_available": 1
+    },
+    {
+      "aircraft_title": "Zlin Aviation Savage Cub Rescue",
+      "status": "supported",
+      "autopilot_available": 1
+    },
+    {
+      "aircraft_title": "C172SP G1000 Cargo",
+      "status": "supported",
+      "autopilot_available": 1
+    },
+    {
+      "aircraft_title": "C172SP G1000 Passengers Floats",
+      "status": "supported",
+      "autopilot_available": 1
+    },
+    {
+      "aircraft_title": "Douglas DC-3 WORLD TRAVEL",
+      "status": "supported",
+      "autopilot_available": 1
+    },
+    {
+      "aircraft_title": "DHC-2 Beaver Floats / Passenger Cabin / Radio + ADF",
+      "status": "supported",
+      "autopilot_available": 1
+    },
+    {
+      "aircraft_title": "PC-12 NGX VIP",
+      "status": "supported",
+      "autopilot_available": 1
+    },
+    {
+      "aircraft_title": "747-8i",
+      "status": "supported",
+      "autopilot_available": 1
+    },
+    {
+      "aircraft_title": "C208B Cargo",
+      "status": "supported",
+      "autopilot_available": 1
+    },
+    {
+      "aircraft_title": "S12-G: Passengers",
+      "status": "supported",
+      "autopilot_available": 1
+    },
+    {
+      "aircraft_title": "Microsoft Vision Jet Executive Seating",
+      "status": "supported",
+      "autopilot_available": 1
+    },
+    {
+      "aircraft_title": "Pilatus PC-6 Gauge Wheels",
+      "status": "supported",
+      "autopilot_available": 1
+    },
+    {
+      "aircraft_title": "Edge540 v3 Martin Sonka",
+      "status": "supported",
+      "autopilot_available": 1
+    },
+    {
+      "aircraft_title": "Draco X: Cargo",
+      "status": "supported",
+      "autopilot_available": 1
+    },
+    {
+      "aircraft_title": "Spirit of St.Louis",
+      "status": "supported",
+      "autopilot_available": 1
+    },
+    {
+      "aircraft_title": "A330-200 (RR)",
+      "status": "supported",
+      "autopilot_available": 1
+    },
+    {
+      "aircraft_title": "C172SP G1000 Passengers",
+      "status": "supported",
+      "autopilot_available": 1
+    },
+    {
+      "aircraft_title": "Edge540 v2",
+      "status": "supported",
+      "autopilot_available": 1
+    },
+    {
+      "aircraft_title": "Douglas DC-3 Aviators XBOX Club",
+      "status": "supported",
+      "autopilot_available": 1
+    },
+    {
+      "aircraft_title": "C172SP G1000 Aerial Advertising",
+      "status": "supported",
+      "autopilot_available": 1
+    },
+    {
+      "aircraft_title": "NXCub Aerial Advertising",
+      "status": "supported",
+      "autopilot_available": 1
+    },
+    {
+      "aircraft_title": "C208B Medic",
+      "status": "supported",
+      "autopilot_available": 1
+    },
+    {
+      "aircraft_title": "A330-300 (GE)",
+      "status": "supported",
+      "autopilot_available": 1
+    },
+    {
+      "aircraft_title": "A330-300 (RR)",
+      "status": "supported",
+      "autopilot_available": 1
+    },
+    {
+      "aircraft_title": "Douglas DC-3 WHITE - classic",
+      "status": "supported",
+      "autopilot_available": 1
+    },
+    {
+      "aircraft_title": "Optica: Scientific Research",
+      "status": "supported",
+      "autopilot_available": 1
+    },
+    {
+      "aircraft_title": "C185F Skywagon Fairing",
+      "status": "supported",
+      "autopilot_available": 1
+    },
+    {
+      "aircraft_title": "Hercules H-4",
+      "status": "supported",
+      "autopilot_available": 1
+    },
+    {
+      "aircraft_title": "C172SP G1000 Tow",
+      "status": "supported",
+      "autopilot_available": 1
+    },
+    {
+      "aircraft_title": "A330-200 (GE)",
+      "status": "supported",
+      "autopilot_available": 1
+    },
+    {
+      "aircraft_title": "Pilatus PC-6 G950 Wheels",
+      "status": "supported",
+      "autopilot_available": 1
+    },
+    {
+      "aircraft_title": "Douglas DC-3 METAL LEFT",
+      "status": "supported",
+      "autopilot_available": 1
+    },
+    {
+      "aircraft_title": "Grumman Goose G21A",
+      "status": "supported",
+      "autopilot_available": 1
+    },
+    {
+      "aircraft_title": "PC-12 NGX Passengers",
+      "status": "supported",
+      "autopilot_available": 1
+    },
+    {
+      "aircraft_title": "Optica: Passengers",
+      "status": "supported",
+      "autopilot_available": 1
+    },
+    {
+      "aircraft_title": "C185F Skywagon Ski",
+      "status": "supported",
+      "autopilot_available": 1
+    },
+    {
+      "aircraft_title": "C172SP G1000 Passengers Skis",
+      "status": "supported",
+      "autopilot_available": 1
+    },
+    {
+      "aircraft_title": "A330-BelugaXL",
+      "status": "supported",
+      "autopilot_available": 1
+    },
+    {
+      "aircraft_title": "XCub Passengers Skis",
+      "status": "supported",
+      "autopilot_available": 1
+    },
+    {
+      "aircraft_title": "Microsoft Vision Jet Complete Seating",
+      "status": "supported",
+      "autopilot_available": 1
+    },
+    {
+      "aircraft_title": "737 Max 8 BBJ",
+      "status": "supported",
+      "autopilot_available": 1
+    },
+    {
+      "aircraft_title": "737 Max 8 Passengers",
+      "status": "supported",
+      "autopilot_available": 1
+    },
+    {
+      "aircraft_title": "Midnight",
+      "status": "supported",
+      "autopilot_available": 1
+    },
+    {
+      "aircraft_title": "Boom XB-1 [Preset Default]",
+      "status": "supported",
+      "autopilot_available": 1
+    },
+    {
+      "aircraft_title": "C400 Corvalis",
+      "status": "supported",
+      "autopilot_available": 1
+    },
+    {
+      "aircraft_title": "A400M Cargo",
+      "status": "supported",
+      "autopilot_available": 1
+    },
+    {
+      "aircraft_title": "DHC-2 Beaver Wheels / Passenger Cabin / Radios",
+      "status": "supported",
+      "autopilot_available": 1
+    },
+    {
+      "aircraft_title": "A330-200 VIP (GE)",
+      "status": "supported",
+      "autopilot_available": 1
+    },
+    {
+      "aircraft_title": "XCub Passengers Floats",
+      "status": "supported",
+      "autopilot_available": 1
+    },
+    {
+      "aircraft_title": "Diamond DA40NG",
+      "status": "supported",
+      "autopilot_available": 1
+    },
+    {
+      "aircraft_title": "DHC-2 Beaver Wheels / Cargo / Radios",
+      "status": "supported",
+      "autopilot_available": 1
+    },
+    {
+      "aircraft_title": "A320neo V2",
+      "status": "supported",
+      "autopilot_available": 1
+    },
+    {
+      "aircraft_title": "DHC-2 Beaver Wheels / Passenger Cabin / Radio + ADF",
+      "status": "supported",
+      "autopilot_available": 1
+    },
+    {
+      "aircraft_title": "A310",
+      "status": "supported",
+      "autopilot_available": 1
+    },
+    {
+      "aircraft_title": "Pilatus PC-6 Gauge Skis",
+      "status": "supported",
+      "autopilot_available": 1
+    },
+    {
+      "aircraft_title": "A330-200 VIP (RR)",
+      "status": "supported",
+      "autopilot_available": 1
+    },
+    {
+      "aircraft_title": "Douglas DC-3 DUSTY",
+      "status": "supported",
+      "autopilot_available": 1
+    },
+    {
+      "aircraft_title": "Douglas DC-3 BLUE STRIPE",
+      "status": "supported",
+      "autopilot_available": 1
+    },
+    {
+      "aircraft_title": "MXS-R Race",
+      "status": "supported",
+      "autopilot_available": 1
+    },
+    {
+      "aircraft_title": "747-8F",
+      "status": "supported",
+      "autopilot_available": 1
+    },
+    {
+      "aircraft_title": "C208B Floats Passengers",
+      "status": "supported",
+      "autopilot_available": 1
+    },
+    {
+      "aircraft_title": "ES30 Passengers",
+      "status": "supported",
+      "autopilot_available": 1
+    },
+    {
+      "aircraft_title": "PC-12NGX Cargo - Empty",
+      "status": "supported",
+      "autopilot_available": 1
+    },
+    {
+      "aircraft_title": "MXS-R",
+      "status": "supported",
+      "autopilot_available": 1
+    },
+    {
+      "aircraft_title": "A321",
+      "status": "supported",
+      "autopilot_available": 1
+    },
+    {
+      "aircraft_title": "Edge540 v3 Matt Hall",
+      "status": "supported",
+      "autopilot_available": 1
+    },
+    {
+      "aircraft_title": "A330-300P2F (GE)",
+      "status": "supported",
+      "autopilot_available": 1
+    },
+    {
+      "aircraft_title": "A320neo V2 VIP",
+      "status": "supported",
+      "autopilot_available": 1
+    },
+    {
+      "aircraft_title": "C208B Passengers",
+      "status": "supported",
+      "autopilot_available": 1
+    },
+    {
+      "aircraft_title": "DHC-2 Beaver Floats / Cargo / GPS",
+      "status": "supported",
+      "autopilot_available": 1
+    },
+    {
+      "aircraft_title": "Douglas DC-3 RED YELLOW",
+      "status": "supported",
+      "autopilot_available": 1
+    },
+    {
+      "aircraft_title": "DHC-2 Beaver Floats / Cargo / Radio + ADF",
+      "status": "supported",
+      "autopilot_available": 1
+    },
+    {
+      "aircraft_title": "DHC-2 Beaver Wheels / Cargo / Radio + ADF",
+      "status": "supported",
+      "autopilot_available": 1
+    },
+    {
+      "aircraft_title": "XCub Aerial Advertising",
+      "status": "supported",
+      "autopilot_available": 1
+    },
+    {
+      "aircraft_title": "DHC-6-300 Twin Otter Floats",
+      "status": "supported",
+      "autopilot_available": 1
+    },
+    {
+      "aircraft_title": "DA62 Scientific Research",
+      "status": "supported",
+      "autopilot_available": 1
+    },
+    {
+      "aircraft_title": "XCub Passengers",
+      "status": "supported",
+      "autopilot_available": 1
+    },
+    {
+      "aircraft_title": "C172SP G1000 Skydive",
+      "status": "supported",
+      "autopilot_available": 1
+    },
+    {
+      "aircraft_title": "Zlin Aviation Savage Cub",
+      "status": "supported",
+      "autopilot_available": 1
+    },
+    {
+      "aircraft_title": "Microsoft Vision Jet Family Seating",
+      "status": "supported",
+      "autopilot_available": 1
+    },
+    {
+      "aircraft_title": "C185F Skywagon Tundra",
+      "status": "supported",
+      "autopilot_available": 1
+    },
+    {
+      "aircraft_title": "A330-300P2F (RR)",
+      "status": "supported",
+      "autopilot_available": 1
+    },
+    {
+      "aircraft_title": "Draco X: Passengers",
+      "status": "supported",
+      "autopilot_available": 1
+    },
+    {
+      "aircraft_title": "Joby [Preset Default]",
+      "status": "supported",
+      "autopilot_available": 1
+    },
+    {
+      "aircraft_title": "NXCub",
+      "status": "supported",
+      "autopilot_available": 1
+    },
+    {
+      "aircraft_title": "Edge540 v3 Kirby Chambliss",
+      "status": "supported",
+      "autopilot_available": 1
+    },
+    {
+      "aircraft_title": "DA62 Passengers",
+      "status": "supported",
+      "autopilot_available": 1
+    },
+    {
+      "aircraft_title": "CAP-4",
+      "status": "supported",
+      "autopilot_available": 1
+    },
+    {
+      "aircraft_title": "C185F Skywagon Standard",
+      "status": "supported",
+      "autopilot_available": 1
+    },
+    {
+      "aircraft_title": "Edge540 v3 Bullet",
+      "status": "supported",
+      "autopilot_available": 1
+    },
+    {
+      "aircraft_title": "Douglas DC-3 Metal - classic",
+      "status": "supported",
+      "autopilot_available": 1
+    },
+    {
+      "aircraft_title": "Piper PA28-236 Dakota - Standard",
+      "status": "supported",
+      "autopilot_available": 1
+    },
+    {
+      "aircraft_title": "Asobo TBM 930 Passengers",
+      "status": "supported",
+      "autopilot_available": 1
+    },
+    {
+      "aircraft_title": "Douglas DC-3 Aviators Club modern",
+      "status": "supported",
+      "autopilot_available": 1
+    },
+    {
+      "aircraft_title": "FA18E SuperHornet",
+      "status": "supported",
+      "autopilot_available": 1
+    },
+    {
+      "aircraft_title": "DHC-2 Beaver Floats / Passenger Cabin / GPS",
+      "status": "supported",
+      "autopilot_available": 1
+    },
+    {
+      "aircraft_title": "C185F Skywagon Amphibious",
+      "status": "supported",
+      "autopilot_available": 1
+    },
+    {
+      "aircraft_title": "Beechcraft Bonanza",
+      "status": "supported",
+      "autopilot_available": 1
+    },
+    {
+      "aircraft_title": "DHC-2 Beaver Floats / Cargo / Radios",
+      "status": "supported",
+      "autopilot_available": 1
+    },
+    {
+      "aircraft_title": "DHC-2 Beaver Wheels / Cargo / GPS",
+      "status": "supported",
+      "autopilot_available": 1
+    },
+    {
+      "aircraft_title": "A330-300 VIP (GE)",
+      "status": "supported",
+      "autopilot_available": 1
+    },
+    {
+      "aircraft_title": "Zlin Aviation Savage Cub Aerial Advertising",
+      "status": "supported",
+      "autopilot_available": 1
+    },
+    {
+      "aircraft_title": "Piper PA28-236 Dakota - Fairings",
+      "status": "supported",
+      "autopilot_available": 1
+    },
+    {
+      "aircraft_title": "A330-300 VIP (RR)",
+      "status": "supported",
+      "autopilot_available": 1
+    },
+    {
+      "aircraft_title": "C208B Scientific",
+      "status": "supported",
+      "autopilot_available": 1
+    },
+    {
+      "aircraft_title": "Pilatus PC-6 G950 Floats",
+      "status": "supported",
+      "autopilot_available": 1
+    },
+    {
+      "aircraft_title": "XCub Passengers Big Wheels",
+      "status": "supported",
+      "autopilot_available": 1
+    },
+    {
+      "aircraft_title": "Douglas DC-3 DCDIRECT",
+      "status": "supported",
+      "autopilot_available": 1
+    },
+    {
+      "aircraft_title": "Beechcraft King Air",
+      "status": "supported",
+      "autopilot_available": 1
+    }
+  ],
+  "runtimeExcluded": [
+    {
+      "aircraft_title": "Powrachute Sky Rascal",
+      "status": "unsupported",
+      "reason": "autopilot_gate_unavailable"
+    },
+    {
+      "aircraft_title": "Magni M24 Plus White",
+      "status": "unsupported",
+      "reason": "autopilot_gate_unavailable"
+    },
+    {
+      "aircraft_title": "Cessna C152 Aerial Advertising",
+      "status": "unsupported",
+      "reason": "autopilot_gate_unavailable"
+    },
+    {
+      "aircraft_title": "Cessna C152",
+      "status": "unsupported",
+      "reason": "autopilot_gate_unavailable"
+    },
+    {
+      "aircraft_title": "Wright Flyer",
+      "status": "unsupported",
+      "reason": "autopilot_gate_unavailable"
+    },
+    {
+      "aircraft_title": "Curtiss JN-4 Jenny",
+      "status": "unsupported",
+      "reason": "autopilot_gate_unavailable"
+    },
+    {
+      "aircraft_title": "DG LS8",
+      "status": "unsupported",
+      "reason": "autopilot_gate_unavailable"
+    },
+    {
+      "aircraft_title": "CGS Hawk Arrow II",
+      "status": "unsupported",
+      "reason": "autopilot_gate_unavailable"
+    },
+    {
+      "aircraft_title": "Robin CAP10",
+      "status": "unsupported",
+      "reason": "autopilot_gate_unavailable"
+    },
+    {
+      "aircraft_title": "Extra 330 Passengers",
+      "status": "unsupported",
+      "reason": "autopilot_gate_unavailable"
+    },
+    {
+      "aircraft_title": "DG-1001-E Neo",
+      "status": "unsupported",
+      "reason": "autopilot_gate_unavailable"
+    },
+    {
+      "aircraft_title": "Icon A5",
+      "status": "unsupported",
+      "reason": "autopilot_gate_unavailable"
+    },
+    {
+      "aircraft_title": "CL415 Firefighting",
+      "status": "unsupported",
+      "reason": "autopilot_gate_unavailable"
+    },
+    {
+      "aircraft_title": "JMB Aviation VL3",
+      "status": "unsupported",
+      "reason": "autopilot_gate_unavailable"
+    },
+    {
+      "aircraft_title": "North American T-6 Texan Reno",
+      "status": "unsupported",
+      "reason": "autopilot_gate_unavailable"
+    },
+    {
+      "aircraft_title": "Jetson One [Preset Default]",
+      "status": "unsupported",
+      "reason": "autopilot_gate_unavailable"
+    },
+    {
+      "aircraft_title": "Aviat Pitts S1",
+      "status": "unsupported",
+      "reason": "autopilot_gate_unavailable"
+    },
+    {
+      "aircraft_title": "Flight Design CT",
+      "status": "unsupported",
+      "reason": "autopilot_gate_unavailable"
+    },
+    {
+      "aircraft_title": "Goodyear Blimp",
+      "status": "unsupported",
+      "reason": "autopilot_gate_unavailable"
+    },
+    {
+      "aircraft_title": "P51 Mustang",
+      "status": "unsupported",
+      "reason": "autopilot_gate_unavailable"
+    },
+    {
+      "aircraft_title": "AT802 Aerial Application Sprayer",
+      "status": "unsupported",
+      "reason": "autopilot_gate_unavailable"
+    },
+    {
+      "aircraft_title": "Volocity Microsoft",
+      "status": "unsupported",
+      "reason": "autopilot_gate_unavailable"
+    },
+    {
+      "aircraft_title": "Robin DR400",
+      "status": "unsupported",
+      "reason": "autopilot_gate_unavailable"
+    },
+    {
+      "aircraft_title": "AT802 Firefighting",
+      "status": "unsupported",
+      "reason": "autopilot_gate_unavailable"
+    },
+    {
+      "aircraft_title": "Skyship600 Passenger",
+      "status": "unsupported",
+      "reason": "autopilot_gate_unavailable"
+    },
+    {
+      "aircraft_title": "Aviat Pitts S2",
+      "status": "unsupported",
+      "reason": "autopilot_gate_unavailable"
+    }
+  ],
+  "officialPartnerCandidates": [
+    {
+      "packageName": "fs24-asobo-aircraft-b7478i",
+      "packageVersion": "2.1.7",
+      "creator": "Working Title Simulations",
+      "title": "B747",
+      "manufacturer": "Boeing",
+      "status": "unknown",
+      "executable": false,
+      "reason": "Official partner candidate; package metadata alone does not prove autopilot capability."
+    },
+    {
+      "packageName": "fs24-asobo-aircraft-cj4",
+      "packageVersion": "2.1.9",
+      "creator": "Working Title Simulations",
+      "title": "Cessna Citation CJ4",
+      "manufacturer": "Textron Aviation",
+      "status": "unknown",
+      "executable": false,
+      "reason": "Official partner candidate; package metadata alone does not prove autopilot capability."
+    },
+    {
+      "packageName": "fs24-asobo-aircraft-dg1001-e",
+      "packageVersion": "8.9.0",
+      "creator": "Microsoft / FSS AG",
+      "title": "DG1001E",
+      "manufacturer": "DG Aviation",
+      "status": "unknown",
+      "executable": false,
+      "reason": "Official partner candidate; package metadata alone does not prove autopilot capability."
+    },
+    {
+      "packageName": "fs24-microsoft-aircraft-a10c",
+      "packageVersion": "1.2.0",
+      "creator": "DC Designs",
+      "title": "DC Designs A10C Thunderbolt II",
+      "manufacturer": "DC Designs",
+      "status": "unknown",
+      "executable": false,
+      "reason": "Official partner candidate; package metadata alone does not prove autopilot capability."
+    },
+    {
+      "packageName": "fs24-microsoft-aircraft-a310-300",
+      "packageVersion": "0.0.37",
+      "creator": "Microsoft / iniBuilds",
+      "title": "Airbus A310-300",
+      "manufacturer": "Airbus",
+      "status": "unknown",
+      "executable": false,
+      "reason": "Official partner candidate; package metadata alone does not prove autopilot capability."
+    },
+    {
+      "packageName": "fs24-microsoft-aircraft-a320neo",
+      "packageVersion": "0.0.45",
+      "creator": "Microsoft/iniBuilds",
+      "title": "Airbus A320neo",
+      "manufacturer": "Airbus",
+      "status": "unknown",
+      "executable": false,
+      "reason": "Official partner candidate; package metadata alone does not prove autopilot capability."
+    },
+    {
+      "packageName": "fs24-microsoft-aircraft-a321",
+      "packageVersion": "0.0.44",
+      "creator": "Microsoft/iniBuilds",
+      "title": "Airbus A321",
+      "manufacturer": "Airbus",
+      "status": "unknown",
+      "executable": false,
+      "reason": "Official partner candidate; package metadata alone does not prove autopilot capability."
+    },
+    {
+      "packageName": "fs24-microsoft-aircraft-a330",
+      "packageVersion": "0.0.53",
+      "creator": "Microsoft / iniBuilds",
+      "title": "Airbus A330",
+      "manufacturer": "Airbus",
+      "status": "unknown",
+      "executable": false,
+      "reason": "Official partner candidate; package metadata alone does not prove autopilot capability."
+    },
+    {
+      "packageName": "fs24-microsoft-aircraft-a400m",
+      "packageVersion": "0.0.42",
+      "creator": "Microsoft / iniBuilds",
+      "title": "A-400M Atlas",
+      "manufacturer": "Airbus",
+      "status": "unknown",
+      "executable": false,
+      "reason": "Official partner candidate; package metadata alone does not prove autopilot capability."
+    },
+    {
+      "packageName": "fs24-microsoft-aircraft-aircrane",
+      "packageVersion": "1.0.4",
+      "creator": "Blackbird Simulations",
+      "title": "S-64F Skycrane",
+      "manufacturer": "Erickson Incorporated",
+      "status": "unknown",
+      "executable": false,
+      "reason": "Official partner candidate; package metadata alone does not prove autopilot capability."
+    },
+    {
+      "packageName": "fs24-microsoft-aircraft-archer",
+      "packageVersion": "1.6.9",
+      "creator": "Microsoft / FlightFX",
+      "title": "Midnight",
+      "manufacturer": "archer",
+      "status": "unknown",
+      "executable": false,
+      "reason": "Official partner candidate; package metadata alone does not prove autopilot capability."
+    },
+    {
+      "packageName": "fs24-microsoft-aircraft-bell407",
+      "packageVersion": "1.0.2",
+      "creator": "iniBuilds/Microsoft",
+      "title": "Model 407",
+      "manufacturer": "Bell Helicopters",
+      "status": "unknown",
+      "executable": false,
+      "reason": "Official partner candidate; package metadata alone does not prove autopilot capability."
+    },
+    {
+      "packageName": "fs24-microsoft-aircraft-belugaxl",
+      "packageVersion": "0.0.50",
+      "creator": "Microsoft / iniBuilds",
+      "title": "Airbus BelugaXL",
+      "manufacturer": "Airbus",
+      "status": "unknown",
+      "executable": false,
+      "reason": "Official partner candidate; package metadata alone does not prove autopilot capability."
+    },
+    {
+      "packageName": "fs24-microsoft-aircraft-blimp",
+      "packageVersion": "0.0.13",
+      "creator": "Microsoft / inibuilds",
+      "title": "Goodyear Blimp",
+      "manufacturer": "Zeppelin Luftschifftechnik",
+      "status": "unknown",
+      "executable": false,
+      "reason": "Official partner candidate; package metadata alone does not prove autopilot capability."
+    },
+    {
+      "packageName": "fs24-microsoft-aircraft-cap4",
+      "packageVersion": "1.0.25",
+      "creator": "Microsoft/iniBuilds",
+      "title": "CAP-4 Paulistinha",
+      "manufacturer": "Companhia Aeronautica Paulista",
+      "status": "unknown",
+      "executable": false,
+      "reason": "Official partner candidate; package metadata alone does not prove autopilot capability."
+    },
+    {
+      "packageName": "fs24-microsoft-aircraft-cgs-hawk-arrow-ii",
+      "packageVersion": "1.1.5",
+      "creator": "Microsoft / BlueMesh",
+      "title": "CGS Hawk Arrow II",
+      "manufacturer": "CGS Aviation",
+      "status": "unknown",
+      "executable": false,
+      "reason": "Official partner candidate; package metadata alone does not prove autopilot capability."
+    },
+    {
+      "packageName": "fs24-microsoft-aircraft-dc3",
+      "packageVersion": "1.3.4",
+      "creator": "Microsoft/Aeroplane Heaven",
+      "title": "DC-3",
+      "manufacturer": "Douglas",
+      "status": "unknown",
+      "executable": false,
+      "reason": "Official partner candidate; package metadata alone does not prove autopilot capability."
+    },
+    {
+      "packageName": "fs24-microsoft-aircraft-dhc2",
+      "packageVersion": "1.0.5",
+      "creator": "Blackbird Simulations",
+      "title": "DHC-2 Beaver",
+      "manufacturer": "Viking Air Limited, a de Havilland Canada company",
+      "status": "unknown",
+      "executable": false,
+      "reason": "Official partner candidate; package metadata alone does not prove autopilot capability."
+    },
+    {
+      "packageName": "fs24-microsoft-aircraft-dracox",
+      "packageVersion": "0.0.9",
+      "creator": "Microsoft / Got Friends",
+      "title": "Draco X",
+      "manufacturer": "Patey Aviation",
+      "status": "unknown",
+      "executable": false,
+      "reason": "Official partner candidate; package metadata alone does not prove autopilot capability."
+    },
+    {
+      "packageName": "fs24-microsoft-aircraft-ec135",
+      "packageVersion": "2.2.3",
+      "creator": "Microsoft/Nemeth Designs",
+      "title": "Eurocopter EC-135T1",
+      "manufacturer": "Eurocopter",
+      "status": "unknown",
+      "executable": false,
+      "reason": "Official partner candidate; package metadata alone does not prove autopilot capability."
+    },
+    {
+      "packageName": "fs24-microsoft-aircraft-edge540",
+      "packageVersion": "6.0.5",
+      "creator": "Microsoft / iniBuilds",
+      "title": "Edge 540 V3",
+      "manufacturer": "Zivko Aeronautics",
+      "status": "unknown",
+      "executable": false,
+      "reason": "Official partner candidate; package metadata alone does not prove autopilot capability."
+    },
+    {
+      "packageName": "fs24-microsoft-aircraft-edge540v2",
+      "packageVersion": "6.0.6",
+      "creator": "Microsoft / iniBuilds",
+      "title": "Edge 540",
+      "manufacturer": "Zivko Aeronautics",
+      "status": "unknown",
+      "executable": false,
+      "reason": "Official partner candidate; package metadata alone does not prove autopilot capability."
+    },
+    {
+      "packageName": "fs24-microsoft-aircraft-g-21",
+      "packageVersion": "0.0.19",
+      "creator": "Microsoft / iniBuilds",
+      "title": "Grumman G-21 Goose",
+      "manufacturer": "Grumman",
+      "status": "unknown",
+      "executable": false,
+      "reason": "Official partner candidate; package metadata alone does not prove autopilot capability."
+    },
+    {
+      "packageName": "fs24-microsoft-aircraft-hughes-h4-hercules",
+      "packageVersion": "1.4.1",
+      "creator": "Microsoft / BlueMesh",
+      "title": "Hughes H-4 Hercules",
+      "manufacturer": "Hughes Aircraft company",
+      "status": "unknown",
+      "executable": false,
+      "reason": "Official partner candidate; package metadata alone does not prove autopilot capability."
+    },
+    {
+      "packageName": "fs24-microsoft-aircraft-jetson-one",
+      "packageVersion": "1.3.0",
+      "creator": "Microsoft / FlightFX",
+      "title": "Jetson One",
+      "manufacturer": "jetson one",
+      "status": "unknown",
+      "executable": false,
+      "reason": "Official partner candidate; package metadata alone does not prove autopilot capability."
+    },
+    {
+      "packageName": "fs24-microsoft-aircraft-jn4",
+      "packageVersion": "0.0.16",
+      "creator": "Microsoft / iniBuilds",
+      "title": "Curtiss JN4 Jenny",
+      "manufacturer": "Curtiss",
+      "status": "unknown",
+      "executable": false,
+      "reason": "Official partner candidate; package metadata alone does not prove autopilot capability."
+    },
+    {
+      "packageName": "fs24-microsoft-aircraft-joby",
+      "packageVersion": "1.6.6",
+      "creator": "Microsoft / FlightFX",
+      "title": "Joby",
+      "manufacturer": "Joby Aviation",
+      "status": "unknown",
+      "executable": false,
+      "reason": "Official partner candidate; package metadata alone does not prove autopilot capability."
+    },
+    {
+      "packageName": "fs24-microsoft-aircraft-magni-m24",
+      "packageVersion": "1.2.1",
+      "creator": "Microsoft / BlueMesh",
+      "title": "Magni M24 Plus",
+      "manufacturer": "Magni Gyro Srl",
+      "status": "unknown",
+      "executable": false,
+      "reason": "Official partner candidate; package metadata alone does not prove autopilot capability."
+    },
+    {
+      "packageName": "fs24-microsoft-aircraft-mxs",
+      "packageVersion": "6.0.11",
+      "creator": "Microsoft / Inibuilds",
+      "title": "MXS-R",
+      "manufacturer": "MX Aircraft",
+      "status": "unknown",
+      "executable": false,
+      "reason": "Official partner candidate; package metadata alone does not prove autopilot capability."
+    },
+    {
+      "packageName": "fs24-microsoft-aircraft-optica",
+      "packageVersion": "0.1.2",
+      "creator": "Microsoft / Got Friends",
+      "title": "Optica",
+      "manufacturer": "AeroElvira",
+      "status": "unknown",
+      "executable": false,
+      "reason": "Official partner candidate; package metadata alone does not prove autopilot capability."
+    },
+    {
+      "packageName": "fs24-microsoft-aircraft-pilatus-pc6",
+      "packageVersion": "0.3.18",
+      "creator": "Microsoft / S&H Software",
+      "title": "Pilatus PC6 Common",
+      "manufacturer": "Pilatus",
+      "status": "unknown",
+      "executable": false,
+      "reason": "Official partner candidate; package metadata alone does not prove autopilot capability."
+    },
+    {
+      "packageName": "fs24-microsoft-aircraft-s12g",
+      "packageVersion": "0.0.9",
+      "creator": "Microsoft / Got Friends",
+      "title": "S12-G",
+      "manufacturer": "Stemme",
+      "status": "unknown",
+      "executable": false,
+      "reason": "Official partner candidate; package metadata alone does not prove autopilot capability."
+    },
+    {
+      "packageName": "fs24-microsoft-aircraft-sf50",
+      "packageVersion": "0.7.1",
+      "creator": "Working Title Simulations",
+      "title": "Cirrus Vision Jet G2",
+      "manufacturer": "Cirrus",
+      "status": "unknown",
+      "executable": false,
+      "reason": "Official partner candidate; package metadata alone does not prove autopilot capability."
+    },
+    {
+      "packageName": "fs24-microsoft-aircraft-skyrascal",
+      "packageVersion": "1.0.9",
+      "creator": "BlueMesh",
+      "title": "SkyRascal",
+      "manufacturer": "Powerchute",
+      "status": "unknown",
+      "executable": false,
+      "reason": "Official partner candidate; package metadata alone does not prove autopilot capability."
+    },
+    {
+      "packageName": "fs24-microsoft-aircraft-spirit-of-st-louis",
+      "packageVersion": "1.0.5",
+      "creator": "BlueMesh",
+      "title": "Spirit of St Louis",
+      "manufacturer": "Ryan Airlines Company",
+      "status": "unknown",
+      "executable": false,
+      "reason": "Official partner candidate; package metadata alone does not prove autopilot capability."
+    },
+    {
+      "packageName": "fs24-microsoft-aircraft-uh1h",
+      "packageVersion": "0.11.0",
+      "creator": "taog",
+      "title": "BELL UH1H Huey",
+      "manufacturer": "Bell Aircraft",
+      "status": "unknown",
+      "executable": false,
+      "reason": "Official partner candidate; package metadata alone does not prove autopilot capability."
+    },
+    {
+      "packageName": "fs24-microsoft-aircraft-volocity",
+      "packageVersion": "0.1.30",
+      "creator": "Microsoft / Volocopter",
+      "title": "Volocity",
+      "manufacturer": "Volocopter",
+      "status": "unknown",
+      "executable": false,
+      "reason": "Official partner candidate; package metadata alone does not prove autopilot capability."
+    },
+    {
+      "packageName": "fs24-microsoft-aircraft-wright-flyer",
+      "packageVersion": "1.1.29",
+      "creator": "Microsoft / Bluemesh",
+      "title": "Wright Flyer",
+      "manufacturer": "Orville and Wilbur Wright",
+      "status": "unknown",
+      "executable": false,
+      "reason": "Official partner candidate; package metadata alone does not prove autopilot capability."
+    }
+  ]
+}

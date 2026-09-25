@@ -71,7 +71,7 @@ EFB 当前飞行计划
 
 | 命令             | 功能                          | 示例                                                            |
 | ---------------- | ----------------------------- | --------------------------------------------------------------- |
-| `key-event send` | 发送官方 Key Event            | `msfs key-event send --name AP_MASTER --data 1 --unsafe --json` |
+| `key-event send` | 发送官方 Key Event            | `msfs key-event send --name AUTOPILOT_ON --unsafe --json`      |
 | `input list`     | 列出当前飞机可用 Input Events | `msfs input list --json`                                        |
 | `input set`      | 按 Hash 设置 Input Event 数值 | `msfs input set --hash 123456789 --value 1 --unsafe --json`     |
 

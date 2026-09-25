@@ -1,0 +1,1264 @@
+{
+  "schemaVersion": 1,
+  "collectedAt": "2026-09-03T14:10:16.236Z",
+  "source": "native_simconnect_temporary_ai_batched",
+  "temporaryAi": true,
+  "userAircraftSwitched": false,
+  "autopilotWriteAttempted": false,
+  "executablePath": "dev-runtime\\msfs-cli\\msfs.exe",
+  "batch": {
+    "number": 3,
+    "skip": 24,
+    "limit": 12
+  },
+  "data": {
+    "schema_version": 1,
+    "type": "aircraft",
+    "status": "complete",
+    "temporary_ai": true,
+    "user_aircraft_switched": false,
+    "autopilot_write_attempted": false,
+    "candidate_title_count": 12,
+    "candidate_title_offset": 24,
+    "candidate_title_total_count": 146,
+    "probed_title_count": 12,
+    "supported_count": 9,
+    "unsupported_count": 3,
+    "unknown_count": 0,
+    "mode_probe_requested": true,
+    "mode_tested_aircraft_count": 9,
+    "mode_supported_count": 53,
+    "mode_unsupported_count": 21,
+    "mode_unknown_count": 10,
+    "cleanup": {
+      "status": "complete",
+      "objects_created": 12,
+      "objects_removed": 12,
+      "unresolved_objects": 0
+    },
+    "error": null,
+    "results": [
+      {
+        "aircraft_title": "CGS Hawk Arrow II",
+        "status": "unsupported",
+        "autopilot_available": 0,
+        "autopilot_master": 0,
+        "flight_director_active": 0,
+        "heading_lock": 0,
+        "nav1_lock": 0,
+        "altitude_lock": 0,
+        "vertical_hold": 0,
+        "flight_level_change": 0,
+        "temporary_ai": true,
+        "object_removed": true,
+        "error": null,
+        "mode_tests": [
+          {
+            "id": "autopilot_master",
+            "readback": "AUTOPILOT MASTER",
+            "on_event": "AUTOPILOT_ON",
+            "off_event": "AUTOPILOT_OFF",
+            "status": "unsupported",
+            "initial": 0,
+            "after_on": null,
+            "after_off": null,
+            "error": {
+              "code": "AUTOPILOT_UNAVAILABLE",
+              "message": "The temporary aircraft reports AUTOPILOT AVAILABLE=0."
+            }
+          },
+          {
+            "id": "flight_director",
+            "readback": "AUTOPILOT FLIGHT DIRECTOR ACTIVE",
+            "on_event": "TOGGLE_FLIGHT_DIRECTOR",
+            "off_event": "TOGGLE_FLIGHT_DIRECTOR",
+            "status": "unsupported",
+            "initial": 0,
+            "after_on": null,
+            "after_off": null,
+            "error": {
+              "code": "AUTOPILOT_UNAVAILABLE",
+              "message": "The temporary aircraft reports AUTOPILOT AVAILABLE=0."
+            }
+          },
+          {
+            "id": "heading",
+            "readback": "AUTOPILOT HEADING LOCK",
+            "on_event": "AP_PANEL_HEADING_ON",
+            "off_event": "AP_PANEL_HEADING_OFF",
+            "status": "unsupported",
+            "initial": 0,
+            "after_on": null,
+            "after_off": null,
+            "error": {
+              "code": "AUTOPILOT_UNAVAILABLE",
+              "message": "The temporary aircraft reports AUTOPILOT AVAILABLE=0."
+            }
+          },
+          {
+            "id": "navigation",
+            "readback": "AUTOPILOT NAV1 LOCK",
+            "on_event": "AP_NAV1_HOLD_ON",
+            "off_event": "AP_NAV1_HOLD_OFF",
+            "status": "unsupported",
+            "initial": 0,
+            "after_on": null,
+            "after_off": null,
+            "error": {
+              "code": "AUTOPILOT_UNAVAILABLE",
+              "message": "The temporary aircraft reports AUTOPILOT AVAILABLE=0."
+            }
+          },
+          {
+            "id": "altitude",
+            "readback": "AUTOPILOT ALTITUDE LOCK",
+            "on_event": "AP_PANEL_ALTITUDE_ON",
+            "off_event": "AP_PANEL_ALTITUDE_OFF",
+            "status": "unsupported",
+            "initial": 0,
+            "after_on": null,
+            "after_off": null,
+            "error": {
+              "code": "AUTOPILOT_UNAVAILABLE",
+              "message": "The temporary aircraft reports AUTOPILOT AVAILABLE=0."
+            }
+          },
+          {
+            "id": "vertical_speed",
+            "readback": "AUTOPILOT VERTICAL HOLD",
+            "on_event": "AP_PANEL_VS_ON",
+            "off_event": "AP_PANEL_VS_OFF",
+            "status": "unsupported",
+            "initial": 0,
+            "after_on": null,
+            "after_off": null,
+            "error": {
+              "code": "AUTOPILOT_UNAVAILABLE",
+              "message": "The temporary aircraft reports AUTOPILOT AVAILABLE=0."
+            }
+          },
+          {
+            "id": "flight_level_change",
+            "readback": "AUTOPILOT FLIGHT LEVEL CHANGE",
+            "on_event": "FLIGHT_LEVEL_CHANGE_ON",
+            "off_event": "FLIGHT_LEVEL_CHANGE_OFF",
+            "status": "unsupported",
+            "initial": 0,
+            "after_on": null,
+            "after_off": null,
+            "error": {
+              "code": "AUTOPILOT_UNAVAILABLE",
+              "message": "The temporary aircraft reports AUTOPILOT AVAILABLE=0."
+            }
+          }
+        ]
+      },
+      {
+        "aircraft_title": "PC-12 NGX VIP",
+        "status": "supported",
+        "autopilot_available": 1,
+        "autopilot_master": 0,
+        "flight_director_active": 0,
+        "heading_lock": 0,
+        "nav1_lock": 0,
+        "altitude_lock": 0,
+        "vertical_hold": 0,
+        "flight_level_change": 0,
+        "temporary_ai": true,
+        "object_removed": true,
+        "error": null,
+        "mode_tests": [
+          {
+            "id": "autopilot_master",
+            "readback": "AUTOPILOT MASTER",
+            "on_event": "AUTOPILOT_ON",
+            "off_event": "AUTOPILOT_OFF",
+            "status": "supported",
+            "initial": 0,
+            "after_on": 1,
+            "after_off": 0,
+            "error": null
+          },
+          {
+            "id": "flight_director",
+            "readback": "AUTOPILOT FLIGHT DIRECTOR ACTIVE",
+            "on_event": "TOGGLE_FLIGHT_DIRECTOR",
+            "off_event": "TOGGLE_FLIGHT_DIRECTOR",
+            "status": "supported",
+            "initial": 0,
+            "after_on": 1,
+            "after_off": 0,
+            "error": null
+          },
+          {
+            "id": "heading",
+            "readback": "AUTOPILOT HEADING LOCK",
+            "on_event": "AP_PANEL_HEADING_ON",
+            "off_event": "AP_PANEL_HEADING_OFF",
+            "status": "supported",
+            "initial": 0,
+            "after_on": 1,
+            "after_off": 0,
+            "error": null
+          },
+          {
+            "id": "navigation",
+            "readback": "AUTOPILOT NAV1 LOCK",
+            "on_event": "AP_NAV1_HOLD_ON",
+            "off_event": "AP_NAV1_HOLD_OFF",
+            "status": "supported",
+            "initial": 0,
+            "after_on": 1,
+            "after_off": 0,
+            "error": null
+          },
+          {
+            "id": "altitude",
+            "readback": "AUTOPILOT ALTITUDE LOCK",
+            "on_event": "AP_PANEL_ALTITUDE_ON",
+            "off_event": "AP_PANEL_ALTITUDE_OFF",
+            "status": "supported",
+            "initial": 0,
+            "after_on": 1,
+            "after_off": 0,
+            "error": null
+          },
+          {
+            "id": "vertical_speed",
+            "readback": "AUTOPILOT VERTICAL HOLD",
+            "on_event": "AP_PANEL_VS_ON",
+            "off_event": "AP_PANEL_VS_OFF",
+            "status": "supported",
+            "initial": 0,
+            "after_on": 1,
+            "after_off": 0,
+            "error": null
+          },
+          {
+            "id": "flight_level_change",
+            "readback": "AUTOPILOT FLIGHT LEVEL CHANGE",
+            "on_event": "FLIGHT_LEVEL_CHANGE_ON",
+            "off_event": "FLIGHT_LEVEL_CHANGE_OFF",
+            "status": "supported",
+            "initial": 0,
+            "after_on": 1,
+            "after_off": 0,
+            "error": null
+          }
+        ]
+      },
+      {
+        "aircraft_title": "747-8i",
+        "status": "supported",
+        "autopilot_available": 1,
+        "autopilot_master": 0,
+        "flight_director_active": 0,
+        "heading_lock": 0,
+        "nav1_lock": 0,
+        "altitude_lock": 0,
+        "vertical_hold": 0,
+        "flight_level_change": 0,
+        "temporary_ai": true,
+        "object_removed": true,
+        "error": null,
+        "mode_tests": [
+          {
+            "id": "autopilot_master",
+            "readback": "AUTOPILOT MASTER",
+            "on_event": "AUTOPILOT_ON",
+            "off_event": "AUTOPILOT_OFF",
+            "status": "supported",
+            "initial": 0,
+            "after_on": 1,
+            "after_off": 0,
+            "error": null
+          },
+          {
+            "id": "flight_director",
+            "readback": "AUTOPILOT FLIGHT DIRECTOR ACTIVE",
+            "on_event": "TOGGLE_FLIGHT_DIRECTOR",
+            "off_event": "TOGGLE_FLIGHT_DIRECTOR",
+            "status": "supported",
+            "initial": 0,
+            "after_on": 1,
+            "after_off": 0,
+            "error": null
+          },
+          {
+            "id": "heading",
+            "readback": "AUTOPILOT HEADING LOCK",
+            "on_event": "AP_PANEL_HEADING_ON",
+            "off_event": "AP_PANEL_HEADING_OFF",
+            "status": "supported",
+            "initial": 0,
+            "after_on": 1,
+            "after_off": 0,
+            "error": null
+          },
+          {
+            "id": "navigation",
+            "readback": "AUTOPILOT NAV1 LOCK",
+            "on_event": "AP_NAV1_HOLD_ON",
+            "off_event": "AP_NAV1_HOLD_OFF",
+            "status": "supported",
+            "initial": 0,
+            "after_on": 1,
+            "after_off": 0,
+            "error": null
+          },
+          {
+            "id": "altitude",
+            "readback": "AUTOPILOT ALTITUDE LOCK",
+            "on_event": "AP_PANEL_ALTITUDE_ON",
+            "off_event": "AP_PANEL_ALTITUDE_OFF",
+            "status": "supported",
+            "initial": 0,
+            "after_on": 1,
+            "after_off": 0,
+            "error": null
+          },
+          {
+            "id": "vertical_speed",
+            "readback": "AUTOPILOT VERTICAL HOLD",
+            "on_event": "AP_PANEL_VS_ON",
+            "off_event": "AP_PANEL_VS_OFF",
+            "status": "supported",
+            "initial": 0,
+            "after_on": 1,
+            "after_off": 0,
+            "error": null
+          },
+          {
+            "id": "flight_level_change",
+            "readback": "AUTOPILOT FLIGHT LEVEL CHANGE",
+            "on_event": "FLIGHT_LEVEL_CHANGE_ON",
+            "off_event": "FLIGHT_LEVEL_CHANGE_OFF",
+            "status": "supported",
+            "initial": 0,
+            "after_on": 1,
+            "after_off": 0,
+            "error": null
+          }
+        ]
+      },
+      {
+        "aircraft_title": "C208B Cargo",
+        "status": "supported",
+        "autopilot_available": 1,
+        "autopilot_master": 0,
+        "flight_director_active": 0,
+        "heading_lock": 0,
+        "nav1_lock": 0,
+        "altitude_lock": 0,
+        "vertical_hold": 0,
+        "flight_level_change": 0,
+        "temporary_ai": true,
+        "object_removed": true,
+        "error": null,
+        "mode_tests": [
+          {
+            "id": "autopilot_master",
+            "readback": "AUTOPILOT MASTER",
+            "on_event": "AUTOPILOT_ON",
+            "off_event": "AUTOPILOT_OFF",
+            "status": "supported",
+            "initial": 0,
+            "after_on": 1,
+            "after_off": 0,
+            "error": null
+          },
+          {
+            "id": "flight_director",
+            "readback": "AUTOPILOT FLIGHT DIRECTOR ACTIVE",
+            "on_event": "TOGGLE_FLIGHT_DIRECTOR",
+            "off_event": "TOGGLE_FLIGHT_DIRECTOR",
+            "status": "supported",
+            "initial": 0,
+            "after_on": 1,
+            "after_off": 0,
+            "error": null
+          },
+          {
+            "id": "heading",
+            "readback": "AUTOPILOT HEADING LOCK",
+            "on_event": "AP_PANEL_HEADING_ON",
+            "off_event": "AP_PANEL_HEADING_OFF",
+            "status": "supported",
+            "initial": 0,
+            "after_on": 1,
+            "after_off": 0,
+            "error": null
+          },
+          {
+            "id": "navigation",
+            "readback": "AUTOPILOT NAV1 LOCK",
+            "on_event": "AP_NAV1_HOLD_ON",
+            "off_event": "AP_NAV1_HOLD_OFF",
+            "status": "supported",
+            "initial": 0,
+            "after_on": 1,
+            "after_off": 0,
+            "error": null
+          },
+          {
+            "id": "altitude",
+            "readback": "AUTOPILOT ALTITUDE LOCK",
+            "on_event": "AP_PANEL_ALTITUDE_ON",
+            "off_event": "AP_PANEL_ALTITUDE_OFF",
+            "status": "supported",
+            "initial": 0,
+            "after_on": 1,
+            "after_off": 0,
+            "error": null
+          },
+          {
+            "id": "vertical_speed",
+            "readback": "AUTOPILOT VERTICAL HOLD",
+            "on_event": "AP_PANEL_VS_ON",
+            "off_event": "AP_PANEL_VS_OFF",
+            "status": "supported",
+            "initial": 0,
+            "after_on": 1,
+            "after_off": 0,
+            "error": null
+          },
+          {
+            "id": "flight_level_change",
+            "readback": "AUTOPILOT FLIGHT LEVEL CHANGE",
+            "on_event": "FLIGHT_LEVEL_CHANGE_ON",
+            "off_event": "FLIGHT_LEVEL_CHANGE_OFF",
+            "status": "supported",
+            "initial": 0,
+            "after_on": 1,
+            "after_off": 0,
+            "error": null
+          }
+        ]
+      },
+      {
+        "aircraft_title": "S12-G: Passengers",
+        "status": "supported",
+        "autopilot_available": 1,
+        "autopilot_master": 0,
+        "flight_director_active": 0,
+        "heading_lock": 0,
+        "nav1_lock": 0,
+        "altitude_lock": 0,
+        "vertical_hold": 0,
+        "flight_level_change": 0,
+        "temporary_ai": true,
+        "object_removed": true,
+        "error": null,
+        "mode_tests": [
+          {
+            "id": "autopilot_master",
+            "readback": "AUTOPILOT MASTER",
+            "on_event": "AUTOPILOT_ON",
+            "off_event": "AUTOPILOT_OFF",
+            "status": "supported",
+            "initial": 0,
+            "after_on": 1,
+            "after_off": 0,
+            "error": null
+          },
+          {
+            "id": "flight_director",
+            "readback": "AUTOPILOT FLIGHT DIRECTOR ACTIVE",
+            "on_event": "TOGGLE_FLIGHT_DIRECTOR",
+            "off_event": "TOGGLE_FLIGHT_DIRECTOR",
+            "status": "supported",
+            "initial": 0,
+            "after_on": 1,
+            "after_off": 0,
+            "error": null
+          },
+          {
+            "id": "heading",
+            "readback": "AUTOPILOT HEADING LOCK",
+            "on_event": "AP_PANEL_HEADING_ON",
+            "off_event": "AP_PANEL_HEADING_OFF",
+            "status": "supported",
+            "initial": 0,
+            "after_on": 1,
+            "after_off": 0,
+            "error": null
+          },
+          {
+            "id": "navigation",
+            "readback": "AUTOPILOT NAV1 LOCK",
+            "on_event": "AP_NAV1_HOLD_ON",
+            "off_event": "AP_NAV1_HOLD_OFF",
+            "status": "supported",
+            "initial": 0,
+            "after_on": 1,
+            "after_off": 0,
+            "error": null
+          },
+          {
+            "id": "altitude",
+            "readback": "AUTOPILOT ALTITUDE LOCK",
+            "on_event": "AP_PANEL_ALTITUDE_ON",
+            "off_event": "AP_PANEL_ALTITUDE_OFF",
+            "status": "unknown",
+            "initial": 1,
+            "after_on": 1,
+            "after_off": 1,
+            "error": {
+              "code": "AUTOPILOT_MODE_READBACK_NOT_CONFIRMED",
+              "message": "The mode event did not produce the expected on/off readback."
+            }
+          },
+          {
+            "id": "vertical_speed",
+            "readback": "AUTOPILOT VERTICAL HOLD",
+            "on_event": "AP_PANEL_VS_ON",
+            "off_event": "AP_PANEL_VS_OFF",
+            "status": "supported",
+            "initial": 0,
+            "after_on": 1,
+            "after_off": 0,
+            "error": null
+          },
+          {
+            "id": "flight_level_change",
+            "readback": "AUTOPILOT FLIGHT LEVEL CHANGE",
+            "on_event": "FLIGHT_LEVEL_CHANGE_ON",
+            "off_event": "FLIGHT_LEVEL_CHANGE_OFF",
+            "status": "supported",
+            "initial": 0,
+            "after_on": 1,
+            "after_off": 0,
+            "error": null
+          }
+        ]
+      },
+      {
+        "aircraft_title": "Microsoft Vision Jet Executive Seating",
+        "status": "supported",
+        "autopilot_available": 1,
+        "autopilot_master": 0,
+        "flight_director_active": 0,
+        "heading_lock": 0,
+        "nav1_lock": 0,
+        "altitude_lock": 0,
+        "vertical_hold": 0,
+        "flight_level_change": 0,
+        "temporary_ai": true,
+        "object_removed": true,
+        "error": null,
+        "mode_tests": [
+          {
+            "id": "autopilot_master",
+            "readback": "AUTOPILOT MASTER",
+            "on_event": "AUTOPILOT_ON",
+            "off_event": "AUTOPILOT_OFF",
+            "status": "supported",
+            "initial": 0,
+            "after_on": 1,
+            "after_off": 0,
+            "error": null
+          },
+          {
+            "id": "flight_director",
+            "readback": "AUTOPILOT FLIGHT DIRECTOR ACTIVE",
+            "on_event": "TOGGLE_FLIGHT_DIRECTOR",
+            "off_event": "TOGGLE_FLIGHT_DIRECTOR",
+            "status": "supported",
+            "initial": 0,
+            "after_on": 1,
+            "after_off": 0,
+            "error": null
+          },
+          {
+            "id": "heading",
+            "readback": "AUTOPILOT HEADING LOCK",
+            "on_event": "AP_PANEL_HEADING_ON",
+            "off_event": "AP_PANEL_HEADING_OFF",
+            "status": "supported",
+            "initial": 0,
+            "after_on": 1,
+            "after_off": 0,
+            "error": null
+          },
+          {
+            "id": "navigation",
+            "readback": "AUTOPILOT NAV1 LOCK",
+            "on_event": "AP_NAV1_HOLD_ON",
+            "off_event": "AP_NAV1_HOLD_OFF",
+            "status": "supported",
+            "initial": 0,
+            "after_on": 1,
+            "after_off": 0,
+            "error": null
+          },
+          {
+            "id": "altitude",
+            "readback": "AUTOPILOT ALTITUDE LOCK",
+            "on_event": "AP_PANEL_ALTITUDE_ON",
+            "off_event": "AP_PANEL_ALTITUDE_OFF",
+            "status": "supported",
+            "initial": 0,
+            "after_on": 1,
+            "after_off": 0,
+            "error": null
+          },
+          {
+            "id": "vertical_speed",
+            "readback": "AUTOPILOT VERTICAL HOLD",
+            "on_event": "AP_PANEL_VS_ON",
+            "off_event": "AP_PANEL_VS_OFF",
+            "status": "supported",
+            "initial": 0,
+            "after_on": 1,
+            "after_off": 0,
+            "error": null
+          },
+          {
+            "id": "flight_level_change",
+            "readback": "AUTOPILOT FLIGHT LEVEL CHANGE",
+            "on_event": "FLIGHT_LEVEL_CHANGE_ON",
+            "off_event": "FLIGHT_LEVEL_CHANGE_OFF",
+            "status": "supported",
+            "initial": 0,
+            "after_on": 1,
+            "after_off": 0,
+            "error": null
+          }
+        ]
+      },
+      {
+        "aircraft_title": "Pilatus PC-6 Gauge Wheels",
+        "status": "supported",
+        "autopilot_available": 1,
+        "autopilot_master": 0,
+        "flight_director_active": 0,
+        "heading_lock": 0,
+        "nav1_lock": 0,
+        "altitude_lock": 0,
+        "vertical_hold": 0,
+        "flight_level_change": 0,
+        "temporary_ai": true,
+        "object_removed": true,
+        "error": null,
+        "mode_tests": [
+          {
+            "id": "autopilot_master",
+            "readback": "AUTOPILOT MASTER",
+            "on_event": "AUTOPILOT_ON",
+            "off_event": "AUTOPILOT_OFF",
+            "status": "supported",
+            "initial": 0,
+            "after_on": 1,
+            "after_off": 0,
+            "error": null
+          },
+          {
+            "id": "flight_director",
+            "readback": "AUTOPILOT FLIGHT DIRECTOR ACTIVE",
+            "on_event": "TOGGLE_FLIGHT_DIRECTOR",
+            "off_event": "TOGGLE_FLIGHT_DIRECTOR",
+            "status": "unknown",
+            "initial": 0,
+            "after_on": 0,
+            "after_off": 0,
+            "error": {
+              "code": "AUTOPILOT_MODE_READBACK_NOT_CONFIRMED",
+              "message": "The mode event did not produce the expected on/off readback."
+            }
+          },
+          {
+            "id": "heading",
+            "readback": "AUTOPILOT HEADING LOCK",
+            "on_event": "AP_PANEL_HEADING_ON",
+            "off_event": "AP_PANEL_HEADING_OFF",
+            "status": "supported",
+            "initial": 0,
+            "after_on": 1,
+            "after_off": 0,
+            "error": null
+          },
+          {
+            "id": "navigation",
+            "readback": "AUTOPILOT NAV1 LOCK",
+            "on_event": "AP_NAV1_HOLD_ON",
+            "off_event": "AP_NAV1_HOLD_OFF",
+            "status": "supported",
+            "initial": 0,
+            "after_on": 1,
+            "after_off": 0,
+            "error": null
+          },
+          {
+            "id": "altitude",
+            "readback": "AUTOPILOT ALTITUDE LOCK",
+            "on_event": "AP_PANEL_ALTITUDE_ON",
+            "off_event": "AP_PANEL_ALTITUDE_OFF",
+            "status": "supported",
+            "initial": 0,
+            "after_on": 1,
+            "after_off": 0,
+            "error": null
+          },
+          {
+            "id": "vertical_speed",
+            "readback": "AUTOPILOT VERTICAL HOLD",
+            "on_event": "AP_PANEL_VS_ON",
+            "off_event": "AP_PANEL_VS_OFF",
+            "status": "supported",
+            "initial": 0,
+            "after_on": 1,
+            "after_off": 0,
+            "error": null
+          },
+          {
+            "id": "flight_level_change",
+            "readback": "AUTOPILOT FLIGHT LEVEL CHANGE",
+            "on_event": "FLIGHT_LEVEL_CHANGE_ON",
+            "off_event": "FLIGHT_LEVEL_CHANGE_OFF",
+            "status": "supported",
+            "initial": 0,
+            "after_on": 1,
+            "after_off": 0,
+            "error": null
+          }
+        ]
+      },
+      {
+        "aircraft_title": "Robin CAP10",
+        "status": "unsupported",
+        "autopilot_available": 0,
+        "autopilot_master": 0,
+        "flight_director_active": 0,
+        "heading_lock": 0,
+        "nav1_lock": 0,
+        "altitude_lock": 0,
+        "vertical_hold": 0,
+        "flight_level_change": 0,
+        "temporary_ai": true,
+        "object_removed": true,
+        "error": null,
+        "mode_tests": [
+          {
+            "id": "autopilot_master",
+            "readback": "AUTOPILOT MASTER",
+            "on_event": "AUTOPILOT_ON",
+            "off_event": "AUTOPILOT_OFF",
+            "status": "unsupported",
+            "initial": 0,
+            "after_on": null,
+            "after_off": null,
+            "error": {
+              "code": "AUTOPILOT_UNAVAILABLE",
+              "message": "The temporary aircraft reports AUTOPILOT AVAILABLE=0."
+            }
+          },
+          {
+            "id": "flight_director",
+            "readback": "AUTOPILOT FLIGHT DIRECTOR ACTIVE",
+            "on_event": "TOGGLE_FLIGHT_DIRECTOR",
+            "off_event": "TOGGLE_FLIGHT_DIRECTOR",
+            "status": "unsupported",
+            "initial": 0,
+            "after_on": null,
+            "after_off": null,
+            "error": {
+              "code": "AUTOPILOT_UNAVAILABLE",
+              "message": "The temporary aircraft reports AUTOPILOT AVAILABLE=0."
+            }
+          },
+          {
+            "id": "heading",
+            "readback": "AUTOPILOT HEADING LOCK",
+            "on_event": "AP_PANEL_HEADING_ON",
+            "off_event": "AP_PANEL_HEADING_OFF",
+            "status": "unsupported",
+            "initial": 0,
+            "after_on": null,
+            "after_off": null,
+            "error": {
+              "code": "AUTOPILOT_UNAVAILABLE",
+              "message": "The temporary aircraft reports AUTOPILOT AVAILABLE=0."
+            }
+          },
+          {
+            "id": "navigation",
+            "readback": "AUTOPILOT NAV1 LOCK",
+            "on_event": "AP_NAV1_HOLD_ON",
+            "off_event": "AP_NAV1_HOLD_OFF",
+            "status": "unsupported",
+            "initial": 0,
+            "after_on": null,
+            "after_off": null,
+            "error": {
+              "code": "AUTOPILOT_UNAVAILABLE",
+              "message": "The temporary aircraft reports AUTOPILOT AVAILABLE=0."
+            }
+          },
+          {
+            "id": "altitude",
+            "readback": "AUTOPILOT ALTITUDE LOCK",
+            "on_event": "AP_PANEL_ALTITUDE_ON",
+            "off_event": "AP_PANEL_ALTITUDE_OFF",
+            "status": "unsupported",
+            "initial": 0,
+            "after_on": null,
+            "after_off": null,
+            "error": {
+              "code": "AUTOPILOT_UNAVAILABLE",
+              "message": "The temporary aircraft reports AUTOPILOT AVAILABLE=0."
+            }
+          },
+          {
+            "id": "vertical_speed",
+            "readback": "AUTOPILOT VERTICAL HOLD",
+            "on_event": "AP_PANEL_VS_ON",
+            "off_event": "AP_PANEL_VS_OFF",
+            "status": "unsupported",
+            "initial": 0,
+            "after_on": null,
+            "after_off": null,
+            "error": {
+              "code": "AUTOPILOT_UNAVAILABLE",
+              "message": "The temporary aircraft reports AUTOPILOT AVAILABLE=0."
+            }
+          },
+          {
+            "id": "flight_level_change",
+            "readback": "AUTOPILOT FLIGHT LEVEL CHANGE",
+            "on_event": "FLIGHT_LEVEL_CHANGE_ON",
+            "off_event": "FLIGHT_LEVEL_CHANGE_OFF",
+            "status": "unsupported",
+            "initial": 0,
+            "after_on": null,
+            "after_off": null,
+            "error": {
+              "code": "AUTOPILOT_UNAVAILABLE",
+              "message": "The temporary aircraft reports AUTOPILOT AVAILABLE=0."
+            }
+          }
+        ]
+      },
+      {
+        "aircraft_title": "Edge540 v3 Martin Sonka",
+        "status": "supported",
+        "autopilot_available": 1,
+        "autopilot_master": 0,
+        "flight_director_active": 0,
+        "heading_lock": 0,
+        "nav1_lock": 0,
+        "altitude_lock": 0,
+        "vertical_hold": 0,
+        "flight_level_change": 0,
+        "temporary_ai": true,
+        "object_removed": true,
+        "error": null,
+        "mode_tests": [
+          {
+            "id": "autopilot_master",
+            "readback": "AUTOPILOT MASTER",
+            "on_event": "AUTOPILOT_ON",
+            "off_event": "AUTOPILOT_OFF",
+            "status": "supported",
+            "initial": 0,
+            "after_on": 1,
+            "after_off": 0,
+            "error": null
+          },
+          {
+            "id": "flight_director",
+            "readback": "AUTOPILOT FLIGHT DIRECTOR ACTIVE",
+            "on_event": "TOGGLE_FLIGHT_DIRECTOR",
+            "off_event": "TOGGLE_FLIGHT_DIRECTOR",
+            "status": "supported",
+            "initial": 0,
+            "after_on": 1,
+            "after_off": 0,
+            "error": null
+          },
+          {
+            "id": "heading",
+            "readback": "AUTOPILOT HEADING LOCK",
+            "on_event": "AP_PANEL_HEADING_ON",
+            "off_event": "AP_PANEL_HEADING_OFF",
+            "status": "supported",
+            "initial": 0,
+            "after_on": 1,
+            "after_off": 0,
+            "error": null
+          },
+          {
+            "id": "navigation",
+            "readback": "AUTOPILOT NAV1 LOCK",
+            "on_event": "AP_NAV1_HOLD_ON",
+            "off_event": "AP_NAV1_HOLD_OFF",
+            "status": "supported",
+            "initial": 0,
+            "after_on": 1,
+            "after_off": 0,
+            "error": null
+          },
+          {
+            "id": "altitude",
+            "readback": "AUTOPILOT ALTITUDE LOCK",
+            "on_event": "AP_PANEL_ALTITUDE_ON",
+            "off_event": "AP_PANEL_ALTITUDE_OFF",
+            "status": "supported",
+            "initial": 0,
+            "after_on": 1,
+            "after_off": 0,
+            "error": null
+          },
+          {
+            "id": "vertical_speed",
+            "readback": "AUTOPILOT VERTICAL HOLD",
+            "on_event": "AP_PANEL_VS_ON",
+            "off_event": "AP_PANEL_VS_OFF",
+            "status": "supported",
+            "initial": 0,
+            "after_on": 1,
+            "after_off": 0,
+            "error": null
+          },
+          {
+            "id": "flight_level_change",
+            "readback": "AUTOPILOT FLIGHT LEVEL CHANGE",
+            "on_event": "FLIGHT_LEVEL_CHANGE_ON",
+            "off_event": "FLIGHT_LEVEL_CHANGE_OFF",
+            "status": "supported",
+            "initial": 0,
+            "after_on": 1,
+            "after_off": 0,
+            "error": null
+          }
+        ]
+      },
+      {
+        "aircraft_title": "Draco X: Cargo",
+        "status": "supported",
+        "autopilot_available": 1,
+        "autopilot_master": 0,
+        "flight_director_active": 0,
+        "heading_lock": 0,
+        "nav1_lock": 0,
+        "altitude_lock": 0,
+        "vertical_hold": 0,
+        "flight_level_change": 0,
+        "temporary_ai": true,
+        "object_removed": true,
+        "error": null,
+        "mode_tests": [
+          {
+            "id": "autopilot_master",
+            "readback": "AUTOPILOT MASTER",
+            "on_event": "AUTOPILOT_ON",
+            "off_event": "AUTOPILOT_OFF",
+            "status": "supported",
+            "initial": 0,
+            "after_on": 1,
+            "after_off": 0,
+            "error": null
+          },
+          {
+            "id": "flight_director",
+            "readback": "AUTOPILOT FLIGHT DIRECTOR ACTIVE",
+            "on_event": "TOGGLE_FLIGHT_DIRECTOR",
+            "off_event": "TOGGLE_FLIGHT_DIRECTOR",
+            "status": "supported",
+            "initial": 0,
+            "after_on": 1,
+            "after_off": 0,
+            "error": null
+          },
+          {
+            "id": "heading",
+            "readback": "AUTOPILOT HEADING LOCK",
+            "on_event": "AP_PANEL_HEADING_ON",
+            "off_event": "AP_PANEL_HEADING_OFF",
+            "status": "supported",
+            "initial": 0,
+            "after_on": 1,
+            "after_off": 0,
+            "error": null
+          },
+          {
+            "id": "navigation",
+            "readback": "AUTOPILOT NAV1 LOCK",
+            "on_event": "AP_NAV1_HOLD_ON",
+            "off_event": "AP_NAV1_HOLD_OFF",
+            "status": "supported",
+            "initial": 0,
+            "after_on": 1,
+            "after_off": 0,
+            "error": null
+          },
+          {
+            "id": "altitude",
+            "readback": "AUTOPILOT ALTITUDE LOCK",
+            "on_event": "AP_PANEL_ALTITUDE_ON",
+            "off_event": "AP_PANEL_ALTITUDE_OFF",
+            "status": "supported",
+            "initial": 0,
+            "after_on": 1,
+            "after_off": 0,
+            "error": null
+          },
+          {
+            "id": "vertical_speed",
+            "readback": "AUTOPILOT VERTICAL HOLD",
+            "on_event": "AP_PANEL_VS_ON",
+            "off_event": "AP_PANEL_VS_OFF",
+            "status": "unknown",
+            "initial": 1,
+            "after_on": 1,
+            "after_off": 1,
+            "error": {
+              "code": "AUTOPILOT_MODE_READBACK_NOT_CONFIRMED",
+              "message": "The mode event did not produce the expected on/off readback."
+            }
+          },
+          {
+            "id": "flight_level_change",
+            "readback": "AUTOPILOT FLIGHT LEVEL CHANGE",
+            "on_event": "FLIGHT_LEVEL_CHANGE_ON",
+            "off_event": "FLIGHT_LEVEL_CHANGE_OFF",
+            "status": "supported",
+            "initial": 0,
+            "after_on": 1,
+            "after_off": 0,
+            "error": null
+          }
+        ]
+      },
+      {
+        "aircraft_title": "Spirit of St.Louis",
+        "status": "supported",
+        "autopilot_available": 1,
+        "autopilot_master": 0,
+        "flight_director_active": 0,
+        "heading_lock": 0,
+        "nav1_lock": 0,
+        "altitude_lock": 0,
+        "vertical_hold": 0,
+        "flight_level_change": 0,
+        "temporary_ai": true,
+        "object_removed": true,
+        "error": null,
+        "mode_tests": [
+          {
+            "id": "autopilot_master",
+            "readback": "AUTOPILOT MASTER",
+            "on_event": "AUTOPILOT_ON",
+            "off_event": "AUTOPILOT_OFF",
+            "status": "unknown",
+            "initial": 0,
+            "after_on": 0,
+            "after_off": 0,
+            "error": {
+              "code": "AUTOPILOT_MASTER_READBACK_NOT_CONFIRMED",
+              "message": "AUTOPILOT_ON/OFF did not produce the expected AUTOPILOT MASTER readback."
+            }
+          },
+          {
+            "id": "flight_director",
+            "readback": "AUTOPILOT FLIGHT DIRECTOR ACTIVE",
+            "on_event": "TOGGLE_FLIGHT_DIRECTOR",
+            "off_event": "TOGGLE_FLIGHT_DIRECTOR",
+            "status": "unknown",
+            "initial": 0,
+            "after_on": 0,
+            "after_off": 0,
+            "error": {
+              "code": "AUTOPILOT_MODE_READBACK_NOT_CONFIRMED",
+              "message": "The mode event did not produce the expected on/off readback."
+            }
+          },
+          {
+            "id": "heading",
+            "readback": "AUTOPILOT HEADING LOCK",
+            "on_event": "AP_PANEL_HEADING_ON",
+            "off_event": "AP_PANEL_HEADING_OFF",
+            "status": "unknown",
+            "initial": 0,
+            "after_on": 0,
+            "after_off": 0,
+            "error": {
+              "code": "AUTOPILOT_MODE_READBACK_NOT_CONFIRMED",
+              "message": "The mode event did not produce the expected on/off readback."
+            }
+          },
+          {
+            "id": "navigation",
+            "readback": "AUTOPILOT NAV1 LOCK",
+            "on_event": "AP_NAV1_HOLD_ON",
+            "off_event": "AP_NAV1_HOLD_OFF",
+            "status": "unknown",
+            "initial": 0,
+            "after_on": 0,
+            "after_off": 0,
+            "error": {
+              "code": "NAV1_PRECONDITION_UNCONFIGURED",
+              "message": "NAV1 was not connected to a navigational source during the temporary-AI test."
+            }
+          },
+          {
+            "id": "altitude",
+            "readback": "AUTOPILOT ALTITUDE LOCK",
+            "on_event": "AP_PANEL_ALTITUDE_ON",
+            "off_event": "AP_PANEL_ALTITUDE_OFF",
+            "status": "unknown",
+            "initial": 0,
+            "after_on": 0,
+            "after_off": 0,
+            "error": {
+              "code": "AUTOPILOT_MODE_READBACK_NOT_CONFIRMED",
+              "message": "The mode event did not produce the expected on/off readback."
+            }
+          },
+          {
+            "id": "vertical_speed",
+            "readback": "AUTOPILOT VERTICAL HOLD",
+            "on_event": "AP_PANEL_VS_ON",
+            "off_event": "AP_PANEL_VS_OFF",
+            "status": "unknown",
+            "initial": 0,
+            "after_on": 0,
+            "after_off": 0,
+            "error": {
+              "code": "AUTOPILOT_MODE_READBACK_NOT_CONFIRMED",
+              "message": "The mode event did not produce the expected on/off readback."
+            }
+          },
+          {
+            "id": "flight_level_change",
+            "readback": "AUTOPILOT FLIGHT LEVEL CHANGE",
+            "on_event": "FLIGHT_LEVEL_CHANGE_ON",
+            "off_event": "FLIGHT_LEVEL_CHANGE_OFF",
+            "status": "unknown",
+            "initial": 0,
+            "after_on": 0,
+            "after_off": 0,
+            "error": {
+              "code": "AUTOPILOT_MODE_READBACK_NOT_CONFIRMED",
+              "message": "The mode event did not produce the expected on/off readback."
+            }
+          }
+        ]
+      },
+      {
+        "aircraft_title": "Extra 330 Passengers",
+        "status": "unsupported",
+        "autopilot_available": 0,
+        "autopilot_master": 0,
+        "flight_director_active": 0,
+        "heading_lock": 0,
+        "nav1_lock": 0,
+        "altitude_lock": 0,
+        "vertical_hold": 0,
+        "flight_level_change": 0,
+        "temporary_ai": true,
+        "object_removed": true,
+        "error": null,
+        "mode_tests": [
+          {
+            "id": "autopilot_master",
+            "readback": "AUTOPILOT MASTER",
+            "on_event": "AUTOPILOT_ON",
+            "off_event": "AUTOPILOT_OFF",
+            "status": "unsupported",
+            "initial": 0,
+            "after_on": null,
+            "after_off": null,
+            "error": {
+              "code": "AUTOPILOT_UNAVAILABLE",
+              "message": "The temporary aircraft reports AUTOPILOT AVAILABLE=0."
+            }
+          },
+          {
+            "id": "flight_director",
+            "readback": "AUTOPILOT FLIGHT DIRECTOR ACTIVE",
+            "on_event": "TOGGLE_FLIGHT_DIRECTOR",
+            "off_event": "TOGGLE_FLIGHT_DIRECTOR",
+            "status": "unsupported",
+            "initial": 0,
+            "after_on": null,
+            "after_off": null,
+            "error": {
+              "code": "AUTOPILOT_UNAVAILABLE",
+              "message": "The temporary aircraft reports AUTOPILOT AVAILABLE=0."
+            }
+          },
+          {
+            "id": "heading",
+            "readback": "AUTOPILOT HEADING LOCK",
+            "on_event": "AP_PANEL_HEADING_ON",
+            "off_event": "AP_PANEL_HEADING_OFF",
+            "status": "unsupported",
+            "initial": 0,
+            "after_on": null,
+            "after_off": null,
+            "error": {
+              "code": "AUTOPILOT_UNAVAILABLE",
+              "message": "The temporary aircraft reports AUTOPILOT AVAILABLE=0."
+            }
+          },
+          {
+            "id": "navigation",
+            "readback": "AUTOPILOT NAV1 LOCK",
+            "on_event": "AP_NAV1_HOLD_ON",
+            "off_event": "AP_NAV1_HOLD_OFF",
+            "status": "unsupported",
+            "initial": 0,
+            "after_on": null,
+            "after_off": null,
+            "error": {
+              "code": "AUTOPILOT_UNAVAILABLE",
+              "message": "The temporary aircraft reports AUTOPILOT AVAILABLE=0."
+            }
+          },
+          {
+            "id": "altitude",
+            "readback": "AUTOPILOT ALTITUDE LOCK",
+            "on_event": "AP_PANEL_ALTITUDE_ON",
+            "off_event": "AP_PANEL_ALTITUDE_OFF",
+            "status": "unsupported",
+            "initial": 0,
+            "after_on": null,
+            "after_off": null,
+            "error": {
+              "code": "AUTOPILOT_UNAVAILABLE",
+              "message": "The temporary aircraft reports AUTOPILOT AVAILABLE=0."
+            }
+          },
+          {
+            "id": "vertical_speed",
+            "readback": "AUTOPILOT VERTICAL HOLD",
+            "on_event": "AP_PANEL_VS_ON",
+            "off_event": "AP_PANEL_VS_OFF",
+            "status": "unsupported",
+            "initial": 0,
+            "after_on": null,
+            "after_off": null,
+            "error": {
+              "code": "AUTOPILOT_UNAVAILABLE",
+              "message": "The temporary aircraft reports AUTOPILOT AVAILABLE=0."
+            }
+          },
+          {
+            "id": "flight_level_change",
+            "readback": "AUTOPILOT FLIGHT LEVEL CHANGE",
+            "on_event": "FLIGHT_LEVEL_CHANGE_ON",
+            "off_event": "FLIGHT_LEVEL_CHANGE_OFF",
+            "status": "unsupported",
+            "initial": 0,
+            "after_on": null,
+            "after_off": null,
+            "error": {
+              "code": "AUTOPILOT_UNAVAILABLE",
+              "message": "The temporary aircraft reports AUTOPILOT AVAILABLE=0."
+            }
+          }
+        ]
+      }
+    ]
+  }
+}

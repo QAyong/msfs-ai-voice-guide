@@ -77,7 +77,7 @@ sequenceDiagram
 | ------------ | --------------------------------- | -------------------------------------------------------- |
 | `system`     | SimConnect General / System State | `msfs system state --name AircraftLoaded`                |
 | `simvar`     | SimVars + Data Definitions        | `msfs simvar get/set/batch/watch`                        |
-| `key-event`  | Simulation Event IDs              | `msfs key-event send --name AP_MASTER --data 1 --unsafe` |
+| `key-event`  | Simulation Event IDs              | `msfs key-event send --name AUTOPILOT_ON --unsafe`       |
 | `input`      | SimConnect Input Events           | `msfs input list` / `msfs input set --hash ... --unsafe` |
 | `facilities` | SimConnect Facilities             | `msfs facilities nearest --type airport`                 |
 | `flight`     | SimConnect Flights                | `msfs flight load --path flight.flt --unsafe`            |

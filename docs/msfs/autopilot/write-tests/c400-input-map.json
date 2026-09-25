@@ -1,0 +1,44 @@
+{
+  "ap": {
+    "name": "AS1000_AUTOPILOT_AP_MFD",
+    "onValue": 1,
+    "offValue": 0,
+    "readback": "AUTOPILOT MASTER"
+  },
+  "fd": {
+    "name": "AS1000_AUTOPILOT_FD_MFD",
+    "onValue": 1,
+    "offValue": 0,
+    "readback": "AUTOPILOT FLIGHT DIRECTOR ACTIVE"
+  },
+  "heading": {
+    "name": "AS1000_AUTOPILOT_HEADING_MFD",
+    "onValue": 1,
+    "offValue": 0,
+    "readback": "AUTOPILOT HEADING LOCK"
+  },
+  "navigation": {
+    "name": "AS1000_AUTOPILOT_NAVIGATION_MFD",
+    "onValue": 1,
+    "offValue": 0,
+    "readback": "AUTOPILOT NAV1 LOCK"
+  },
+  "altitude": {
+    "name": "AS1000_AUTOPILOT_ALTITUDE_MFD",
+    "onValue": 1,
+    "offValue": 0,
+    "readback": "AUTOPILOT ALTITUDE LOCK"
+  },
+  "vertical_speed": {
+    "name": "AS1000_AUTOPILOT_VERTICALSPEED_MFD",
+    "onValue": 1,
+    "offValue": 0,
+    "readback": "AUTOPILOT VERTICAL HOLD"
+  },
+  "flight_level_change": {
+    "name": "AS1000_AUTOPILOT_FLIGHTLEVELCHANGE_MFD",
+    "onValue": 1,
+    "offValue": 0,
+    "readback": "AUTOPILOT FLIGHT LEVEL CHANGE"
+  }
+}

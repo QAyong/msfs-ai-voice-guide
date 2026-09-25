@@ -1,0 +1,275 @@
+{
+  "schemaVersion": 1,
+  "collectedAt": "2026-09-10T14:17:26.477Z",
+  "source": "native_simconnect",
+  "readOnly": true,
+  "writesAttempted": false,
+  "fingerprint": "e23f2d65361baeadf4c53ce1e060579fe61d19dfcabc600334c23a52d0a62aea",
+  "collection": {
+    "status": "unavailable",
+    "successfulProbeCount": 0,
+    "failedProbeCount": 26
+  },
+  "aircraft": {
+    "loaded": {
+      "status": "unavailable",
+      "code": "SIM_NOT_READY",
+      "message": "模拟器尚未进入已加载飞行的座舱。"
+    },
+    "loadedPath": {
+      "status": "unavailable",
+      "code": "SIM_NOT_READY",
+      "message": "模拟器尚未进入已加载飞行的座舱。"
+    },
+    "title": {
+      "status": "unavailable",
+      "code": "SIM_NOT_READY",
+      "message": "模拟器尚未进入已加载飞行的座舱。"
+    },
+    "model": {
+      "status": "unavailable",
+      "code": "SIM_NOT_READY",
+      "message": "模拟器尚未进入已加载飞行的座舱。"
+    },
+    "type": {
+      "status": "unavailable",
+      "code": "SIM_NOT_READY",
+      "message": "模拟器尚未进入已加载飞行的座舱。"
+    },
+    "tailNumber": {
+      "status": "unavailable",
+      "code": "SIM_NOT_READY",
+      "message": "模拟器尚未进入已加载飞行的座舱。"
+    }
+  },
+  "autopilot": {
+    "availability": "unknown",
+    "availabilityObservation": {
+      "name": "AUTOPILOT AVAILABLE",
+      "unit": "bool",
+      "datatype": "FLOAT64",
+      "result": {
+        "status": "unavailable",
+        "code": "SIM_NOT_READY",
+        "message": "模拟器尚未进入已加载飞行的座舱。"
+      }
+    },
+    "simvars": [
+      {
+        "name": "AUTOPILOT AVAILABLE",
+        "unit": "bool",
+        "datatype": "FLOAT64",
+        "result": {
+          "status": "unavailable",
+          "code": "SIM_NOT_READY",
+          "message": "模拟器尚未进入已加载飞行的座舱。"
+        }
+      },
+      {
+        "name": "AUTOPILOT MASTER",
+        "unit": "bool",
+        "datatype": "FLOAT64",
+        "result": {
+          "status": "unavailable",
+          "code": "SIM_NOT_READY",
+          "message": "模拟器尚未进入已加载飞行的座舱。"
+        }
+      },
+      {
+        "name": "AUTOPILOT FLIGHT DIRECTOR ACTIVE",
+        "unit": "bool",
+        "datatype": "FLOAT64",
+        "result": {
+          "status": "unavailable",
+          "code": "SIM_NOT_READY",
+          "message": "模拟器尚未进入已加载飞行的座舱。"
+        }
+      },
+      {
+        "name": "AUTOPILOT DEFAULT ROLL MODE",
+        "unit": "number",
+        "datatype": "FLOAT64",
+        "result": {
+          "status": "unavailable",
+          "code": "SIM_NOT_READY",
+          "message": "模拟器尚未进入已加载飞行的座舱。"
+        }
+      },
+      {
+        "name": "AUTOPILOT DEFAULT PITCH MODE",
+        "unit": "number",
+        "datatype": "FLOAT64",
+        "result": {
+          "status": "unavailable",
+          "code": "SIM_NOT_READY",
+          "message": "模拟器尚未进入已加载飞行的座舱。"
+        }
+      },
+      {
+        "name": "AUTOPILOT HEADING MANUALLY TUNABLE",
+        "unit": "bool",
+        "datatype": "FLOAT64",
+        "result": {
+          "status": "unavailable",
+          "code": "SIM_NOT_READY",
+          "message": "模拟器尚未进入已加载飞行的座舱。"
+        }
+      },
+      {
+        "name": "AUTOPILOT HEADING LOCK",
+        "unit": "bool",
+        "datatype": "FLOAT64",
+        "result": {
+          "status": "unavailable",
+          "code": "SIM_NOT_READY",
+          "message": "模拟器尚未进入已加载飞行的座舱。"
+        }
+      },
+      {
+        "name": "AUTOPILOT HEADING LOCK DIR",
+        "unit": "degrees",
+        "datatype": "FLOAT64",
+        "result": {
+          "status": "unavailable",
+          "code": "SIM_NOT_READY",
+          "message": "模拟器尚未进入已加载飞行的座舱。"
+        }
+      },
+      {
+        "name": "NAV AVAILABLE:1",
+        "unit": "bool",
+        "datatype": "FLOAT64",
+        "result": {
+          "status": "unavailable",
+          "code": "SIM_NOT_READY",
+          "message": "模拟器尚未进入已加载飞行的座舱。"
+        }
+      },
+      {
+        "name": "AUTOPILOT NAV1 LOCK",
+        "unit": "bool",
+        "datatype": "FLOAT64",
+        "result": {
+          "status": "unavailable",
+          "code": "SIM_NOT_READY",
+          "message": "模拟器尚未进入已加载飞行的座舱。"
+        }
+      },
+      {
+        "name": "AUTOPILOT ALTITUDE MANUALLY TUNABLE",
+        "unit": "bool",
+        "datatype": "FLOAT64",
+        "result": {
+          "status": "unavailable",
+          "code": "SIM_NOT_READY",
+          "message": "模拟器尚未进入已加载飞行的座舱。"
+        }
+      },
+      {
+        "name": "AUTOPILOT ALTITUDE ARM",
+        "unit": "bool",
+        "datatype": "FLOAT64",
+        "result": {
+          "status": "unavailable",
+          "code": "SIM_NOT_READY",
+          "message": "模拟器尚未进入已加载飞行的座舱。"
+        }
+      },
+      {
+        "name": "AUTOPILOT ALTITUDE LOCK",
+        "unit": "bool",
+        "datatype": "FLOAT64",
+        "result": {
+          "status": "unavailable",
+          "code": "SIM_NOT_READY",
+          "message": "模拟器尚未进入已加载飞行的座舱。"
+        }
+      },
+      {
+        "name": "AUTOPILOT ALTITUDE LOCK VAR",
+        "unit": "feet",
+        "datatype": "FLOAT64",
+        "result": {
+          "status": "unavailable",
+          "code": "SIM_NOT_READY",
+          "message": "模拟器尚未进入已加载飞行的座舱。"
+        }
+      },
+      {
+        "name": "AUTOPILOT VERTICAL HOLD",
+        "unit": "bool",
+        "datatype": "FLOAT64",
+        "result": {
+          "status": "unavailable",
+          "code": "SIM_NOT_READY",
+          "message": "模拟器尚未进入已加载飞行的座舱。"
+        }
+      },
+      {
+        "name": "AUTOPILOT VERTICAL HOLD VAR",
+        "unit": "feet per minute",
+        "datatype": "FLOAT64",
+        "result": {
+          "status": "unavailable",
+          "code": "SIM_NOT_READY",
+          "message": "模拟器尚未进入已加载飞行的座舱。"
+        }
+      },
+      {
+        "name": "AUTOPILOT FLIGHT LEVEL CHANGE",
+        "unit": "bool",
+        "datatype": "FLOAT64",
+        "result": {
+          "status": "unavailable",
+          "code": "SIM_NOT_READY",
+          "message": "模拟器尚未进入已加载飞行的座舱。"
+        }
+      },
+      {
+        "name": "AUTOPILOT AIRSPEED HOLD",
+        "unit": "bool",
+        "datatype": "FLOAT64",
+        "result": {
+          "status": "unavailable",
+          "code": "SIM_NOT_READY",
+          "message": "模拟器尚未进入已加载飞行的座舱。"
+        }
+      },
+      {
+        "name": "AUTOPILOT AIRSPEED HOLD VAR",
+        "unit": "knots",
+        "datatype": "FLOAT64",
+        "result": {
+          "status": "unavailable",
+          "code": "SIM_NOT_READY",
+          "message": "模拟器尚未进入已加载飞行的座舱。"
+        }
+      }
+    ],
+    "inputEvents": {
+      "status": "unavailable",
+      "events": [],
+      "error": {
+        "status": "unavailable",
+        "code": "SIM_NOT_READY",
+        "message": "模拟器尚未进入已加载飞行的座舱。"
+      }
+    }
+  },
+  "spawnableAircraft": {
+    "status": "unavailable",
+    "type": "aircraft",
+    "uniqueTitleCount": 0,
+    "items": [],
+    "error": {
+      "status": "unavailable",
+      "code": "SIM_NOT_READY",
+      "message": "模拟器尚未进入已加载飞行的座舱。"
+    }
+  },
+  "warnings": [
+    "AUTOPILOT AVAILABLE 未能读取为明确的 0/1；本机自动驾驶能力保持 unknown。",
+    "当前模拟器的可生成飞机目录无法读取。",
+    "当前飞机的 Input Event 列表无法读取。"
+  ]
+}

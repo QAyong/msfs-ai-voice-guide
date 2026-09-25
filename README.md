@@ -43,7 +43,7 @@
 
 使用 pnpm 锁定依赖；LiveKit Agents 的包名、版本和 API 必须以安装当日的官方文档与本地 TypeScript 类型定义为准。不要把未核验的示例或记忆中的 API 直接写入生产代码。
 
-开发态可以复制 [`.env.example`](.env.example) 为本地 `.env`，也可以在可信设置页填写服务凭据；安装态由 Electron 主进程使用 Windows `safeStorage` 保存。绝不提交真实 `.env`、加密凭据文件或任何 API Key。
+开发态可以复制 `.env.example` 为本地 `.env`，也可以在可信设置页填写服务凭据；安装态由 Electron 主进程使用 Windows `safeStorage` 保存。绝不提交真实 `.env`、加密凭据文件或任何 API Key。
 
 ## 当前开发命令
 
@@ -54,7 +54,7 @@ pnpm install
 pnpm run verify
 ```
 
-项目在 [`pnpm-workspace.yaml`](pnpm-workspace.yaml) 中固定使用 `nodeLinker: hoisted`。不要在同一个工作区交替使用 pnpm 的 `isolated` 和 `hoisted` 依赖树，否则可能出现依赖目录已存在但 TypeScript 无法解析的情况，例如 `@phosphor-icons/react/dist/csr/*` 图标模块找不到。
+项目在 `pnpm-workspace.yaml` 中固定使用 `nodeLinker: hoisted`。不要在同一个工作区交替使用 pnpm 的 `isolated` 和 `hoisted` 依赖树，否则可能出现依赖目录已存在但 TypeScript 无法解析的情况，例如 `@phosphor-icons/react/dist/csr/*` 图标模块找不到。
 
 如果当前网络通过 Clash 访问依赖仓库，可只在当前 PowerShell 会话设置代理；代理不会写入项目，也不会成为应用运行时配置：
 
@@ -107,7 +107,7 @@ pnpm msfs:use:app
 
 ## 桌面前端
 
-生产方向的桌面入口位于 [`desktop/`](desktop/)。当前 Electron 实现包括：
+生产方向的桌面入口位于 `desktop/`。当前 Electron 实现包括：
 
 - 64×72px 收起窗口：顶部 36×14px 原生拖动把手与 48px 头像点击区明确分离。
 - 展开标题栏左侧以指南针触发探索，中间仅显示带状态点的头像，右侧分别收起或结束当前对话；悬浮菜单中的电源按钮才退出整个应用。

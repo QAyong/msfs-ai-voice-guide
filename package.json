@@ -46,6 +46,8 @@
     "tts:stage": "node scripts/stage-tts-voice-samples.mjs resources/tts out/tts",
     "tts:samples": "node --env-file=.env --import tsx scripts/tts-voice-samples.ts",
     "msfs:smoke": "node --env-file=.env --import tsx scripts/smoke-msfs-adapter.ts",
+    "msfs:filter:official": "node --import tsx scripts/filter-official-autopilot-candidates.ts",
+    "msfs:test:autopilot-write": "node --import tsx scripts/test-msfs-autopilot-write-methods.ts",
     "explore:spike": "node --import tsx scripts/spike-explore-providers.ts",
     "verify": "pnpm lint && pnpm typecheck && pnpm desktop:typecheck && pnpm test && pnpm format:check"
   },

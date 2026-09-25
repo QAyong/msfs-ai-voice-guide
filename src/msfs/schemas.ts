@@ -43,6 +43,92 @@ export const inputEventSetDataSchema = z.object({
   set: z.literal(true),
 });
 
+const aircraftProbeErrorSchema = z
+  .object({
+    code: z.string().min(1),
+    message: z.string().min(1),
+  })
+  .nullable();
+
+const aircraftProbeModeTestSchema = z.object({
+  id: z.string().min(1),
+  readback: z.string().min(1),
+  on_event: z.string().min(1),
+  off_event: z.string().min(1),
+  status: z.enum(['supported', 'unsupported', 'unknown']),
+  initial: z.number().finite().nullable(),
+  after_on: z.number().finite().nullable(),
+  after_off: z.number().finite().nullable(),
+  error: aircraftProbeErrorSchema,
+});
+
+const aircraftProbeResultSchema = z.object({
+  aircraft_title: z.string().min(1),
+  status: z.enum(['supported', 'unsupported', 'unknown']),
+  autopilot_available: z.number().finite(),
+  autopilot_master: z.number().finite(),
+  flight_director_active: z.number().finite(),
+  heading_lock: z.number().finite(),
+  nav1_lock: z.number().finite(),
+  altitude_lock: z.number().finite(),
+  vertical_hold: z.number().finite(),
+  flight_level_change: z.number().finite(),
+  temporary_ai: z.boolean(),
+  object_removed: z.boolean(),
+  error: aircraftProbeErrorSchema,
+  mode_tests: z.array(aircraftProbeModeTestSchema).optional(),
+});
+
+export const aircraftProbeDataSchema = z.object({
+  schema_version: z.number().int().positive(),
+  type: z.literal('aircraft'),
+  status: z.enum(['complete', 'partial', 'error']),
+  temporary_ai: z.boolean(),
+  user_aircraft_switched: z.boolean(),
+  autopilot_write_attempted: z.boolean(),
+  candidate_title_count: z.number().int().nonnegative(),
+  candidate_title_offset: z.number().int().nonnegative().optional(),
+  candidate_title_total_count: z.number().int().nonnegative().optional(),
+  probed_title_count: z.number().int().nonnegative(),
+  supported_count: z.number().int().nonnegative(),
+  unsupported_count: z.number().int().nonnegative(),
+  unknown_count: z.number().int().nonnegative(),
+  mode_probe_requested: z.boolean().optional(),
+  mode_tested_aircraft_count: z.number().int().nonnegative().optional(),
+  mode_supported_count: z.number().int().nonnegative().optional(),
+  mode_unsupported_count: z.number().int().nonnegative().optional(),
+  mode_unknown_count: z.number().int().nonnegative().optional(),
+  cleanup: z.object({
+    status: z.enum(['complete', 'partial', 'error']),
+    objects_created: z.number().int().nonnegative(),
+    objects_removed: z.number().int().nonnegative(),
+    unresolved_objects: z.number().int().nonnegative(),
+  }),
+  error: aircraftProbeErrorSchema,
+  results: z.array(aircraftProbeResultSchema),
+});
+
+export const aircraftListDataSchema = z.object({
+  type: z.string().min(1),
+  items: z.array(
+    z.object({
+      aircraft_title: z.string(),
+      livery_name: z.string(),
+    }),
+  ),
+});
+
+export const inputEventParamsDataSchema = z.object({
+  hash: z.string().regex(/^\d+$/),
+  params: z.string(),
+});
+
+export const inputEventValueDataSchema = z.object({
+  hash: z.string().regex(/^\d+$/),
+  type: z.number().int(),
+  value: z.number().finite(),
+});
+
 export const statusDataSchema = z.object({
   daemon: z.string().min(1),
   simconnect: z.object({

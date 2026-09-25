@@ -1,0 +1,210 @@
+{
+  "schemaVersion": 1,
+  "simulator": "Microsoft Flight Simulator 2024",
+  "source": "official_sdk",
+  "sdkVersion": "1.6.9",
+  "collectedAt": "2026-09-03T06:00:00.000Z",
+  "readOnly": true,
+  "statusMeaning": {
+    "candidate": "官方 SDK 定义了可用的标准接口；不代表每架飞机已经实现或已通过本项目验证。",
+    "supported": "只有具体飞机的 systems.cfg、运行时读回或受控测试证据才能升级为 supported。",
+    "unknown": "资料不足时保持 unknown，禁止从缺失文件、事件名称或机舱外观推断能力。"
+  },
+  "sources": [
+    {
+      "kind": "official_documentation",
+      "url": "https://docs.flightsimulator.com/msfs2024/flighting/content-configuration/cfg-files/systems.cfg/",
+      "covers": ["systems.cfg [AUTOPILOT]", "autopilot_available", "flight_director_available"]
+    },
+    {
+      "kind": "official_documentation",
+      "url": "https://docs.flightsimulator.com/msfs2024/flighting/programming-apis/simvars/aircraft-simvars/aircraft-autopilot-and-assistant-variables/",
+      "covers": ["aircraft autopilot SimVars", "units", "readback"]
+    },
+    {
+      "kind": "official_documentation",
+      "url": "https://docs.flightsimulator.com/msfs2024/html/6_Programming_APIs/Key_Events/Aircraft_Autopilot_Flight_Assist_Events.htm",
+      "covers": ["standard autopilot Key Events", "event parameters"]
+    },
+    {
+      "kind": "official_sdk_file",
+      "path": "ModelBehaviorDefs/Asobo/Common/Autopilot.xml",
+      "covers": [
+        "NO_AP",
+        "NO_HEADING",
+        "NO_NAV",
+        "NO_ALTITUDE",
+        "NO_FLC",
+        "NO_VERTICAL_SPEED",
+        "AUTOPILOT input-event source"
+      ]
+    },
+    {
+      "kind": "official_sdk_file",
+      "path": "ModelBehaviorDefs/Asobo_EX1/Common/Interior/Templates/ParametersFn/Autopilot_ParametersFn.xml",
+      "covers": ["AUTOPILOT MASTER readback", "AP_MASTER binding"]
+    }
+  ],
+  "evidenceRules": [
+    {
+      "capability": "autopilot",
+      "static": "systems.cfg [AUTOPILOT] autopilot_available=1",
+      "runtime": "AUTOPILOT AVAILABLE=1 for the currently loaded aircraft",
+      "limit": "This proves the AP system gate only; it does not prove every AP mode or target-setting path."
+    },
+    {
+      "capability": "flightDirector",
+      "static": "systems.cfg [AUTOPILOT] flight_director_available=1",
+      "runtime": "AUTOPILOT FLIGHT DIRECTOR ACTIVE readback after an aircraft-specific control path",
+      "limit": "An inactive FD is not evidence that the aircraft lacks an FD."
+    },
+    {
+      "capability": "mode",
+      "static": "The aircraft package behavior binds the mode and does not set the corresponding NO_* condition.",
+      "runtime": "The mode SimVar changes to the requested state and remains readable after the operation.",
+      "limit": "Standard Key Event existence alone is not evidence that a specific aircraft supports the mode."
+    }
+  ],
+  "candidates": [
+    {
+      "id": "autopilot",
+      "capability": "autopilot",
+      "status": "candidate",
+      "read": [
+        { "name": "AUTOPILOT AVAILABLE", "unit": "bool", "role": "capability_gate" },
+        { "name": "AUTOPILOT MASTER", "unit": "bool", "role": "active_state" }
+      ],
+      "controls": [
+        { "path": "key_event", "on": "AUTOPILOT_ON", "off": "AUTOPILOT_OFF", "parameters": [] },
+        { "path": "key_event", "event": "AP_MASTER", "semantics": "toggle", "parameters": [] },
+        {
+          "path": "input_event",
+          "source": "AUTOPILOT",
+          "name": "aircraft_specific",
+          "semantics": "set_or_toggle"
+        }
+      ],
+      "readback": { "name": "AUTOPILOT MASTER", "unit": "bool" }
+    },
+    {
+      "id": "flightDirector",
+      "capability": "flightDirector",
+      "status": "candidate",
+      "read": [
+        { "name": "AUTOPILOT FLIGHT DIRECTOR ACTIVE", "unit": "bool", "role": "active_state" }
+      ],
+      "controls": [
+        {
+          "path": "key_event",
+          "event": "TOGGLE_FLIGHT_DIRECTOR",
+          "semantics": "toggle",
+          "parameters": []
+        },
+        {
+          "path": "input_event",
+          "source": "AUTOPILOT",
+          "name": "AUTOPILOT_FLIGHT_DIRECTOR",
+          "semantics": "set_or_toggle"
+        }
+      ],
+      "readback": { "name": "AUTOPILOT FLIGHT DIRECTOR ACTIVE", "unit": "bool" }
+    },
+    {
+      "id": "heading",
+      "capability": "heading",
+      "status": "candidate",
+      "read": [
+        { "name": "AUTOPILOT HEADING LOCK", "unit": "bool", "role": "active_state" },
+        { "name": "AUTOPILOT HEADING LOCK DIR", "unit": "degrees", "role": "target" }
+      ],
+      "controls": [
+        {
+          "path": "key_event",
+          "on": "AP_PANEL_HEADING_ON",
+          "off": "AP_PANEL_HEADING_OFF",
+          "parameters": []
+        },
+        { "path": "key_event", "event": "AP_PANEL_HEADING_SET", "parameters": ["bool"] },
+        { "path": "key_event", "event": "HEADING_BUG_SET", "parameters": ["degrees", "index"] }
+      ],
+      "readback": { "name": "AUTOPILOT HEADING LOCK", "unit": "bool" }
+    },
+    {
+      "id": "navigation",
+      "capability": "navigation",
+      "status": "candidate",
+      "read": [
+        { "name": "NAV AVAILABLE:1", "unit": "bool", "role": "navigation_gate" },
+        { "name": "AUTOPILOT NAV1 LOCK", "unit": "bool", "role": "active_state" }
+      ],
+      "controls": [
+        {
+          "path": "key_event",
+          "on": "AP_NAV1_HOLD_ON",
+          "off": "AP_NAV1_HOLD_OFF",
+          "parameters": []
+        },
+        { "path": "key_event", "event": "AP_NAV_SELECT_SET", "parameters": ["nav_index"] }
+      ],
+      "readback": { "name": "AUTOPILOT NAV1 LOCK", "unit": "bool" }
+    },
+    {
+      "id": "altitude",
+      "capability": "altitude",
+      "status": "candidate",
+      "read": [
+        { "name": "AUTOPILOT ALTITUDE ARM", "unit": "bool", "role": "armed_state" },
+        { "name": "AUTOPILOT ALTITUDE LOCK", "unit": "bool", "role": "active_state" },
+        { "name": "AUTOPILOT ALTITUDE LOCK VAR", "unit": "feet", "role": "target" }
+      ],
+      "controls": [
+        {
+          "path": "key_event",
+          "on": "AP_PANEL_ALTITUDE_ON",
+          "off": "AP_PANEL_ALTITUDE_OFF",
+          "parameters": []
+        },
+        { "path": "key_event", "event": "AP_ALT_VAR_SET_ENGLISH", "parameters": ["feet", "index"] }
+      ],
+      "readback": { "name": "AUTOPILOT ALTITUDE LOCK", "unit": "bool" }
+    },
+    {
+      "id": "verticalSpeed",
+      "capability": "verticalSpeed",
+      "status": "candidate",
+      "read": [
+        { "name": "AUTOPILOT VERTICAL HOLD", "unit": "bool", "role": "active_state" },
+        { "name": "AUTOPILOT VERTICAL HOLD VAR", "unit": "feet per minute", "role": "target" }
+      ],
+      "controls": [
+        { "path": "key_event", "on": "AP_PANEL_VS_ON", "off": "AP_PANEL_VS_OFF", "parameters": [] },
+        {
+          "path": "key_event",
+          "event": "AP_VS_VAR_SET_ENGLISH",
+          "parameters": ["feet per minute", "index"]
+        }
+      ],
+      "readback": { "name": "AUTOPILOT VERTICAL HOLD", "unit": "bool" }
+    },
+    {
+      "id": "flightLevelChange",
+      "capability": "flightLevelChange",
+      "status": "candidate",
+      "read": [
+        { "name": "AUTOPILOT FLIGHT LEVEL CHANGE", "unit": "bool", "role": "active_state" },
+        { "name": "AUTOPILOT AIRSPEED HOLD", "unit": "bool", "role": "speed_state" },
+        { "name": "AUTOPILOT AIRSPEED HOLD VAR", "unit": "knots", "role": "target" }
+      ],
+      "controls": [
+        {
+          "path": "key_event",
+          "on": "FLIGHT_LEVEL_CHANGE_ON",
+          "off": "FLIGHT_LEVEL_CHANGE_OFF",
+          "parameters": []
+        },
+        { "path": "key_event", "event": "AP_SPD_VAR_SET", "parameters": ["knots", "index"] }
+      ],
+      "readback": { "name": "AUTOPILOT FLIGHT LEVEL CHANGE", "unit": "bool" }
+    }
+  ]
+}

@@ -1,0 +1,368 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-09-11T13:12:40.132Z",
+  "status": "complete",
+  "writeRequested": true,
+  "methodRequested": "key_event",
+  "testOptions": {
+    "allowGround": false,
+    "settleMs": 300,
+    "readbackPollMs": 100,
+    "readbackTimeoutMs": 3000
+  },
+  "operationsRequested": [
+    "navigation"
+  ],
+  "targetOperationsRequested": [
+    "target_altitude"
+  ],
+  "writesAttempted": true,
+  "sources": {
+    "candidateFile": "docs\\msfs\\autopilot\\official-autopilot-candidate-filter.json",
+    "inputMap": null,
+    "executablePath": "dev-runtime\\msfs-cli\\msfs.exe"
+  },
+  "aircraft": {
+    "title": "C400 Corvalis",
+    "model": "C400TT",
+    "tailNumber": "ASXGS",
+    "loadedPath": "SimObjects\\Airplanes\\microsoft_c400_corvalis\\presets\\microsoft\\c400_corvalis\\config\\aircraft.CFG",
+    "autopilotAvailable": 1
+  },
+  "candidateMatch": {
+    "matched": true,
+    "records": [
+      {
+        "packageName": "fs24-microsoft-aircraft-c400-corvalis",
+        "officialTitle": "400 Corvalis TT",
+        "boundaryStatus": "official",
+        "aircraftTitle": "C400 Corvalis"
+      }
+    ]
+  },
+  "inputEventInventory": null,
+  "inputEventInventoryAtInputTestStart": null,
+  "initialState": {
+    "AUTOPILOT AVAILABLE": 1,
+    "AUTOPILOT MASTER": 1,
+    "AUTOPILOT FLIGHT DIRECTOR ACTIVE": 1,
+    "AUTOPILOT HEADING LOCK": 0,
+    "AUTOPILOT HEADING LOCK DIR": 360,
+    "AUTOPILOT HEADING SLOT INDEX": 1,
+    "NAV AVAILABLE:1": 1,
+    "AUTOPILOT NAV1 LOCK": 0,
+    "AUTOPILOT ALTITUDE LOCK": 0,
+    "AUTOPILOT ALTITUDE LOCK VAR": 5000,
+    "AUTOPILOT ALTITUDE SLOT INDEX": 1,
+    "AUTOPILOT VERTICAL HOLD": 0,
+    "AUTOPILOT VERTICAL HOLD VAR": 0,
+    "AUTOPILOT VS SLOT INDEX": 1,
+    "AUTOPILOT FLIGHT LEVEL CHANGE": 0,
+    "AUTOPILOT AIRSPEED HOLD VAR": 230,
+    "AUTOPILOT SPEED SLOT INDEX": 1,
+    "SIM ON GROUND": 0,
+    "PLANE ALTITUDE": 1498.026738,
+    "GROUND ALTITUDE": 0,
+    "AUTOPILOT DEFAULT ROLL MODE": 3,
+    "AUTOPILOT DEFAULT PITCH MODE": 1,
+    "AUTOPILOT ALTITUDE ARM": 0,
+    "AUTOPILOT AIRSPEED HOLD": 0,
+    "NAV CODES:1": 0,
+    "NAV BACK COURSE FLAGS:1": 0,
+    "GPS DRIVES NAV1": 0,
+    "GPS IS ACTIVE FLIGHT PLAN": 0
+  },
+  "initialStateOptionalErrors": [],
+  "tests": {
+    "key_event": [
+      {
+        "method": "key_event",
+        "operation": "navigation",
+        "label": "NAV 导航模式",
+        "readback": "AUTOPILOT NAV1 LOCK",
+        "keyEvent": {
+          "kind": "on_off",
+          "on": "AP_NAV1_HOLD_ON",
+          "off": "AP_NAV1_HOLD_OFF"
+        },
+        "before": {
+          "AUTOPILOT AVAILABLE": 1,
+          "AUTOPILOT MASTER": 1,
+          "AUTOPILOT FLIGHT DIRECTOR ACTIVE": 1,
+          "AUTOPILOT HEADING LOCK": 0,
+          "AUTOPILOT HEADING LOCK DIR": 360,
+          "AUTOPILOT HEADING SLOT INDEX": 1,
+          "NAV AVAILABLE:1": 1,
+          "AUTOPILOT NAV1 LOCK": 0,
+          "AUTOPILOT ALTITUDE LOCK": 0,
+          "AUTOPILOT ALTITUDE LOCK VAR": 5000,
+          "AUTOPILOT ALTITUDE SLOT INDEX": 1,
+          "AUTOPILOT VERTICAL HOLD": 0,
+          "AUTOPILOT VERTICAL HOLD VAR": 0,
+          "AUTOPILOT VS SLOT INDEX": 1,
+          "AUTOPILOT FLIGHT LEVEL CHANGE": 0,
+          "AUTOPILOT AIRSPEED HOLD VAR": 230,
+          "AUTOPILOT SPEED SLOT INDEX": 1,
+          "SIM ON GROUND": 0,
+          "PLANE ALTITUDE": 1498.026738,
+          "GROUND ALTITUDE": 0,
+          "AUTOPILOT DEFAULT ROLL MODE": 3,
+          "AUTOPILOT DEFAULT PITCH MODE": 1,
+          "AUTOPILOT ALTITUDE ARM": 0,
+          "AUTOPILOT AIRSPEED HOLD": 0,
+          "NAV CODES:1": 0,
+          "NAV BACK COURSE FLAGS:1": 0,
+          "GPS DRIVES NAV1": 0,
+          "GPS IS ACTIVE FLIGHT PLAN": 0
+        },
+        "preconditions": {
+          "status": "skipped_precondition",
+          "autopilotAvailable": true,
+          "onGround": false,
+          "planeAltitudeFeet": 1498.026738,
+          "groundAltitudeFeet": 0,
+          "aboveGroundFeet": 1498.026738,
+          "navigation": {
+            "navAvailable": true,
+            "gpsDrivesNav1": false,
+            "gpsFlightPlanActive": false,
+            "radioStationActive": false,
+            "radioSignalMissing": false,
+            "source": null,
+            "sourceReady": false
+          },
+          "warnings": [
+            "飞机配置中的 min_feet_for_ap 和 min_flight_time_for_ap 不是通用运行时 SimVar；最终证据应在稳定空中状态采集。"
+          ],
+          "reason": "NAV1 没有确认有效导航源：需要 GPS 驱动 NAV1 且有活动航路，或 NAV1 已捕获有效台站信号。"
+        },
+        "optionalStateErrors": [],
+        "status": "skipped_precondition",
+        "reason": "NAV1 没有确认有效导航源：需要 GPS 驱动 NAV1 且有活动航路，或 NAV1 已捕获有效台站信号。"
+      }
+    ],
+    "key_event_targets": [
+      {
+        "method": "key_event",
+        "operation": "target_altitude",
+        "label": "目标高度",
+        "keyEvent": {
+          "name": "AP_ALT_VAR_SET_ENGLISH",
+          "slotIndexSimvar": "AUTOPILOT ALTITUDE SLOT INDEX"
+        },
+        "readback": "AUTOPILOT ALTITUDE LOCK VAR",
+        "tolerance": 1,
+        "before": {
+          "AUTOPILOT AVAILABLE": 1,
+          "AUTOPILOT MASTER": 1,
+          "AUTOPILOT FLIGHT DIRECTOR ACTIVE": 1,
+          "AUTOPILOT HEADING LOCK": 0,
+          "AUTOPILOT HEADING LOCK DIR": 360,
+          "AUTOPILOT HEADING SLOT INDEX": 1,
+          "NAV AVAILABLE:1": 1,
+          "AUTOPILOT NAV1 LOCK": 0,
+          "AUTOPILOT ALTITUDE LOCK": 0,
+          "AUTOPILOT ALTITUDE LOCK VAR": 5000,
+          "AUTOPILOT ALTITUDE SLOT INDEX": 1,
+          "AUTOPILOT VERTICAL HOLD": 0,
+          "AUTOPILOT VERTICAL HOLD VAR": 0,
+          "AUTOPILOT VS SLOT INDEX": 1,
+          "AUTOPILOT FLIGHT LEVEL CHANGE": 0,
+          "AUTOPILOT AIRSPEED HOLD VAR": 230,
+          "AUTOPILOT SPEED SLOT INDEX": 1,
+          "SIM ON GROUND": 0,
+          "PLANE ALTITUDE": 1498.026738,
+          "GROUND ALTITUDE": 0,
+          "AUTOPILOT DEFAULT ROLL MODE": 3,
+          "AUTOPILOT DEFAULT PITCH MODE": 1,
+          "AUTOPILOT ALTITUDE ARM": 0,
+          "AUTOPILOT AIRSPEED HOLD": 0,
+          "NAV CODES:1": 0,
+          "NAV BACK COURSE FLAGS:1": 0,
+          "GPS DRIVES NAV1": 0,
+          "GPS IS ACTIVE FLIGHT PLAN": 0
+        },
+        "preconditions": {
+          "status": "ready",
+          "autopilotAvailable": true,
+          "onGround": false,
+          "planeAltitudeFeet": 1498.026738,
+          "groundAltitudeFeet": 0,
+          "aboveGroundFeet": 1498.026738,
+          "warnings": [
+            "目标值测试只验证 Key Event 的目标参数和独立 SimVar 读回，不证明飞机会按该目标实际爬升或下降。"
+          ]
+        },
+        "optionalStateErrors": [],
+        "status": "supported",
+        "steps": [
+          {
+            "step": "set_test_target",
+            "value": 6000,
+            "slotIndex": 1,
+            "data": [
+              6000,
+              1
+            ],
+            "status": "sent",
+            "attempts": 1,
+            "elapsedMs": 779,
+            "readback": 6000
+          },
+          {
+            "step": "restore_original_target",
+            "value": 5000,
+            "slotIndex": 1,
+            "data": [
+              5000,
+              1
+            ],
+            "status": "sent",
+            "attempts": 1,
+            "elapsedMs": 763,
+            "readback": 5000
+          }
+        ],
+        "initialTargetValue": 5000,
+        "initialSlotIndex": 1,
+        "testValue": 6000,
+        "afterTest": {
+          "AUTOPILOT AVAILABLE": 1,
+          "AUTOPILOT MASTER": 1,
+          "AUTOPILOT FLIGHT DIRECTOR ACTIVE": 1,
+          "AUTOPILOT HEADING LOCK": 0,
+          "AUTOPILOT HEADING LOCK DIR": 360,
+          "AUTOPILOT HEADING SLOT INDEX": 1,
+          "NAV AVAILABLE:1": 1,
+          "AUTOPILOT NAV1 LOCK": 0,
+          "AUTOPILOT ALTITUDE LOCK": 0,
+          "AUTOPILOT ALTITUDE LOCK VAR": 6000,
+          "AUTOPILOT ALTITUDE SLOT INDEX": 1,
+          "AUTOPILOT VERTICAL HOLD": 0,
+          "AUTOPILOT VERTICAL HOLD VAR": 0,
+          "AUTOPILOT VS SLOT INDEX": 1,
+          "AUTOPILOT FLIGHT LEVEL CHANGE": 0,
+          "AUTOPILOT AIRSPEED HOLD VAR": 230,
+          "AUTOPILOT SPEED SLOT INDEX": 1,
+          "SIM ON GROUND": 0,
+          "PLANE ALTITUDE": 1498.026738,
+          "GROUND ALTITUDE": 0
+        },
+        "restored": {
+          "AUTOPILOT AVAILABLE": 1,
+          "AUTOPILOT MASTER": 1,
+          "AUTOPILOT FLIGHT DIRECTOR ACTIVE": 1,
+          "AUTOPILOT HEADING LOCK": 0,
+          "AUTOPILOT HEADING LOCK DIR": 360,
+          "AUTOPILOT HEADING SLOT INDEX": 1,
+          "NAV AVAILABLE:1": 1,
+          "AUTOPILOT NAV1 LOCK": 0,
+          "AUTOPILOT ALTITUDE LOCK": 0,
+          "AUTOPILOT ALTITUDE LOCK VAR": 5000,
+          "AUTOPILOT ALTITUDE SLOT INDEX": 1,
+          "AUTOPILOT VERTICAL HOLD": 0,
+          "AUTOPILOT VERTICAL HOLD VAR": 0,
+          "AUTOPILOT VS SLOT INDEX": 1,
+          "AUTOPILOT FLIGHT LEVEL CHANGE": 0,
+          "AUTOPILOT AIRSPEED HOLD VAR": 230,
+          "AUTOPILOT SPEED SLOT INDEX": 1,
+          "SIM ON GROUND": 0,
+          "PLANE ALTITUDE": 1498.026738,
+          "GROUND ALTITUDE": 0
+        }
+      }
+    ],
+    "input_event": []
+  },
+  "finalState": {
+    "AUTOPILOT AVAILABLE": 1,
+    "AUTOPILOT MASTER": 1,
+    "AUTOPILOT FLIGHT DIRECTOR ACTIVE": 1,
+    "AUTOPILOT HEADING LOCK": 0,
+    "AUTOPILOT HEADING LOCK DIR": 360,
+    "AUTOPILOT HEADING SLOT INDEX": 1,
+    "NAV AVAILABLE:1": 1,
+    "AUTOPILOT NAV1 LOCK": 0,
+    "AUTOPILOT ALTITUDE LOCK": 0,
+    "AUTOPILOT ALTITUDE LOCK VAR": 5000,
+    "AUTOPILOT ALTITUDE SLOT INDEX": 1,
+    "AUTOPILOT VERTICAL HOLD": 0,
+    "AUTOPILOT VERTICAL HOLD VAR": 0,
+    "AUTOPILOT VS SLOT INDEX": 1,
+    "AUTOPILOT FLIGHT LEVEL CHANGE": 0,
+    "AUTOPILOT AIRSPEED HOLD VAR": 230,
+    "AUTOPILOT SPEED SLOT INDEX": 1,
+    "SIM ON GROUND": 0,
+    "PLANE ALTITUDE": 1498.026738,
+    "GROUND ALTITUDE": 0,
+    "AUTOPILOT DEFAULT ROLL MODE": 3,
+    "AUTOPILOT DEFAULT PITCH MODE": 1,
+    "AUTOPILOT ALTITUDE ARM": 0,
+    "AUTOPILOT AIRSPEED HOLD": 0,
+    "NAV CODES:1": 0,
+    "NAV BACK COURSE FLAGS:1": 0,
+    "GPS DRIVES NAV1": 0,
+    "GPS IS ACTIVE FLIGHT PLAN": 0
+  },
+  "finalStateOptionalErrors": [],
+  "globalStateRestoration": {
+    "status": "restored",
+    "before": {
+      "AUTOPILOT AVAILABLE": 1,
+      "AUTOPILOT MASTER": 1,
+      "AUTOPILOT FLIGHT DIRECTOR ACTIVE": 1,
+      "AUTOPILOT HEADING LOCK": 0,
+      "AUTOPILOT HEADING LOCK DIR": 360,
+      "AUTOPILOT HEADING SLOT INDEX": 1,
+      "NAV AVAILABLE:1": 1,
+      "AUTOPILOT NAV1 LOCK": 0,
+      "AUTOPILOT ALTITUDE LOCK": 0,
+      "AUTOPILOT ALTITUDE LOCK VAR": 5000,
+      "AUTOPILOT ALTITUDE SLOT INDEX": 1,
+      "AUTOPILOT VERTICAL HOLD": 0,
+      "AUTOPILOT VERTICAL HOLD VAR": 0,
+      "AUTOPILOT VS SLOT INDEX": 1,
+      "AUTOPILOT FLIGHT LEVEL CHANGE": 0,
+      "AUTOPILOT AIRSPEED HOLD VAR": 230,
+      "AUTOPILOT SPEED SLOT INDEX": 1,
+      "SIM ON GROUND": 0,
+      "PLANE ALTITUDE": 1498.026738,
+      "GROUND ALTITUDE": 0
+    },
+    "after": {
+      "AUTOPILOT AVAILABLE": 1,
+      "AUTOPILOT MASTER": 1,
+      "AUTOPILOT FLIGHT DIRECTOR ACTIVE": 1,
+      "AUTOPILOT HEADING LOCK": 0,
+      "AUTOPILOT HEADING LOCK DIR": 360,
+      "AUTOPILOT HEADING SLOT INDEX": 1,
+      "NAV AVAILABLE:1": 1,
+      "AUTOPILOT NAV1 LOCK": 0,
+      "AUTOPILOT ALTITUDE LOCK": 0,
+      "AUTOPILOT ALTITUDE LOCK VAR": 5000,
+      "AUTOPILOT ALTITUDE SLOT INDEX": 1,
+      "AUTOPILOT VERTICAL HOLD": 0,
+      "AUTOPILOT VERTICAL HOLD VAR": 0,
+      "AUTOPILOT VS SLOT INDEX": 1,
+      "AUTOPILOT FLIGHT LEVEL CHANGE": 0,
+      "AUTOPILOT AIRSPEED HOLD VAR": 230,
+      "AUTOPILOT SPEED SLOT INDEX": 1,
+      "SIM ON GROUND": 0,
+      "PLANE ALTITUDE": 1498.026738,
+      "GROUND ALTITUDE": 0
+    },
+    "steps": []
+  },
+  "summary": {
+    "candidateMatched": true,
+    "keyEventSupportedCount": 1,
+    "inputEventSupportedCount": 0,
+    "operationCount": 1,
+    "targetOperationCount": 1,
+    "targetKeyEventSupportedCount": 1,
+    "writesAttempted": 1,
+    "globalStateRestored": true,
+    "whitelistPromotionAllowed": false,
+    "whitelistPromotionReason": "测试结果需要人工审阅，并确认当前用户飞机身份、写入方式、操作范围和恢复结果后，才能写入正式白名单。"
+  }
+}

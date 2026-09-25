@@ -24,20 +24,44 @@ struct KeyEvent final {
     std::string_view description;
 };
 
-constexpr std::array<SimVar, 9> kSimVars{{
+constexpr std::array<SimVar, 16> kSimVars{{
     {"PLANE ALTITUDE", "feet", false, false, "Aircraft altitude above sea level."},
     {"GROUND ALTITUDE", "feet", false, false, "Ground elevation directly below the aircraft."},
     {"PLANE LATITUDE", "degrees", false, false, "Aircraft latitude."},
     {"PLANE LONGITUDE", "degrees", false, false, "Aircraft longitude."},
     {"SIM ON GROUND", "bool", false, false, "Whether the user aircraft is on the ground."},
+    {"AUTOPILOT MASTER", "bool", false, false, "Whether the autopilot master is active."},
+    {"AUTOPILOT HEADING LOCK DIR", "degrees", false, false, "Selected autopilot heading."},
     {"AUTOPILOT ALTITUDE LOCK VAR", "feet", true, false, "Selected autopilot altitude."},
-    {"AUTOPILOT HEADING LOCK DIR", "degrees", true, false, "Selected autopilot heading."},
+    {"AUTOPILOT VERTICAL HOLD VAR", "feet per minute", false, false, "Selected autopilot vertical speed."},
+    {"AUTOPILOT AIRSPEED HOLD VAR", "knots", false, false, "Selected autopilot airspeed."},
+    {"AUTOPILOT HEADING SLOT INDEX", "number", false, false, "Slot used by the selected autopilot heading."},
+    {"AUTOPILOT ALTITUDE SLOT INDEX", "number", false, false, "Slot used by the selected autopilot altitude."},
+    {"AUTOPILOT VS SLOT INDEX", "number", false, false, "Slot used by the selected autopilot vertical speed."},
+    {"AUTOPILOT SPEED SLOT INDEX", "number", false, false, "Slot used by the selected autopilot speed."},
     {"FUEL TOTAL QUANTITY", "gallons", false, false, "Total usable fuel quantity."},
     {"GPS WP NEXT ID", "string", false, false, "Identifier of the next GPS waypoint."},
 }};
 
-constexpr std::array<KeyEvent, 4> kKeyEvents{{
+constexpr std::array<KeyEvent, 21> kKeyEvents{{
     {"AP_MASTER", "Toggle the autopilot master."},
+    {"AUTOPILOT_ON", "Enable the autopilot master."},
+    {"AUTOPILOT_OFF", "Disable the autopilot master."},
+    {"TOGGLE_FLIGHT_DIRECTOR", "Toggle the flight director."},
+    {"AP_PANEL_HEADING_ON", "Enable autopilot heading hold."},
+    {"AP_PANEL_HEADING_OFF", "Disable autopilot heading hold."},
+    {"AP_NAV1_HOLD_ON", "Enable autopilot NAV1 hold."},
+    {"AP_NAV1_HOLD_OFF", "Disable autopilot NAV1 hold."},
+    {"AP_PANEL_ALTITUDE_ON", "Enable autopilot altitude hold."},
+    {"AP_PANEL_ALTITUDE_OFF", "Disable autopilot altitude hold."},
+    {"AP_VS_ON", "Enable autopilot vertical speed hold."},
+    {"AP_VS_OFF", "Disable autopilot vertical speed hold."},
+    {"FLIGHT_LEVEL_CHANGE_ON", "Enable autopilot flight level change."},
+    {"FLIGHT_LEVEL_CHANGE_OFF", "Disable autopilot flight level change."},
+    {"HEADING_BUG_SET", "Set the heading target and slot index."},
+    {"AP_ALT_VAR_SET_ENGLISH", "Set the altitude target in feet and slot index."},
+    {"AP_SPD_VAR_SET", "Set the airspeed target in knots and slot index."},
+    {"AP_VS_VAR_SET_ENGLISH", "Set the vertical speed target in feet per minute and slot index."},
     {"GEAR_TOGGLE", "Toggle landing gear."},
     {"FLAPS_INCR", "Increase flap setting."},
     {"FLAPS_DECR", "Decrease flap setting."},

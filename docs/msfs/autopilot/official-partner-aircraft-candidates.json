@@ -1,0 +1,283 @@
+{
+  "schemaVersion": 1,
+  "simulator": "Microsoft Flight Simulator 2024",
+  "sourceCatalog": "official-aircraft-catalog.json",
+  "selection": {
+    "boundaryStatus": "official_partner_candidate",
+    "count": 38,
+    "autopilotStatus": "unknown"
+  },
+  "notes": [
+    "These 38 packages are candidates for official partner aircraft autopilot data acquisition.",
+    "Candidate status does not add a package to the executable official allowlist.",
+    "Package metadata does not prove autopilot capability; runtime inspection and controlled testing are required."
+  ],
+  "aircraft": [
+    {
+      "packageName": "fs24-asobo-aircraft-b7478i",
+      "packageVersion": "2.1.7",
+      "creator": "Working Title Simulations",
+      "title": "B747",
+      "manufacturer": "Boeing"
+    },
+    {
+      "packageName": "fs24-asobo-aircraft-cj4",
+      "packageVersion": "2.1.9",
+      "creator": "Working Title Simulations",
+      "title": "Cessna Citation CJ4",
+      "manufacturer": "Textron Aviation"
+    },
+    {
+      "packageName": "fs24-asobo-aircraft-dg1001-e",
+      "packageVersion": "8.9.0",
+      "creator": "Microsoft / FSS AG",
+      "title": "DG1001E",
+      "manufacturer": "DG Aviation"
+    },
+    {
+      "packageName": "fs24-microsoft-aircraft-a10c",
+      "packageVersion": "1.2.0",
+      "creator": "DC Designs",
+      "title": "DC Designs A10C Thunderbolt II",
+      "manufacturer": "DC Designs"
+    },
+    {
+      "packageName": "fs24-microsoft-aircraft-a310-300",
+      "packageVersion": "0.0.37",
+      "creator": "Microsoft / iniBuilds",
+      "title": "Airbus A310-300",
+      "manufacturer": "Airbus"
+    },
+    {
+      "packageName": "fs24-microsoft-aircraft-a320neo",
+      "packageVersion": "0.0.45",
+      "creator": "Microsoft/iniBuilds",
+      "title": "Airbus A320neo",
+      "manufacturer": "Airbus"
+    },
+    {
+      "packageName": "fs24-microsoft-aircraft-a321",
+      "packageVersion": "0.0.44",
+      "creator": "Microsoft/iniBuilds",
+      "title": "Airbus A321",
+      "manufacturer": "Airbus"
+    },
+    {
+      "packageName": "fs24-microsoft-aircraft-a330",
+      "packageVersion": "0.0.53",
+      "creator": "Microsoft / iniBuilds",
+      "title": "Airbus A330",
+      "manufacturer": "Airbus"
+    },
+    {
+      "packageName": "fs24-microsoft-aircraft-a400m",
+      "packageVersion": "0.0.42",
+      "creator": "Microsoft / iniBuilds",
+      "title": "A-400M Atlas",
+      "manufacturer": "Airbus"
+    },
+    {
+      "packageName": "fs24-microsoft-aircraft-aircrane",
+      "packageVersion": "1.0.4",
+      "creator": "Blackbird Simulations",
+      "title": "S-64F Skycrane",
+      "manufacturer": "Erickson Incorporated"
+    },
+    {
+      "packageName": "fs24-microsoft-aircraft-archer",
+      "packageVersion": "1.6.9",
+      "creator": "Microsoft / FlightFX",
+      "title": "Midnight",
+      "manufacturer": "archer"
+    },
+    {
+      "packageName": "fs24-microsoft-aircraft-bell407",
+      "packageVersion": "1.0.2",
+      "creator": "iniBuilds/Microsoft",
+      "title": "Model 407",
+      "manufacturer": "Bell Helicopters"
+    },
+    {
+      "packageName": "fs24-microsoft-aircraft-belugaxl",
+      "packageVersion": "0.0.50",
+      "creator": "Microsoft / iniBuilds",
+      "title": "Airbus BelugaXL",
+      "manufacturer": "Airbus"
+    },
+    {
+      "packageName": "fs24-microsoft-aircraft-blimp",
+      "packageVersion": "0.0.13",
+      "creator": "Microsoft / inibuilds",
+      "title": "Goodyear Blimp",
+      "manufacturer": "Zeppelin Luftschifftechnik"
+    },
+    {
+      "packageName": "fs24-microsoft-aircraft-cap4",
+      "packageVersion": "1.0.25",
+      "creator": "Microsoft/iniBuilds",
+      "title": "CAP-4 Paulistinha",
+      "manufacturer": "Companhia Aeronautica Paulista"
+    },
+    {
+      "packageName": "fs24-microsoft-aircraft-cgs-hawk-arrow-ii",
+      "packageVersion": "1.1.5",
+      "creator": "Microsoft / BlueMesh",
+      "title": "CGS Hawk Arrow II",
+      "manufacturer": "CGS Aviation"
+    },
+    {
+      "packageName": "fs24-microsoft-aircraft-dc3",
+      "packageVersion": "1.3.4",
+      "creator": "Microsoft/Aeroplane Heaven",
+      "title": "DC-3",
+      "manufacturer": "Douglas"
+    },
+    {
+      "packageName": "fs24-microsoft-aircraft-dhc2",
+      "packageVersion": "1.0.5",
+      "creator": "Blackbird Simulations",
+      "title": "DHC-2 Beaver",
+      "manufacturer": "Viking Air Limited, a de Havilland Canada company"
+    },
+    {
+      "packageName": "fs24-microsoft-aircraft-dracox",
+      "packageVersion": "0.0.9",
+      "creator": "Microsoft / Got Friends",
+      "title": "Draco X",
+      "manufacturer": "Patey Aviation"
+    },
+    {
+      "packageName": "fs24-microsoft-aircraft-ec135",
+      "packageVersion": "2.2.3",
+      "creator": "Microsoft/Nemeth Designs",
+      "title": "Eurocopter EC-135T1",
+      "manufacturer": "Eurocopter"
+    },
+    {
+      "packageName": "fs24-microsoft-aircraft-edge540",
+      "packageVersion": "6.0.5",
+      "creator": "Microsoft / iniBuilds",
+      "title": "Edge 540 V3",
+      "manufacturer": "Zivko Aeronautics"
+    },
+    {
+      "packageName": "fs24-microsoft-aircraft-edge540v2",
+      "packageVersion": "6.0.6",
+      "creator": "Microsoft / iniBuilds",
+      "title": "Edge 540",
+      "manufacturer": "Zivko Aeronautics"
+    },
+    {
+      "packageName": "fs24-microsoft-aircraft-g-21",
+      "packageVersion": "0.0.19",
+      "creator": "Microsoft / iniBuilds",
+      "title": "Grumman G-21 Goose",
+      "manufacturer": "Grumman"
+    },
+    {
+      "packageName": "fs24-microsoft-aircraft-hughes-h4-hercules",
+      "packageVersion": "1.4.1",
+      "creator": "Microsoft / BlueMesh",
+      "title": "Hughes H-4 Hercules",
+      "manufacturer": "Hughes Aircraft company"
+    },
+    {
+      "packageName": "fs24-microsoft-aircraft-jetson-one",
+      "packageVersion": "1.3.0",
+      "creator": "Microsoft / FlightFX",
+      "title": "Jetson One",
+      "manufacturer": "jetson one"
+    },
+    {
+      "packageName": "fs24-microsoft-aircraft-jn4",
+      "packageVersion": "0.0.16",
+      "creator": "Microsoft / iniBuilds",
+      "title": "Curtiss JN4 Jenny",
+      "manufacturer": "Curtiss"
+    },
+    {
+      "packageName": "fs24-microsoft-aircraft-joby",
+      "packageVersion": "1.6.6",
+      "creator": "Microsoft / FlightFX",
+      "title": "Joby",
+      "manufacturer": "Joby Aviation"
+    },
+    {
+      "packageName": "fs24-microsoft-aircraft-magni-m24",
+      "packageVersion": "1.2.1",
+      "creator": "Microsoft / BlueMesh",
+      "title": "Magni M24 Plus",
+      "manufacturer": "Magni Gyro Srl"
+    },
+    {
+      "packageName": "fs24-microsoft-aircraft-mxs",
+      "packageVersion": "6.0.11",
+      "creator": "Microsoft / Inibuilds",
+      "title": "MXS-R",
+      "manufacturer": "MX Aircraft"
+    },
+    {
+      "packageName": "fs24-microsoft-aircraft-optica",
+      "packageVersion": "0.1.2",
+      "creator": "Microsoft / Got Friends",
+      "title": "Optica",
+      "manufacturer": "AeroElvira"
+    },
+    {
+      "packageName": "fs24-microsoft-aircraft-pilatus-pc6",
+      "packageVersion": "0.3.18",
+      "creator": "Microsoft / S&H Software",
+      "title": "Pilatus PC6 Common",
+      "manufacturer": "Pilatus"
+    },
+    {
+      "packageName": "fs24-microsoft-aircraft-s12g",
+      "packageVersion": "0.0.9",
+      "creator": "Microsoft / Got Friends",
+      "title": "S12-G",
+      "manufacturer": "Stemme"
+    },
+    {
+      "packageName": "fs24-microsoft-aircraft-sf50",
+      "packageVersion": "0.7.1",
+      "creator": "Working Title Simulations",
+      "title": "Cirrus Vision Jet G2",
+      "manufacturer": "Cirrus"
+    },
+    {
+      "packageName": "fs24-microsoft-aircraft-skyrascal",
+      "packageVersion": "1.0.9",
+      "creator": "BlueMesh",
+      "title": "SkyRascal",
+      "manufacturer": "Powerchute"
+    },
+    {
+      "packageName": "fs24-microsoft-aircraft-spirit-of-st-louis",
+      "packageVersion": "1.0.5",
+      "creator": "BlueMesh",
+      "title": "Spirit of St Louis",
+      "manufacturer": "Ryan Airlines Company"
+    },
+    {
+      "packageName": "fs24-microsoft-aircraft-uh1h",
+      "packageVersion": "0.11.0",
+      "creator": "taog",
+      "title": "BELL UH1H Huey",
+      "manufacturer": "Bell Aircraft"
+    },
+    {
+      "packageName": "fs24-microsoft-aircraft-volocity",
+      "packageVersion": "0.1.30",
+      "creator": "Microsoft / Volocopter",
+      "title": "Volocity",
+      "manufacturer": "Volocopter"
+    },
+    {
+      "packageName": "fs24-microsoft-aircraft-wright-flyer",
+      "packageVersion": "1.1.29",
+      "creator": "Microsoft / Bluemesh",
+      "title": "Wright Flyer",
+      "manufacturer": "Orville and Wilbur Wright"
+    }
+  ]
+}

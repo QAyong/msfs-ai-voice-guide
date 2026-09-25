@@ -19,6 +19,13 @@ import {
 } from './schemas.js';
 import { MsfsTrackCache } from './track-cache.js';
 import {
+  autopilotKeyEvents,
+  autopilotTargetKeyEvents,
+  encodeAutopilotTargetData,
+  isAutopilotTargetSlotIndexValid,
+  type AutopilotTargetKey,
+} from './autopilot-key-events.js';
+import {
   msfsUnavailableCodeSchema,
   msfsReadinessSchema,
   msfsUnavailableSchema,
@@ -306,6 +313,12 @@ export const autopilotStateSchema = z.object({
     speedKnots: z.number().finite(),
     verticalSpeedFpm: z.number().finite(),
   }),
+  slotIndexes: z.object({
+    altitude: z.number().int().min(0).max(3).nullable(),
+    heading: z.number().int().min(0).max(3).nullable(),
+    speed: z.number().int().min(0).max(4).nullable(),
+    verticalSpeed: z.number().int().min(0).max(3).nullable(),
+  }),
 });
 export const autopilotStateResultSchema = z.union([autopilotStateSchema, msfsUnavailableSchema]);
 export type AutopilotStateResult = z.infer<typeof autopilotStateResultSchema>;
@@ -399,6 +412,19 @@ const requiredValue = (values: Map<string, number>, name: string): number => {
   return value;
 };
 
+const optionalIndexValue = (
+  values: Map<string, number>,
+  name: string,
+  target: AutopilotTargetKey,
+): number | null => {
+  const value = values.get(name);
+  if (value === undefined) return null;
+  if (!isAutopilotTargetSlotIndexValid(target, value)) {
+    throw new Error(`Invalid autopilot slot index SimVar: ${name}`);
+  }
+  return value;
+};
+
 const booleanValue = (values: Map<string, number>, name: string): boolean => {
   const value = requiredValue(values, name);
   if (value !== 0 && value !== 1) throw new Error(`Invalid boolean SimVar: ${name}`);
@@ -422,7 +448,11 @@ const normalizeHeading = (value: number): number => {
       : normalized;
 };
 
-const eventInteger = (value: number): number => Math.trunc(value) >>> 0;
+const requiredTargetSlotIndex = (state: AutopilotState, target: AutopilotTargetKey): number => {
+  const index = state.slotIndexes[target];
+  if (index === null) throw new Error(`Missing autopilot target slot index: ${target}`);
+  return index;
+};
 
 const circularHeadingDifference = (first: number, second: number): number => {
   const difference = Math.abs(normalizeHeading(first) - normalizeHeading(second));
@@ -444,11 +474,15 @@ const autopilotItems = [
   ['AUTOPILOT ALTITUDE ARM', 'bool'],
   ['AUTOPILOT ALTITUDE LOCK', 'bool'],
   ['AUTOPILOT ALTITUDE LOCK VAR', 'feet'],
+  ['AUTOPILOT ALTITUDE SLOT INDEX', 'number'],
   ['AUTOPILOT VERTICAL HOLD', 'bool'],
   ['AUTOPILOT VERTICAL HOLD VAR', 'feet per minute'],
+  ['AUTOPILOT VS SLOT INDEX', 'number'],
   ['AUTOPILOT FLIGHT LEVEL CHANGE', 'bool'],
   ['AUTOPILOT AIRSPEED HOLD', 'bool'],
   ['AUTOPILOT AIRSPEED HOLD VAR', 'knots'],
+  ['AUTOPILOT SPEED SLOT INDEX', 'number'],
+  ['AUTOPILOT HEADING SLOT INDEX', 'number'],
 ] as const;
 
 const createAutopilotState = (values: Map<string, number>) => {
@@ -509,6 +543,12 @@ const createAutopilotState = (values: Map<string, number>) => {
       headingDegrees: requiredValue(values, 'AUTOPILOT HEADING LOCK DIR'),
       speedKnots: requiredValue(values, 'AUTOPILOT AIRSPEED HOLD VAR'),
       verticalSpeedFpm: requiredValue(values, 'AUTOPILOT VERTICAL HOLD VAR'),
+    },
+    slotIndexes: {
+      altitude: optionalIndexValue(values, 'AUTOPILOT ALTITUDE SLOT INDEX', 'altitude'),
+      heading: optionalIndexValue(values, 'AUTOPILOT HEADING SLOT INDEX', 'heading'),
+      speed: optionalIndexValue(values, 'AUTOPILOT SPEED SLOT INDEX', 'speed'),
+      verticalSpeed: optionalIndexValue(values, 'AUTOPILOT VS SLOT INDEX', 'verticalSpeed'),
     },
   });
 };
@@ -769,15 +809,6 @@ export class MsfsGuideService {
     }
     if (request.verticalMode === 'FLC') requireCapability('flightLevelChange', 'FLC 高度层改变');
 
-    let inputEvents: Map<string, string> | undefined;
-    // Input Events are aircraft-specific controls. Their names do not prove that
-    // a generic autopilot mode exists, nor that value 1 selects that mode.
-    // They are only used for the two aircraft-specific AP/FD controls that have
-    // been verified on the current aircraft; all named modes use official events.
-    if (request.ap !== undefined || request.fd !== undefined) {
-      inputEvents = await this.getAutopilotInputEvents(signal);
-    }
-
     for (const [capability, label] of requiredCapabilities) {
       const status = before.capabilities[capability];
       if (status === 'supported') continue;
@@ -795,13 +826,43 @@ export class MsfsGuideService {
       });
     }
 
+    const targetSlotRequirements = [
+      request.targetHeadingDegrees !== undefined
+        ? { label: '航向', index: before.slotIndexes.heading }
+        : null,
+      request.targetAltitudeFeet !== undefined
+        ? { label: '高度', index: before.slotIndexes.altitude }
+        : null,
+      request.targetSpeedKnots !== undefined
+        ? { label: '速度', index: before.slotIndexes.speed }
+        : null,
+      request.targetVerticalSpeedFpm !== undefined
+        ? { label: '垂直速度', index: before.slotIndexes.verticalSpeed }
+        : null,
+    ];
+    const missingTargetSlot = targetSlotRequirements.find(
+      (requirement): requirement is { label: string; index: number | null } =>
+        requirement !== null && requirement.index === null,
+    );
+    if (missingTargetSlot) {
+      return autopilotActionResultSchema.parse({
+        status: 'rejected',
+        source: 'native_simconnect',
+        timestamp: new Date().toISOString(),
+        message: `当前无法确认目标${missingTargetSlot.label}使用的 slot/index，没有执行任何自动驾驶设置。`,
+        requested: request,
+        steps: [],
+        state: before,
+      });
+    }
+
     type Action = {
       operation: string;
       capability?: AutopilotCapability;
       event?: string;
-      data?: readonly number[];
-      inputEventName?: string;
-      inputEventValue?: number;
+      data?:
+        | readonly number[]
+        | ((state: AutopilotState) => readonly number[]);
       shouldSend: (state: AutopilotState) => boolean;
     };
     const actions: Action[] = [];
@@ -811,9 +872,7 @@ export class MsfsGuideService {
       actions.push({
         operation: request.ap ? '打开自动驾驶' : '关闭自动驾驶',
         capability: 'autopilot',
-        event: 'AP_MASTER',
-        inputEventName: 'AUTOPILOT_AP_MASTER',
-        inputEventValue: 1,
+        event: request.ap ? autopilotKeyEvents.autopilotOn : autopilotKeyEvents.autopilotOff,
         shouldSend: (state) => state.active.autopilot !== request.ap,
       });
     }
@@ -821,9 +880,7 @@ export class MsfsGuideService {
       actions.push({
         operation: request.fd ? '打开飞行指引' : '关闭飞行指引',
         capability: 'flightDirector',
-        event: 'TOGGLE_FLIGHT_DIRECTOR',
-        inputEventName: 'AUTOPILOT_FLIGHT_DIRECTOR',
-        inputEventValue: 1,
+        event: autopilotKeyEvents.flightDirectorToggle,
         shouldSend: (state) => state.active.flightDirector !== request.fd,
       });
     }
@@ -831,14 +888,14 @@ export class MsfsGuideService {
       actions.push({
         operation: '切换到 HDG 航向模式',
         capability: 'heading',
-        event: 'AP_PANEL_HEADING_ON',
+        event: autopilotKeyEvents.headingOn,
         shouldSend: (state) => !state.active.heading,
       });
     } else if (request.lateralMode === 'NAV') {
       actions.push({
         operation: '切换到 NAV 导航模式',
         capability: 'navigation',
-        event: 'AP_NAV1_HOLD_ON',
+        event: autopilotKeyEvents.navigationOn,
         shouldSend: (state) => !state.active.navigation,
       });
     }
@@ -846,21 +903,21 @@ export class MsfsGuideService {
       actions.push({
         operation: '切换到 ALT 高度保持模式',
         capability: 'altitude',
-        event: 'AP_PANEL_ALTITUDE_ON',
+        event: autopilotKeyEvents.altitudeOn,
         shouldSend: (state) => !state.active.altitude,
       });
     } else if (request.verticalMode === 'VS') {
       actions.push({
         operation: '切换到 VS 垂直速度模式',
         capability: 'verticalSpeed',
-        event: 'AP_VS_ON',
+        event: autopilotKeyEvents.verticalSpeedOn,
         shouldSend: (state) => !state.active.verticalSpeed,
       });
     } else if (request.verticalMode === 'FLC') {
       actions.push({
         operation: '切换到 FLC 高度层改变模式',
         capability: 'flightLevelChange',
-        event: 'FLIGHT_LEVEL_CHANGE_ON',
+        event: autopilotKeyEvents.flightLevelChangeOn,
         shouldSend: (state) => !state.active.flightLevelChange,
       });
     }
@@ -868,8 +925,13 @@ export class MsfsGuideService {
       const target = normalizeHeading(request.targetHeadingDegrees);
       actions.push({
         operation: `设置目标航向 ${Math.round(target)} 度`,
-        event: 'HEADING_BUG_SET',
-        data: [Math.round(target), 0],
+        event: autopilotTargetKeyEvents.heading.event,
+        data: (state) =>
+          encodeAutopilotTargetData(
+            'heading',
+            Math.round(target),
+            requiredTargetSlotIndex(state, 'heading'),
+          ),
         shouldSend: (state) => circularHeadingDifference(state.targets.headingDegrees, target) > 1,
       });
     }
@@ -877,8 +939,13 @@ export class MsfsGuideService {
       const target = Math.round(request.targetAltitudeFeet);
       actions.push({
         operation: `设置目标高度 ${target} 英尺`,
-        event: 'AP_ALT_VAR_SET_ENGLISH',
-        data: [target, 0],
+        event: autopilotTargetKeyEvents.altitude.event,
+        data: (state) =>
+          encodeAutopilotTargetData(
+            'altitude',
+            target,
+            requiredTargetSlotIndex(state, 'altitude'),
+          ),
         shouldSend: (state) => Math.abs(state.targets.altitudeFeet - target) > 1,
       });
     }
@@ -886,8 +953,9 @@ export class MsfsGuideService {
       const target = Math.round(request.targetSpeedKnots);
       actions.push({
         operation: `设置目标速度 ${target} 节`,
-        event: 'AP_SPD_VAR_SET',
-        data: [target, 0],
+        event: autopilotTargetKeyEvents.speed.event,
+        data: (state) =>
+          encodeAutopilotTargetData('speed', target, requiredTargetSlotIndex(state, 'speed')),
         shouldSend: (state) => Math.abs(state.targets.speedKnots - target) > 1,
       });
     }
@@ -895,8 +963,13 @@ export class MsfsGuideService {
       const target = Math.round(request.targetVerticalSpeedFpm);
       actions.push({
         operation: `设置目标垂直速度 ${target} 英尺/分钟`,
-        event: 'AP_VS_VAR_SET_ENGLISH',
-        data: [eventInteger(target), 0],
+        event: autopilotTargetKeyEvents.verticalSpeed.event,
+        data: (state) =>
+          encodeAutopilotTargetData(
+            'verticalSpeed',
+            target,
+            requiredTargetSlotIndex(state, 'verticalSpeed'),
+          ),
         shouldSend: (state) => Math.abs(state.targets.verticalSpeedFpm - target) > 1,
       });
     }
@@ -925,16 +998,13 @@ export class MsfsGuideService {
         continue;
       }
 
-      let eventResult: MsfsCommandResult<unknown>;
-      if (action.inputEventName) {
-        if (!inputEvents) inputEvents = await this.getAutopilotInputEvents(signal);
-        const hash = inputEvents.get(action.inputEventName);
-        eventResult = hash
-          ? await this.sendAutopilotInput(hash, action.inputEventValue ?? 1, signal)
-          : await this.sendAutopilotEvent(action.event ?? '', action.data, signal);
-      } else {
-        eventResult = await this.sendAutopilotEvent(action.event ?? '', action.data, signal);
-      }
+      const data =
+        typeof action.data === 'function' ? action.data(current) : action.data;
+      const eventResult: MsfsCommandResult<unknown> = await this.sendAutopilotEvent(
+        action.event ?? '',
+        data,
+        signal,
+      );
       if (eventResult.status !== 'ok') {
         this.rememberFailure(eventResult);
         steps.push({ operation: action.operation, status: 'failed' });
